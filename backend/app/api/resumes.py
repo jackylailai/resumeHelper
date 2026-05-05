@@ -68,12 +68,20 @@ async def upload_resume(
     fhash = storage.file_hash(data)
     prompt_version = settings.llm_prompt_version
 
+    # --- Validate resume_id if provided ---
+    if resume_id is not None:
+        existing_resume = db.get(Resume, resume_id)
+        if existing_resume is None:
+            return error("not_found", f"Resume {resume_id} not found", status_code=404)
+
     # --- Cache check ---
     from backend.app.services.evaluator import check_cache
     cached_eval = check_cache(db, cv_hash, job_description, prompt_version)
     if cached_eval:
-        # Still create a new ResumeVersion so history is accurate
-        version = _create_version(db, data, fhash, ext, cv_hash, text, resume_id, filename)
+        try:
+            _create_version(db, data, fhash, ext, cv_hash, text, resume_id, filename)
+        except ValueError as exc:
+            return error("version_cap_exceeded", str(exc), status_code=422)
         return success(
             EvaluationOut.model_validate(cached_eval).model_dump(mode="json"),
             cached=True,
@@ -81,7 +89,10 @@ async def upload_resume(
         )
 
     # --- Persist version ---
-    version = _create_version(db, data, fhash, ext, cv_hash, text, resume_id, filename)
+    try:
+        version = _create_version(db, data, fhash, ext, cv_hash, text, resume_id, filename)
+    except ValueError as exc:
+        return error("version_cap_exceeded", str(exc), status_code=422)
 
     # --- Evaluate synchronously (small/fast) or async ---
     version._job_description = job_description  # passed through to worker
