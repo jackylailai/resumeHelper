@@ -119,8 +119,30 @@ async def upload_resume(
 @router.get("/resumes")
 def list_resumes(db: Session = Depends(get_db)) -> JSONResponse:
     from backend.app.models.resume import Resume as ResumeModel
-    resumes = db.query(ResumeModel).order_by(ResumeModel.updated_at.desc()).all()
-    return success([ResumeOut.model_validate(r).model_dump(mode="json") for r in resumes])
+    from backend.app.models.resume_evaluation import ResumeEvaluation
+
+    resumes = db.query(ResumeModel).order_by(ResumeModel.updated_at.desc()).limit(100).all()
+    result = []
+    for resume in resumes:
+        data = ResumeOut.model_validate(resume).model_dump(mode="json")
+        latest_version = (
+            db.query(ResumeVersion)
+            .filter(ResumeVersion.resume_id == resume.id)
+            .order_by(ResumeVersion.version_number.desc())
+            .first()
+        )
+        if latest_version:
+            data["latest_version_number"] = latest_version.version_number
+            latest_eval = (
+                db.query(ResumeEvaluation)
+                .filter(ResumeEvaluation.resume_version_id == latest_version.id)
+                .order_by(ResumeEvaluation.created_at.desc())
+                .first()
+            )
+            if latest_eval:
+                data["latest_score"] = latest_eval.score
+        result.append(data)
+    return success(result)
 
 
 @router.get("/resumes/{resume_id}/versions")

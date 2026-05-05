@@ -15,6 +15,8 @@ class ResumeOut(BaseModel):
     display_name: str
     created_at: datetime
     updated_at: datetime
+    latest_version_number: int | None = None
+    latest_score: int | None = None
 
 
 class ResumeVersionOut(BaseModel):
