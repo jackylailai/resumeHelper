@@ -67,6 +67,16 @@ Pre-push checklist (MUST pass before any push or PR):
 1. All work happens on a feature branch (`feat/`, `fix/`, `chore/`)
 2. Reviewer runs the pre-push checklist
 3. Push branch to `origin`
+4. **Run e2e smoke test and post results as PR comment** (if server can start):
+   ```bash
+   # Start server first
+   docker compose up -d postgres && uvicorn backend.app.main:app --reload
+
+   # Run checks and auto-post to PR comment
+   ./scripts/e2e-check.sh --pr <pr_number>
+   ```
+   Results appear as a PR comment with ✅/❌ per endpoint so user can verify
+   feature behaviour matches expectations before merging.
 4. Open PR with:
    - **Title**: short summary (≤70 chars)
    - **Body** (required sections):
