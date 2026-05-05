@@ -1,0 +1,23 @@
+# Runtime
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+alembic==1.14.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+python-multipart==0.0.20
+pypdf==5.1.0
+python-docx==1.1.2
+anthropic==0.40.0
+
+# Development & test
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+httpx==0.28.1
+schemathesis==3.39.7
+testcontainers[postgres]==4.9.0
+ruff==0.8.3
+mypy==1.13.0

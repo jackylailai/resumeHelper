@@ -1,0 +1,20 @@
+Senior Backend Engineer
+
+We are looking for a senior backend engineer to join our platform team. You will:
+
+- Design and operate FastAPI services backed by PostgreSQL.
+- Integrate LLM providers (Anthropic Claude preferred) with caching and
+  observability.
+- Drive test-driven development, owning unit, integration and contract test
+  layers.
+- Collaborate with frontend on async job APIs and UX consistency.
+
+Required:
+- 5+ years Python, including 2+ years FastAPI or comparable async framework.
+- Strong PostgreSQL fundamentals, SQLAlchemy 2.x, Alembic.
+- Production experience with prompt-driven LLM features.
+- TDD discipline and comfort with pytest, schemathesis, or equivalent.
+
+Nice to have:
+- Docker / Kubernetes operational experience.
+- Open-source contributions in observability or workflow orchestration.

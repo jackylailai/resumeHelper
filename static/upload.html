@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resume Upload — AI Career Intelligence System</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="wrap">
+            <h1>Resume Upload &amp; Rating</h1>
+            <p class="sub">Upload a resume, paste a job description, get a fit score.</p>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <section class="panel">
+            <form id="upload-form">
+                <label for="resume-file"><strong>Resume file</strong> (PDF or DOCX, ≤ 10 MB)</label>
+                <input id="resume-file" name="file" type="file" accept=".pdf,.docx" required />
+
+                <label for="job-description"><strong>Job description</strong></label>
+                <textarea id="job-description" name="job_description" rows="8" required
+                    placeholder="Paste the job description here…"></textarea>
+
+                <input id="resume-id" name="resume_id" type="hidden" />
+
+                <button type="submit">Evaluate</button>
+            </form>
+        </section>
+
+        <section id="result" class="panel" hidden>
+            <h2>Result</h2>
+            <p id="status-line"></p>
+            <div id="score-card" hidden>
+                <h3>Score: <span id="score-value"></span> / 100</h3>
+                <p id="explanation"></p>
+                <h4>Strengths</h4>
+                <ul id="strengths"></ul>
+                <h4>Gaps</h4>
+                <ul id="gaps"></ul>
+            </div>
+        </section>
+
+        <section id="history" class="panel" hidden>
+            <h2>Version history</h2>
+            <ol id="history-list"></ol>
+        </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+</body>
+</html>
