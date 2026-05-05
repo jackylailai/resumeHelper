@@ -82,11 +82,18 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
     test_app = create_app()
     test_app.dependency_overrides[get_db] = override_db
 
-    # Inject FakeLLMClient (used by evaluator service via DI in US1)
-    test_app.state.llm_client = fake_llm
-
     with TestClient(test_app, raise_server_exceptions=True) as c:
+        # Set AFTER lifespan runs (lifespan overwrites app.state.llm_client)
+        test_app.state.llm_client = fake_llm
         yield c
+
+    # Truncate all tables after each test so next test starts clean
+    from sqlalchemy import text
+    with db_engine.connect() as conn:
+        conn.execute(text(
+            "TRUNCATE TABLE generated_resumes, job_analyses, baseline_profile RESTART IDENTITY CASCADE"
+        ))
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------
