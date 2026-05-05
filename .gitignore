@@ -1,0 +1,86 @@
+# Speckit generated files
+.specify/
+
+# IDE/Editor specific
+.claude/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.key
+secrets/
+credentials.json
+
+# Uploaded user data (resumes contain PII)
+backend/storage/
+storage/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+ENV/
+env/
+
+# Package managers
+node_modules/
+package-lock.json
+yarn.lock
+
+# Dependencies
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python tooling caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.tox/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/

@@ -1,0 +1,356 @@
+openapi: 3.1.0
+info:
+  title: Resume Upload & Rating API
+  version: 0.1.0
+  description: |
+    Single-user FastAPI service for uploading resumes (PDF/DOCX), evaluating
+    them against a job description, and tracking version history. All
+    responses follow the constitutional envelope `{ data, error, meta }`.
+
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+
+tags:
+  - name: health
+  - name: resumes
+  - name: evaluations
+  - name: jobs
+
+paths:
+  /api/health:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthEnvelope"
+
+  /api/resumes:
+    post:
+      tags: [resumes]
+      summary: Upload a resume version and start evaluation
+      description: |
+        Multipart upload. The server stores an immutable ResumeVersion and
+        triggers a job-fit evaluation against the supplied job description.
+        If the (content_hash, jd_hash, prompt_version) combination has been
+        evaluated before, the cached result is returned synchronously
+        (status=succeeded). Otherwise a job_id is returned (status=pending).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, job_description]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF or DOCX, ≤ 10 MB
+                job_description:
+                  type: string
+                  description: Plain-text JD the resume is evaluated against
+                resume_id:
+                  type: string
+                  format: uuid
+                  description: |
+                    Optional. If omitted, a new Resume is created. If supplied,
+                    the upload becomes a new ResumeVersion under the existing
+                    Resume.
+      responses:
+        "200":
+          description: Cache hit — evaluation returned synchronously
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationEnvelope"
+        "202":
+          description: Evaluation queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobEnvelope"
+        "413":
+          $ref: "#/components/responses/Error"
+        "415":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+    get:
+      tags: [resumes]
+      summary: List all resumes (with latest version + score)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumeListEnvelope"
+
+  /api/resumes/{resume_id}/versions:
+    get:
+      tags: [resumes]
+      summary: List versions and ratings for a resume (SC-005)
+      parameters:
+        - in: path
+          name: resume_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Reverse-chronological list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionListEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/resumes/{resume_id}/compare:
+    get:
+      tags: [resumes]
+      summary: Compare two versions (US3)
+      parameters:
+        - in: path
+          name: resume_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: from_version
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: to_version
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComparisonEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/evaluations/{evaluation_id}:
+    get:
+      tags: [evaluations]
+      summary: Fetch a specific evaluation
+      parameters:
+        - in: path
+          name: evaluation_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/jobs/{job_id}:
+    get:
+      tags: [jobs]
+      summary: Poll job status (FR-004)
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK — status reflects current lifecycle state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+
+components:
+  schemas:
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed]
+          description: Mirrors evaluation_jobs.status when applicable
+        cached: { type: boolean }
+      additionalProperties: false
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: |
+            Stable machine-readable error code, e.g. `file_too_large`,
+            `unsupported_format`, `no_extractable_text`, `not_found`,
+            `llm_unavailable`, `validation_failed`.
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+
+    Resume:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string }
+        latest_version_number: { type: integer }
+        latest_score: { type: integer, nullable: true, minimum: 0, maximum: 100 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ResumeVersion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        resume_id: { type: string, format: uuid }
+        version_number: { type: integer }
+        file_format: { type: string, enum: [pdf, docx] }
+        file_size_bytes: { type: integer }
+        content_hash: { type: string }
+        uploaded_at: { type: string, format: date-time }
+        evaluation:
+          oneOf:
+            - $ref: "#/components/schemas/Evaluation"
+            - type: "null"
+
+    Evaluation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        resume_version_id: { type: string, format: uuid }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        explanation: { type: string }
+        strengths:
+          type: array
+          items: { type: string }
+        gaps:
+          type: array
+          items: { type: string }
+        prompt_version: { type: string }
+        model: { type: string }
+        latency_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    Job:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed]
+        resume_version_id: { type: string, format: uuid }
+        evaluation_id:
+          type: string
+          format: uuid
+          nullable: true
+        failure_reason:
+          type: string
+          nullable: true
+        created_at: { type: string, format: date-time }
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Comparison:
+      type: object
+      properties:
+        from_version: { $ref: "#/components/schemas/ResumeVersion" }
+        to_version: { $ref: "#/components/schemas/ResumeVersion" }
+        score_delta: { type: integer }
+        changed_sections:
+          type: array
+          items: { type: string }
+
+    HealthEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status: { type: string, enum: [ok] }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    EvaluationEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Evaluation" }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    JobEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Job" }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    ResumeListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Resume" }
+        error: { type: "null" }
+        meta:
+          allOf:
+            - $ref: "#/components/schemas/Meta"
+            - type: object
+              properties:
+                next_cursor: { type: string, nullable: true }
+
+    VersionListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ResumeVersion" }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    ComparisonEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Comparison" }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        data: { type: "null" }
+        error: { $ref: "#/components/schemas/Error" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
