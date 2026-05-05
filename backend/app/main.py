@@ -3,46 +3,24 @@ from __future__ import annotations
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.api.evaluations import router as evaluations_router
+from backend.app.api.evaluate import router as evaluate_router
 from backend.app.api.health import router as health_router
-from backend.app.api.jobs import router as jobs_router
-from backend.app.api.resumes import router as resumes_router
+from backend.app.api.profile import router as profile_router
 from backend.app.config import get_settings
-from backend.app.db import SessionLocal
-from backend.app.services.llm.anthropic import AnthropicLLMClient
+from backend.app.services.llm.claude_cli import ClaudeCLIClient
 
 logger = logging.getLogger(__name__)
 
 
-def _recover_orphaned_jobs() -> None:
-    """On startup, mark any jobs stuck in 'running' as failed.
-
-    BackgroundTasks are in-process; a crash leaves jobs in 'running' forever.
-    """
-    from backend.app.models.evaluation_job import EvaluationJob  # avoid circular at module level
-
-    with SessionLocal() as db:
-        orphans = db.query(EvaluationJob).filter(EvaluationJob.status == "running").all()
-        if orphans:
-            logger.warning("Recovering %d orphaned jobs from previous crash", len(orphans))
-            for job in orphans:
-                job.status = "failed"
-                job.failure_reason = "worker_crashed"
-                job.finished_at = datetime.now(timezone.utc)
-            db.commit()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    _recover_orphaned_jobs()
-    app.state.llm_client = AnthropicLLMClient()
+    app.state.llm_client = ClaudeCLIClient()
     yield
 
 
@@ -72,9 +50,8 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(health_router, prefix="/api")
-    app.include_router(resumes_router, prefix="/api")
-    app.include_router(evaluations_router, prefix="/api")
-    app.include_router(jobs_router, prefix="/api")
+    app.include_router(profile_router, prefix="/api")
+    app.include_router(evaluate_router, prefix="/api")
 
     # Serve static UI at root — mount last so API routes take priority
     app.mount("/", StaticFiles(directory="static", html=True), name="static")

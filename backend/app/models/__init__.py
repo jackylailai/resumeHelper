@@ -1,12 +1,5 @@
-from backend.app.models.evaluation_job import EvaluationCache, EvaluationJob
-from backend.app.models.resume import Resume
-from backend.app.models.resume_evaluation import ResumeEvaluation
-from backend.app.models.resume_version import ResumeVersion
+from backend.app.models.baseline_profile import BaselineProfile
+from backend.app.models.job_analysis import JobAnalysis
+from backend.app.models.generated_resume import GeneratedResume
 
-__all__ = [
-    "Resume",
-    "ResumeVersion",
-    "ResumeEvaluation",
-    "EvaluationJob",
-    "EvaluationCache",
-]
+__all__ = ["BaselineProfile", "JobAnalysis", "GeneratedResume"]
