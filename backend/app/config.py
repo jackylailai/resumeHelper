@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Database
+    database_url: str
+
+    # LLM
+    anthropic_api_key: str = ""
+    llm_model: str = "claude-sonnet-4-6"
+    llm_prompt_version: str = "resume-fit-v1"
+
+    # Storage
+    storage_dir: Path = Path("./backend/storage")
+
+    # Limits
+    max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
+
+    # Server
+    port: int = 8000
+    log_level: str = "info"
+
+    @field_validator("storage_dir", mode="after")
+    @classmethod
+    def make_storage_dir(cls, v: Path) -> Path:
+        v.mkdir(parents=True, exist_ok=True)
+        return v
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
