@@ -10,9 +10,13 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.app.api.evaluations import router as evaluations_router
 from backend.app.api.health import router as health_router
+from backend.app.api.jobs import router as jobs_router
+from backend.app.api.resumes import router as resumes_router
 from backend.app.config import get_settings
 from backend.app.db import SessionLocal
+from backend.app.services.llm.anthropic import AnthropicLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,7 @@ def _recover_orphaned_jobs() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _recover_orphaned_jobs()
+    app.state.llm_client = AnthropicLLMClient()
     yield
 
 
@@ -67,6 +72,9 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(health_router, prefix="/api")
+    app.include_router(resumes_router, prefix="/api")
+    app.include_router(evaluations_router, prefix="/api")
+    app.include_router(jobs_router, prefix="/api")
 
     # Serve static UI at root — mount last so API routes take priority
     app.mount("/", StaticFiles(directory="static", html=True), name="static")

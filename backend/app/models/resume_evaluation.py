@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -32,8 +33,8 @@ class ResumeEvaluation(Base):
     gaps: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
     model: Mapped[str] = mapped_column(String(64), nullable=False)
-    token_count_input: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    token_count_output: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    token_count_input: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    token_count_output: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
@@ -42,6 +43,6 @@ class ResumeEvaluation(Base):
     version: Mapped[ResumeVersion] = relationship(  # noqa: F821
         "ResumeVersion", back_populates="evaluations"
     )
-    cache_entry: Mapped[EvaluationCache | None] = relationship(  # noqa: F821
+    cache_entry: Mapped[Optional[EvaluationCache]] = relationship(  # noqa: F821
         "EvaluationCache", back_populates="evaluation", uselist=False
     )

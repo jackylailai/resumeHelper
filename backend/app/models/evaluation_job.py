@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -31,20 +32,20 @@ class EvaluationJob(Base):
     )
     jd_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
-    evaluation_id: Mapped[uuid.UUID | None] = mapped_column(
+    evaluation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("resume_evaluations.id", ondelete="SET NULL"), nullable=True
     )
-    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     version: Mapped[ResumeVersion] = relationship(  # noqa: F821
         "ResumeVersion", back_populates="jobs"
     )
-    evaluation: Mapped[ResumeEvaluation | None] = relationship(  # noqa: F821
+    evaluation: Mapped[Optional[ResumeEvaluation]] = relationship(  # noqa: F821
         "ResumeEvaluation", foreign_keys=[evaluation_id]
     )
 
