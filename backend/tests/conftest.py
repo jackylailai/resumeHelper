@@ -111,15 +111,5 @@ def sample_jd() -> str:
 @pytest.fixture
 def minimal_pdf_bytes() -> bytes:
     """Minimal valid single-page PDF containing the text 'Hello World'."""
-    return (
-        b"%PDF-1.4\n"
-        b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-        b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
-        b"3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R"
-        b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n"
-        b"4 0 obj<</Length 44>>\nstream\nBT /F1 12 Tf 100 700 Td"
-        b" (Hello World) Tj ET\nendstream\nendobj\n"
-        b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n"
-        b"xref\n0 6\n0000000000 65535 f\n"
-        b"trailer<</Size 6/Root 1 0 R>>\nstartxref\n0\n%%EOF"
-    )
+    from backend.tests.unit.test_parsing import make_minimal_pdf
+    return make_minimal_pdf("Hello World")

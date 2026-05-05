@@ -20,23 +20,39 @@ from backend.app.services.parsing import NoExtractableTextError, parse
 # ---------------------------------------------------------------------------
 
 def make_minimal_pdf(text: str = "Hello World") -> bytes:
-    """Build a minimal readable PDF with one text stream."""
-    body = f"BT /F1 12 Tf 100 700 Td ({text}) Tj ET".encode()
-    stream = b"stream\n" + body + b"\nendstream"
-    obj4 = b"4 0 obj<</Length " + str(len(body)).encode() + b">>\n" + stream + b"\nendobj\n"
+    """Build a minimal readable PDF with correct xref offsets."""
+    stream_content = f"BT /F1 12 Tf 100 700 Td ({text}) Tj ET".encode()
+    objs: list[bytes] = []
+    offsets: list[int] = []
 
-    parts = [
-        b"%PDF-1.4\n",
-        b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n",
-        b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n",
-        b"3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R"
-        b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n",
-        obj4,
-        b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n",
-        b"xref\n0 6\n0000000000 65535 f\n",
-        b"trailer<</Size 6/Root 1 0 R>>\nstartxref\n0\n%%EOF",
-    ]
-    return b"".join(parts)
+    header = b"%PDF-1.4\n"
+    pos = len(header)
+
+    def add(obj: bytes) -> None:
+        nonlocal pos
+        offsets.append(pos)
+        objs.append(obj)
+        pos += len(obj)
+
+    add(b"1 0 obj\n<</Type /Catalog /Pages 2 0 R>>\nendobj\n")
+    add(b"2 0 obj\n<</Type /Pages /Kids [3 0 R] /Count 1>>\nendobj\n")
+    add(
+        b"3 0 obj\n<</Type /Page /MediaBox [0 0 612 792] /Parent 2 0 R"
+        b" /Contents 4 0 R /Resources <</Font <</F1 5 0 R>>>>>>\nendobj\n"
+    )
+    add(
+        b"4 0 obj\n<</Length " + str(len(stream_content)).encode() + b">>\n"
+        b"stream\n" + stream_content + b"\nendstream\nendobj\n"
+    )
+    add(b"5 0 obj\n<</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>\nendobj\n")
+
+    xref_offset = pos
+    xref = b"xref\n0 6\n0000000000 65535 f \r\n"
+    for off in offsets:
+        xref += f"{off:010d} 00000 n \r\n".encode()
+    trailer = b"trailer\n<</Size 6 /Root 1 0 R>>\nstartxref\n" + str(xref_offset).encode() + b"\n%%EOF\n"
+
+    return header + b"".join(objs) + xref + trailer
 
 
 def make_minimal_docx(text: str = "Hello World") -> bytes:
