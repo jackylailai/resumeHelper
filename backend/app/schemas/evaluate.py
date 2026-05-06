@@ -74,7 +74,7 @@ class SubmittableResumeOut(BaseModel):
 
 
 class BulkEvaluateIn(BaseModel):
-    jd_texts: Annotated[List[str], Field(min_length=1)]
+    jd_texts: Annotated[List[str], Field(min_length=1, max_length=100)]
 
 
 class BulkEvaluateResult(BaseModel):

@@ -75,3 +75,21 @@ def test_bulk_evaluate_stores_all_in_history(client: TestClient):
     client.post("/api/evaluate/bulk", json={"jd_texts": [_JD_A, _JD_B, _JD_C]})
     history = client.get("/api/history").json()["data"]
     assert len(history) >= 3
+
+
+@pytest.mark.integration
+def test_bulk_evaluate_no_profile_does_not_write_any_jd(client: TestClient):
+    """Without a baseline, the endpoint must 404 before writing any JD to the DB."""
+    r = client.post("/api/evaluate/bulk", json={"jd_texts": [_JD_A, _JD_B]})
+    assert r.status_code == 404
+    # Nothing should be in history — no partial write
+    history = client.get("/api/history").json()["data"]
+    assert history == []
+
+
+@pytest.mark.integration
+def test_bulk_evaluate_over_limit_returns_422(client: TestClient):
+    """More than 100 JDs must be rejected before any processing."""
+    client.post("/api/profile", json={"skills_text": _PROFILE})
+    r = client.post("/api/evaluate/bulk", json={"jd_texts": [_JD_A] * 101})
+    assert r.status_code == 422

@@ -28,7 +28,7 @@ from backend.app.schemas.evaluate import (
     HistoryItemOut,
     SubmittableResumeOut,
 )
-from backend.app.services.evaluator_v2 import evaluate_jd
+from backend.app.services.evaluator_v2 import evaluate_jd, get_baseline
 from backend.app.services.llm import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -109,6 +109,10 @@ def bulk_evaluate(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Evaluate multiple JDs in one request. Deduplicates by content hash."""
+    # Check baseline exists before touching any JD — avoids partial DB writes on missing profile
+    if get_baseline(db) is None:
+        return error("not_found", "baseline_profile not set", status_code=404)
+
     settings = get_settings()
     llm = _get_llm(request)
     results: list[BulkEvaluateResult] = []
@@ -116,14 +120,11 @@ def bulk_evaluate(
     cached_count = 0
 
     for jd_text in body.jd_texts:
-        try:
-            job, cached = evaluate_jd(
-                db, jd_text, llm,
-                prompt_version=settings.llm_prompt_version,
-                threshold=settings.resume_gen_threshold,
-            )
-        except LookupError as exc:
-            return error("not_found", str(exc), status_code=404)
+        job, cached = evaluate_jd(
+            db, jd_text, llm,
+            prompt_version=settings.llm_prompt_version,
+            threshold=settings.resume_gen_threshold,
+        )
 
         if cached:
             cached_count += 1
