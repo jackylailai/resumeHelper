@@ -48,36 +48,43 @@ async function loadProfile() {
     const res = await fetch('/api/profile');
     const body = await res.json();
     if (res.ok && body.data?.skills_text) {
-      document.getElementById('profile-input').value = body.data.skills_text;
-      document.getElementById('profile-success').textContent = 'Profile loaded.';
+      showProfilePreview(body.data.skills_text);
     }
   } catch (_) {}
 }
 
-async function saveProfile() {
-  const text = document.getElementById('profile-input').value.trim();
-  if (!text) { document.getElementById('profile-error').textContent = 'Skills text cannot be empty.'; return; }
+function showProfilePreview(text) {
+  document.getElementById('profile-input').value = text;
+  document.getElementById('profile-preview-wrap').style.display = 'block';
+}
+
+async function uploadProfilePdf(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('profile-filename').textContent = file.name;
   document.getElementById('profile-error').textContent = '';
   document.getElementById('profile-success').textContent = '';
-  document.getElementById('profile-save-btn').disabled = true;
-  document.getElementById('profile-status').textContent = 'Saving…';
+  document.getElementById('profile-upload-progress').style.display = 'flex';
+  document.getElementById('profile-preview-wrap').style.display = 'none';
+  const form = new FormData();
+  form.append('file', file);
   try {
-    const res = await fetch('/api/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skills_text: text }),
-    });
+    const res = await fetch('/api/profile/upload', { method: 'POST', body: form });
     const body = await res.json();
-    if (!res.ok) { document.getElementById('profile-error').textContent = body?.error?.message || 'Error saving profile.'; return; }
-    document.getElementById('profile-success').textContent = 'Profile saved!';
+    if (!res.ok) {
+      document.getElementById('profile-error').textContent = body?.error?.message || 'Upload failed.';
+      return;
+    }
+    document.getElementById('profile-success').textContent = 'Profile saved from PDF!';
+    showProfilePreview(body.data.skills_text);
     profileLoaded = true;
     setHeaderBadge(true);
     document.getElementById('no-profile-notice').style.display = 'none';
   } catch (e) {
     document.getElementById('profile-error').textContent = 'Network error: ' + e.message;
   } finally {
-    document.getElementById('profile-save-btn').disabled = false;
-    document.getElementById('profile-status').textContent = '';
+    document.getElementById('profile-upload-progress').style.display = 'none';
+    input.value = '';
   }
 }
 

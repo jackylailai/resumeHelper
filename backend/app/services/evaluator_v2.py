@@ -26,6 +26,7 @@ def get_baseline(db: Session) -> BaselineProfile | None:
 
 
 def upsert_baseline(db: Session, skills_text: str) -> BaselineProfile:
+    skills_text = skills_text.replace("\x00", "")
     existing = get_baseline(db)
     if existing:
         existing.skills_text = skills_text

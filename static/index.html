@@ -173,15 +173,24 @@
 <!-- PROFILE -->
 <div id="tab-profile" class="page">
   <div class="card">
-    <label for="profile-input">Baseline Resume / Skills</label>
-    <p class="status-msg" style="margin-bottom:0.75rem">This is your base resume. The LLM will compare JDs against this text to score and tailor.</p>
-    <textarea id="profile-input" rows="14" placeholder="Paste your resume or skills summary here&#10;&#10;Example:&#10;5 years backend experience. Python, FastAPI, PostgreSQL, Redis, Docker, Kubernetes.&#10;Led design and deployment of REST APIs serving 1M+ daily requests.&#10;Strong in system design, CI/CD, and cloud infrastructure (AWS)."></textarea>
-    <div class="mt flex-between">
-      <button class="btn btn-primary" id="profile-save-btn" onclick="saveProfile()">Save Profile</button>
-      <span id="profile-status" class="status-msg"></span>
+    <p class="status-msg" style="margin-bottom:0.75rem">Upload your resume PDF. The text will be extracted and used as your baseline profile for JD scoring and tailoring.</p>
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+      <label class="btn btn-primary" style="cursor:pointer">
+        Choose PDF
+        <input type="file" id="profile-pdf-input" accept=".pdf" style="display:none" onchange="uploadProfilePdf(this)">
+      </label>
+      <span id="profile-filename" class="status-msg">No file chosen</span>
+    </div>
+    <div id="profile-upload-progress" style="display:none;margin-top:0.75rem" class="flex">
+      <span class="spinner"></span>
+      <span style="font-size:0.85rem;color:var(--muted)">Extracting text…</span>
     </div>
     <div id="profile-error" class="error-msg"></div>
     <div id="profile-success" class="success-msg"></div>
+    <div id="profile-preview-wrap" style="display:none;margin-top:1rem">
+      <label style="margin-bottom:0.4rem;display:block;font-size:0.8rem;color:var(--muted)">Extracted text (read-only preview)</label>
+      <textarea id="profile-input" rows="12" readonly style="opacity:0.7;cursor:default"></textarea>
+    </div>
   </div>
 </div>
 
