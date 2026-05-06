@@ -29,7 +29,7 @@ from backend.app.schemas.evaluate import (
     HistoryItemOut,
     SubmittableResumeOut,
 )
-from backend.app.services.evaluator_v2 import evaluate_jd, get_baseline
+from backend.app.services.evaluator_v2 import evaluate_jd, get_latest_profile as get_baseline
 from backend.app.services.llm import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ def evaluate(
             db, body.jd_text, llm,
             prompt_version=settings.llm_prompt_version,
             threshold=settings.resume_gen_threshold,
+            profile_id=body.profile_id,
         )
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)

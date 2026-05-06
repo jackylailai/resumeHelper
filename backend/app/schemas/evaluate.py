@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class EvaluateIn(BaseModel):
     jd_text: str
+    profile_id: Optional[int] = None
 
 
 class EvaluateOut(BaseModel):
@@ -41,6 +42,7 @@ class GeneratedResumeOut(BaseModel):
 class HistoryItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    profile_id: Optional[int] = None
     jd_snippet: Optional[str]
     score: Optional[int]
     threshold_met: bool
