@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.db import Base
@@ -32,7 +32,13 @@ class JobAnalysis(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    jd_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    profile_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("baseline_profile.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    jd_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     jd_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     jd_full_text: Mapped[str] = mapped_column(Text, nullable=False)
     score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -40,7 +46,6 @@ class JobAnalysis(Base):
     strengths: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     gaps: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     threshold_met: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Three-tier classification
     status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     can_submit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     skip_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

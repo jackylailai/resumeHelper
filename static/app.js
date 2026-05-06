@@ -20,9 +20,10 @@ function switchTab(name) {
 // ---- Profile ----
 async function checkProfile() {
   try {
-    const res = await fetch('/api/profile');
+    const res = await fetch('/api/profiles');
     const body = await res.json();
-    if (res.ok && body.data?.skills_text) {
+    const profiles = body.data || [];
+    if (res.ok && profiles.length > 0) {
       profileLoaded = true;
       setHeaderBadge(true);
       document.getElementById('no-profile-notice').style.display = 'none';
@@ -31,7 +32,18 @@ async function checkProfile() {
       setHeaderBadge(false);
       document.getElementById('no-profile-notice').style.display = 'block';
     }
+    populateProfileSelector(profiles);
   } catch (_) {}
+}
+
+function populateProfileSelector(profiles) {
+  const sel = document.getElementById('profile-select');
+  if (!sel) return;
+  sel.innerHTML = profiles.length === 0
+    ? '<option value="">No profiles yet — add one in Profile tab</option>'
+    : profiles.map(p =>
+        `<option value="${p.id}">${escHtml(p.name || 'Untitled #' + p.id)} — ${fmtDate(p.updated_at)}</option>`
+      ).join('');
 }
 
 function setHeaderBadge(hasProfile) {
@@ -44,48 +56,83 @@ function setHeaderBadge(hasProfile) {
 }
 
 async function loadProfile() {
+  const el = document.getElementById('profiles-list');
+  if (!el) return;
+  el.innerHTML = '<div class="empty">Loading…</div>';
   try {
-    const res = await fetch('/api/profile');
+    const res = await fetch('/api/profiles');
     const body = await res.json();
-    if (res.ok && body.data?.skills_text) {
-      showProfilePreview(body.data.skills_text);
-    }
-  } catch (_) {}
-}
-
-function showProfilePreview(text) {
-  document.getElementById('profile-input').value = text;
-  document.getElementById('profile-preview-wrap').style.display = 'block';
-}
-
-async function uploadProfilePdf(input) {
-  const file = input.files[0];
-  if (!file) return;
-  document.getElementById('profile-filename').textContent = file.name;
-  document.getElementById('profile-error').textContent = '';
-  document.getElementById('profile-success').textContent = '';
-  document.getElementById('profile-upload-progress').style.display = 'flex';
-  document.getElementById('profile-preview-wrap').style.display = 'none';
-  const form = new FormData();
-  form.append('file', file);
-  try {
-    const res = await fetch('/api/profile/upload', { method: 'POST', body: form });
-    const body = await res.json();
-    if (!res.ok) {
-      document.getElementById('profile-error').textContent = body?.error?.message || 'Upload failed.';
+    if (!res.ok) { el.innerHTML = '<div class="empty">Error loading profiles.</div>'; return; }
+    const profiles = body.data || [];
+    populateProfileSelector(profiles);
+    if (profiles.length === 0) {
+      el.innerHTML = '<div class="empty">No profiles yet. Click "+ Add Profile" to get started.</div>';
       return;
     }
-    document.getElementById('profile-success').textContent = 'Profile saved from PDF!';
-    showProfilePreview(body.data.skills_text);
+    el.innerHTML = '<div class="card" style="padding:0;overflow:hidden"><table>'
+      + '<thead><tr><th>Name</th><th>Preview</th><th>Updated</th><th></th></tr></thead><tbody>'
+      + profiles.map(p => `
+        <tr>
+          <td style="font-weight:600">${escHtml(p.name || 'Untitled #' + p.id)}</td>
+          <td><div class="jd-preview">${escHtml((p.skills_text || '').substring(0, 80))}</div></td>
+          <td style="font-size:0.8rem;color:var(--muted)">${fmtDate(p.updated_at)}</td>
+          <td><button class="btn btn-sm btn-muted" style="color:var(--red)" onclick="deleteProfile(${p.id})">Delete</button></td>
+        </tr>`).join('')
+      + '</tbody></table></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="empty">Network error.</div>';
+  }
+}
+
+function toggleAddForm(show) {
+  document.getElementById('add-profile-card').style.display = show ? 'block' : 'none';
+  document.getElementById('add-profile-error').textContent = '';
+  document.getElementById('add-profile-success').textContent = '';
+  if (!show) {
+    document.getElementById('new-profile-name').value = '';
+    document.getElementById('new-profile-pdf').value = '';
+    document.getElementById('new-profile-filename').textContent = 'No file chosen';
+  }
+}
+
+function updateFilename(input) {
+  document.getElementById('new-profile-filename').textContent = input.files[0]?.name || 'No file chosen';
+}
+
+async function submitNewProfile() {
+  const file = document.getElementById('new-profile-pdf').files[0];
+  const name = document.getElementById('new-profile-name').value.trim() || null;
+  document.getElementById('add-profile-error').textContent = '';
+  document.getElementById('add-profile-success').textContent = '';
+  if (!file) { document.getElementById('add-profile-error').textContent = 'Please choose a PDF file.'; return; }
+  document.getElementById('add-profile-progress').style.display = 'flex';
+  const form = new FormData();
+  form.append('file', file);
+  if (name) form.append('name', name);
+  try {
+    const res = await fetch('/api/profiles/upload', { method: 'POST', body: form });
+    const body = await res.json();
+    if (!res.ok) { document.getElementById('add-profile-error').textContent = body?.error?.message || 'Upload failed.'; return; }
+    document.getElementById('add-profile-success').textContent = 'Profile saved!';
     profileLoaded = true;
     setHeaderBadge(true);
     document.getElementById('no-profile-notice').style.display = 'none';
+    setTimeout(() => { toggleAddForm(false); loadProfile(); }, 800);
   } catch (e) {
-    document.getElementById('profile-error').textContent = 'Network error: ' + e.message;
+    document.getElementById('add-profile-error').textContent = 'Network error: ' + e.message;
   } finally {
-    document.getElementById('profile-upload-progress').style.display = 'none';
-    input.value = '';
+    document.getElementById('add-profile-progress').style.display = 'none';
   }
+}
+
+async function deleteProfile(id) {
+  if (!confirm('Delete this profile?')) return;
+  try {
+    const res = await fetch('/api/profiles/' + id, { method: 'DELETE' });
+    if (!res.ok) { alert('Delete failed.'); return; }
+    loadProfile();
+    checkProfile();
+  } catch (e) { alert('Network error: ' + e.message); }
 }
 
 // ---- Evaluate ----
@@ -101,10 +148,11 @@ async function runEvaluate() {
 
   let data, cached;
   try {
+    const profileId = document.getElementById('profile-select')?.value;
     const res = await fetch('/api/evaluate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jd_text: jd }),
+      body: JSON.stringify({ jd_text: jd, profile_id: profileId ? parseInt(profileId) : null }),
     });
     const body = await res.json();
     if (!res.ok) { setEvalError(body?.error?.message || res.statusText); return; }

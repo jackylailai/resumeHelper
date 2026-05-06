@@ -57,7 +57,10 @@ def run_tailoring(
             return
 
         logger.info("tailor_start job_id=%s score=%s", job_analysis_id, job.score)
-        baseline = db.query(BaselineProfile).order_by(BaselineProfile.id.desc()).first()
+        if job.profile_id:
+            baseline = db.get(BaselineProfile, job.profile_id)
+        else:
+            baseline = db.query(BaselineProfile).order_by(BaselineProfile.id.desc()).first()
         if baseline is None:
             logger.error("tailor_no_baseline job_id=%s", job_analysis_id)
             return

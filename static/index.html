@@ -98,6 +98,10 @@
     No baseline profile set. Go to the <strong>Profile</strong> tab to add your resume/skills first.
   </div>
   <div class="card">
+    <label for="profile-select">Profile to evaluate against</label>
+    <select id="profile-select" style="width:100%;background:#0f172a;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.55rem 0.75rem;font-size:0.9rem;margin-bottom:0.75rem">
+      <option value="">Loading profiles…</option>
+    </select>
     <label for="jd-input">Paste Job Description</label>
     <textarea id="jd-input" rows="10" placeholder="Paste the full job description here…"></textarea>
     <div class="mt flex-between">
@@ -173,24 +177,38 @@
 <!-- PROFILE -->
 <div id="tab-profile" class="page">
   <div class="card">
-    <p class="status-msg" style="margin-bottom:0.75rem">Upload your resume PDF. The text will be extracted and used as your baseline profile for JD scoring and tailoring.</p>
-    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+    <div class="flex-between" style="margin-bottom:1rem">
+      <span style="font-weight:600">Baseline Profiles</span>
+      <button class="btn btn-primary btn-sm" onclick="toggleAddForm(true)">+ Add Profile</button>
+    </div>
+    <div id="profiles-list"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div id="add-profile-card" class="card" style="display:none">
+    <div class="flex-between" style="margin-bottom:0.75rem">
+      <span style="font-weight:600">New Profile</span>
+      <button class="btn btn-sm btn-muted" onclick="toggleAddForm(false)">Cancel</button>
+    </div>
+    <label>Name (optional)</label>
+    <input type="text" id="new-profile-name" placeholder="e.g. Backend Engineer Resume"
+      style="width:100%;background:#0f172a;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.6rem 0.75rem;font-size:0.9rem;margin-bottom:0.75rem">
+    <label>Upload PDF</label>
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-top:0.4rem">
       <label class="btn btn-primary" style="cursor:pointer">
         Choose PDF
-        <input type="file" id="profile-pdf-input" accept=".pdf" style="display:none" onchange="uploadProfilePdf(this)">
+        <input type="file" id="new-profile-pdf" accept=".pdf" style="display:none" onchange="updateFilename(this)">
       </label>
-      <span id="profile-filename" class="status-msg">No file chosen</span>
+      <span id="new-profile-filename" class="status-msg">No file chosen</span>
     </div>
-    <div id="profile-upload-progress" style="display:none;margin-top:0.75rem" class="flex">
+    <div id="add-profile-progress" style="display:none;margin-top:0.75rem" class="flex">
       <span class="spinner"></span>
-      <span style="font-size:0.85rem;color:var(--muted)">Extracting text…</span>
+      <span style="font-size:0.85rem;color:var(--muted)">Uploading…</span>
     </div>
-    <div id="profile-error" class="error-msg"></div>
-    <div id="profile-success" class="success-msg"></div>
-    <div id="profile-preview-wrap" style="display:none;margin-top:1rem">
-      <label style="margin-bottom:0.4rem;display:block;font-size:0.8rem;color:var(--muted)">Extracted text (read-only preview)</label>
-      <textarea id="profile-input" rows="12" readonly style="opacity:0.7;cursor:default"></textarea>
+    <div class="mt">
+      <button class="btn btn-primary" onclick="submitNewProfile()">Save Profile</button>
     </div>
+    <div id="add-profile-error" class="error-msg"></div>
+    <div id="add-profile-success" class="success-msg"></div>
   </div>
 </div>
 
