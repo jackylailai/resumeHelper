@@ -35,8 +35,10 @@ def test_callback_appears_in_history_detail(client: TestClient):
 
     item_id = client.get("/api/history").json()["data"][0]["id"]
     detail = client.get(f"/api/history/{item_id}").json()["data"]
-    assert len(detail["generated_resumes"]) == 1
-    assert detail["generated_resumes"][0]["resume_text"] == "# My Resume"
+    # At least 1 resume: the explicit callback. Background tailoring may also have fired.
+    assert len(detail["generated_resumes"]) >= 1
+    resume_texts = [r["resume_text"] for r in detail["generated_resumes"]]
+    assert "# My Resume" in resume_texts
 
 
 @pytest.mark.integration

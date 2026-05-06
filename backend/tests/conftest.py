@@ -85,6 +85,8 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
     with TestClient(test_app, raise_server_exceptions=True) as c:
         # Set AFTER lifespan runs (lifespan overwrites app.state.llm_client)
         test_app.state.llm_client = fake_llm
+        # Inject test session factory so background tasks use the test DB
+        test_app.state.session_factory = Session
         yield c
 
     # Truncate all tables after each test so next test starts clean

@@ -19,6 +19,7 @@ class GeneratedResume(Base):
         ForeignKey("job_analyses.id", ondelete="CASCADE"), nullable=False, index=True
     )
     resume_text: Mapped[str] = mapped_column(Text, nullable=False)
+    pdf_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now

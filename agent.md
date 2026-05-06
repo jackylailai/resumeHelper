@@ -115,3 +115,53 @@ Prompt files live in `modes/` (career-ops pattern):
 
 Read `specs/001-resume-upload-rating/scope-correction.md` before every session.
 If in doubt about whether a feature belongs: it doesn't. Ask first.
+
+---
+
+## End-of-Process Discord Notification
+
+At the end of every task or process — whenever work is complete and there is meaningful
+feedback to share — Claude **must** send a summary to Discord.
+
+**When to trigger**
+- A feature, fix, or chore is fully implemented (files written, committed, or PR opened)
+- A test run finishes (pass or fail)
+- An investigation concludes with findings
+- Any multi-step process reaches a natural stopping point
+
+**When NOT to trigger**
+- Mid-task (only at the end, not after every small step)
+- The output is purely a one-line answer with no follow-up action needed
+- The previous message in the session already sent a Discord notification for the same result
+
+**Format** (keep it short — aim for ≤ 8 lines):
+
+```
+[role] short title
+
+✅/⚠️/❌  one-line outcome
+
+• What changed / what was found
+• Key numbers (score, test count, lines changed, etc.)
+• Blockers or next step if any
+
+Branch: <branch>  |  PR: #<n> or "not pushed yet"
+```
+
+**How to send**
+
+Use the Discord MCP reply tool with:
+- `chat_id`: `1241933442434732128`
+- `message`: the formatted summary above
+- Do **not** set `reply_to` — send as a top-level message
+
+Example call (pseudo-code):
+```
+mcp__plugin_discord_discord__reply(
+    chat_id="1241933442434732128",
+    message="[Executor] feat/e2e-ui — UI complete\n\n✅ Static files rewritten ...",
+)
+```
+
+If the Discord tool call fails (network error, permission), log the error in the
+conversation but do **not** retry in a loop — skip and continue.
