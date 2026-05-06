@@ -51,6 +51,18 @@ TDD: write tests RED before implementation.
 - [x] `static/index.html`: single-page app
 - [x] Profile tab: PDF file picker replaces textarea input; extracted text shown as read-only preview
 
+### P1-T07 · Multi-Profile CRUD + Profile-Scoped Evaluation ✅ (PR #17)
+- [x] `0004_multi_profile.py`: add `name`/`created_at` to `baseline_profile`; add `profile_id` FK on `job_analyses` (SET NULL); drop `jd_hash` unique; add composite unique `(jd_hash, profile_id)`
+- [x] `models/baseline_profile.py`: add `name`, `created_at` columns
+- [x] `models/job_analysis.py`: add `profile_id` FK column
+- [x] `schemas/profile.py`: `ProfileIn` adds `name`; new `ProfileUpdateIn`; `ProfileOut` adds `name`, `created_at`
+- [x] `schemas/evaluate.py`: `EvaluateIn` adds `profile_id`; `HistoryItemOut` adds `profile_id`
+- [x] `services/evaluator_v2.py`: full CRUD (`list_profiles`, `get_profile`, `create_profile`, `update_profile`, `delete_profile`); `evaluate_jd` resolves profile by `profile_id` or latest; cache scoped to `(jd_hash, profile_id)`
+- [x] `api/profile.py`: `GET/POST/PUT/DELETE /api/profiles`; `POST /api/profiles/upload`; legacy singular endpoints preserved
+- [x] `workers/tailor.py`: looks up profile by `job.profile_id` (falls back to latest)
+- [x] `static/index.html` + `app.js`: Profile tab table + Add form; Evaluate tab profile selector dropdown
+- [x] `tests/integration/v2/test_profiles_endpoint.py`: 14 tests covering CRUD, upload, cache isolation, legacy compat
+
 ---
 
 ## Phase 2 — Bulk Ingestion (in progress)

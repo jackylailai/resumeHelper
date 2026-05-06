@@ -1,9 +1,9 @@
 # Feature Specification: Resume Fit Evaluator
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-06 (rev 2)
+**Updated**: 2026-05-06 (rev 3)
 **Status**: Phase 1 (implemented)
-**Authoritative direction**: `feat/e2e-ui` three-tier evaluation flow
+**Authoritative direction**: `feat/multi-profile` multi-profile CRUD + profile-scoped evaluation
 
 ## Overview
 
@@ -21,48 +21,47 @@ three tiers that determine the next action automatically.
 
 ## User Stories
 
-### Story 1 — Set Up Baseline Profile (P1)
+### Story 1 — Manage Baseline Profiles (P1)
 
-A user saves their resume as the baseline profile via PDF upload or raw text.
-All JD evaluations compare against this profile.
+A user maintains a library of resume profiles (e.g., one per job family). Each
+profile has a name and skills text extracted from a PDF. Profiles can be created,
+listed, updated, and deleted. The legacy `/api/profile` singular endpoint is
+preserved for backward compatibility.
 
 **Acceptance Scenarios**:
 
-1. **Given** a POST to `/api/profile` with `skills_text`, **Then** the profile is
-   saved (upserted) and the full profile is returned.
-2. **Given** a second POST to `/api/profile`, **Then** the previous profile is
-   replaced — there is only ever one baseline.
-3. **Given** a GET to `/api/profile` before any profile exists, **Then** a 404
-   with code `not_found` is returned.
-4. **Given** a POST to `/api/profile/upload` with a PDF file (multipart), **Then**
-   text is extracted server-side (via pypdf), NUL bytes stripped, and the profile
-   is upserted identically to scenario 1.
-5. **Given** `skills_text` contains NUL (`\x00`) bytes, **Then** they are silently
-   stripped before persistence — no 500 crash.
+1. **Given** a POST to `/api/profiles` with `skills_text` (and optional `name`), **Then** a new profile row is created and returned.
+2. **Given** a GET to `/api/profiles`, **Then** all profiles are returned as a list (empty list if none).
+3. **Given** a GET to `/api/profiles/{id}` for a valid ID, **Then** that profile is returned.
+4. **Given** a GET to `/api/profiles/{id}` for a non-existent ID, **Then** a 404 is returned.
+5. **Given** a PUT to `/api/profiles/{id}`, **Then** the profile's `skills_text` and/or `name` are updated.
+6. **Given** a DELETE to `/api/profiles/{id}`, **Then** the profile is removed; a subsequent GET returns 404.
+7. **Given** a POST to `/api/profiles/upload` with a PDF file (multipart) and optional `name`, **Then** text is extracted server-side (via pypdf), NUL bytes stripped, and a new profile is created.
+8. **Given** `skills_text` contains NUL (`\x00`) bytes, **Then** they are silently stripped before persistence — no 500 crash.
+9. **Given** a POST to the legacy `/api/profile`, **Then** a new profile row is created (same as `/api/profiles`).
+10. **Given** a GET to the legacy `/api/profile`, **Then** the most recently created profile is returned.
 
 ---
 
 ### Story 2 — Evaluate a Job Description (P1)
 
-A user submits a job description. The system scores it against the baseline
-and classifies the result into one of the three tiers.
+A user submits a job description and optionally selects which profile to
+evaluate against. The system scores it and classifies the result into one
+of three tiers. The cache is scoped to `(jd_hash, profile_id)` so the same
+JD evaluated against different profiles produces independent results.
 
 **Acceptance Scenarios**:
 
-1. **Given** a baseline profile exists and a POST to `/api/evaluate` with
-   `jd_text`, **Then** the response includes `score`, `status`, `strengths`,
-   `gaps`, and a human-readable `message`.
-2. **Given** the same JD is submitted twice, **Then** the second response has
-   `cached: true` in `meta` and the LLM is not called again.
-3. **Given** no baseline profile exists, **Then** a 404 with code `not_found`
-   is returned.
-4. **Given** `jd_text` is omitted, **Then** a 422 validation error is returned.
-5. **Given** a score of 85+, **Then** `status` is `ready_to_submit` and no
-   background tailoring is triggered.
-6. **Given** a score of 60–84, **Then** `status` is `needs_tailoring` and a
-   background tailoring task is enqueued using the saved baseline profile.
-7. **Given** a score below 60, **Then** `status` is `skip` and `skip_reason`
-   explains why the job is a poor fit.
+1. **Given** a profile exists and a POST to `/api/evaluate` with `jd_text`, **Then** the response includes `score`, `status`, `strengths`, `gaps`, and a human-readable `message`.
+2. **Given** `profile_id` is specified in the request, **Then** that profile is used for evaluation.
+3. **Given** `profile_id` is omitted, **Then** the most recently created profile is used.
+4. **Given** the same JD + same `profile_id` is submitted twice, **Then** the second response has `cached: true` in `meta`.
+5. **Given** the same JD is submitted with two different `profile_id` values, **Then** each produces an independent result — the second is NOT a cache hit.
+6. **Given** no profile exists, **Then** a 404 with code `not_found` is returned.
+7. **Given** `jd_text` is omitted, **Then** a 422 validation error is returned.
+8. **Given** a score of 85+, **Then** `status` is `ready_to_submit` and no background tailoring is triggered.
+9. **Given** a score of 60–84, **Then** `status` is `needs_tailoring` and a background tailoring task is enqueued using the profile that was used for scoring.
+10. **Given** a score below 60, **Then** `status` is `skip` and `skip_reason` explains why the job is a poor fit.
 
 ---
 
@@ -100,21 +99,22 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 
 ## Functional Requirements
 
-- **FR-001**: System MUST accept and store a single baseline profile via raw text (`POST /api/profile`) or PDF upload (`POST /api/profile/upload`); NUL bytes are stripped before storage.
-- **FR-002**: System MUST deduplicate JDs by SHA-256 hash of canonicalized text; re-submitting the same JD skips the LLM call.
-- **FR-003**: System MUST score each JD 0–100 and classify it into one of three tiers: `ready_to_submit`, `needs_tailoring`, or `skip`.
-- **FR-004**: System MUST trigger background tailoring for `needs_tailoring` jobs using the saved baseline profile text, not the JD.
-- **FR-005**: System MUST store generated resumes per job analysis with the LLM prompt version.
-- **FR-006**: System MUST expose history (all evaluations) and a submittable list (can_submit=true with resume attached).
-- **FR-007**: System MUST accept external resume delivery via POST `/api/callback` (e.g., from n8n or a CI pipeline).
-- **FR-008**: System MUST accept bulk JD evaluation (list of texts) in a single request, deduplicated and summarized.
-- **FR-009**: No authentication or multi-user support required. Single-user tool.
-- **FR-010**: PDF generation is out of scope for Phase 1; `pdf_url` is null.
+- **FR-001**: System MUST support multiple baseline profiles with full CRUD (`GET/POST/PUT/DELETE /api/profiles`); legacy `/api/profile` singular endpoints preserved for backward compatibility.
+- **FR-002**: System MUST accept profile creation via raw text (`POST /api/profiles`) or PDF upload (`POST /api/profiles/upload`); NUL bytes are stripped before storage.
+- **FR-003**: System MUST deduplicate JDs by SHA-256 hash of canonicalized text scoped to `(jd_hash, profile_id)`; re-submitting the same JD+profile combination skips the LLM call.
+- **FR-004**: System MUST score each JD 0–100 and classify it into one of three tiers: `ready_to_submit`, `needs_tailoring`, or `skip`.
+- **FR-005**: System MUST trigger background tailoring for `needs_tailoring` jobs using the specific profile used at evaluation time (stored as `profile_id` on `JobAnalysis`).
+- **FR-006**: System MUST store generated resumes per job analysis with the LLM prompt version.
+- **FR-007**: System MUST expose history (all evaluations) and a submittable list (can_submit=true with resume attached).
+- **FR-008**: System MUST accept external resume delivery via POST `/api/callback` (e.g., from n8n or a CI pipeline).
+- **FR-009**: System MUST accept bulk JD evaluation (list of texts) in a single request, deduplicated and summarized.
+- **FR-010**: No authentication or multi-user support required. Single-user tool.
+- **FR-011**: PDF generation is out of scope for Phase 1; `pdf_url` is null.
 
 ## Key Entities
 
-- **BaselineProfile**: One row. `skills_text` (TEXT). Upserted on each POST.
-- **JobAnalysis**: One row per unique JD (`jd_hash` UNIQUE). Stores score, status, strengths, gaps, can_submit, skip_reason.
+- **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
+- **JobAnalysis**: One row per unique `(jd_hash, profile_id)` pair. Stores score, status, strengths, gaps, can_submit, skip_reason, `profile_id` FK (SET NULL on profile delete).
 - **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url` (null), `prompt_version`.
 
 ## Success Criteria

@@ -1,15 +1,16 @@
 # Implementation Plan: Resume Scoring & Generation
 
-**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-06
+**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-06 (rev 2)
 **Scope authority**: `scope-correction.md` — read before making any implementation decision.
 
 ## Summary
 
 Single-user FastAPI service that:
-1. Stores a one-time **baseline skills profile** via raw text or PDF upload
-2. Accepts a **job description (JD)** and scores the fit (0–100) via LLM
+1. Maintains a **library of baseline profiles** (name + skills text); each created via raw text or PDF upload; full CRUD at `/api/profiles`
+2. Accepts a **job description (JD)** and scores the fit (0–100) via LLM against a selected or latest profile
 3. If score ≥ `RESUME_GEN_THRESHOLD`, triggers a **FastAPI BackgroundTask** to generate a tailored resume via Anthropic API directly (n8n removed)
-4. Stores all analyses and generated resumes; serves them via a minimal browser UI
+4. Cache scoped to `(jd_hash, profile_id)` — same JD against different profiles = independent evaluations
+5. Stores all analyses and generated resumes; serves them via a minimal browser UI
 
 No resume versioning. No async job queue (Phase 1). No auth. Runs locally on Mac.
 
@@ -19,13 +20,19 @@ No resume versioning. No async job queue (Phase 1). No auth. Runs locally on Mac
 Browser
   │
 FastAPI (uvicorn, single process)
-  ├── POST /api/profile        → upsert baseline_profile (text)
-  ├── POST /api/profile/upload → upsert baseline_profile (PDF, pypdf extraction)
-  ├── POST /api/evaluate       → score JD; if threshold → BackgroundTask (Anthropic API)
-  ├── POST /api/callback       → external resume delivery (e.g. CI pipeline)
-  ├── GET  /api/history        → list past job_analyses
-  ├── GET  /api/history/{id}   → one analysis + all generated_resumes
-  └── GET  /api/health
+  ├── GET    /api/profiles          → list all baseline profiles
+  ├── POST   /api/profiles          → create profile (text)
+  ├── POST   /api/profiles/upload   → create profile (PDF, pypdf extraction)
+  ├── GET    /api/profiles/{id}     → get one profile
+  ├── PUT    /api/profiles/{id}     → update profile
+  ├── DELETE /api/profiles/{id}     → delete profile
+  ├── POST   /api/profile           → legacy: create profile (backward compat)
+  ├── GET    /api/profile           → legacy: return latest profile
+  ├── POST   /api/evaluate          → score JD against selected/latest profile; if threshold → BackgroundTask
+  ├── POST   /api/callback          → external resume delivery (e.g. CI pipeline)
+  ├── GET    /api/history           → list past job_analyses
+  ├── GET    /api/history/{id}      → one analysis + all generated_resumes
+  └── GET    /api/health
   │
   ├── PostgreSQL  (3 tables: baseline_profile, job_analyses, generated_resumes)
   └── Anthropic API (tailoring via BackgroundTask — no n8n)
