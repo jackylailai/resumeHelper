@@ -2,8 +2,9 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
@@ -71,6 +72,7 @@ def evaluate(
 
     # For needs_tailoring, trigger background tailoring (only on fresh evaluations)
     if status == STATUS_NEEDS_TAILORING and not cached:
+        # Lazy import avoids circular dependency: tailor → db → main → evaluate → tailor
         from backend.app.workers.tailor import run_tailoring
         # Use test-injected session factory if present, else default
         session_factory = getattr(request.app.state, "session_factory", None)
@@ -131,6 +133,7 @@ def bulk_evaluate(
         else:
             new_count += 1
             if job.status == STATUS_NEEDS_TAILORING:
+                # Lazy import avoids circular dependency: tailor → db → main → evaluate → tailor
                 from backend.app.workers.tailor import run_tailoring
                 session_factory = getattr(request.app.state, "session_factory", None)
                 background_tasks.add_task(
@@ -181,12 +184,14 @@ def n8n_callback(body: CallbackIn, db: Session = Depends(get_db)) -> JSONRespons
 
 
 @router.get("/history")
-def list_history(db: Session = Depends(get_db)) -> JSONResponse:
-    """Return all job analyses, optionally grouped by status."""
-    jobs = db.query(JobAnalysis).order_by(JobAnalysis.created_at.desc()).limit(100).all()
+def list_history(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> JSONResponse:
+    """Return job analyses in reverse-chronological order, grouped by status."""
+    jobs = db.query(JobAnalysis).order_by(JobAnalysis.created_at.desc()).limit(limit).all()
     items = [HistoryItemOut.model_validate(j).model_dump(mode="json") for j in jobs]
 
-    # Group by status for convenience
     grouped: dict[str, list] = {
         STATUS_READY_TO_SUBMIT: [],
         STATUS_NEEDS_TAILORING: [],
@@ -205,6 +210,7 @@ def list_history(db: Session = Depends(get_db)) -> JSONResponse:
         items,
         grouped=grouped,
         total=len(items),
+        limit=limit,
         submittable_count=submittable_count,
     )
 
@@ -218,26 +224,32 @@ def list_submittable(db: Session = Depends(get_db)) -> JSONResponse:
         .order_by(JobAnalysis.created_at.desc())
         .all()
     )
+    if not jobs:
+        return success([], count=0)
 
-    resumes = []
+    # Fetch the latest generated resume per job in one query (DISTINCT ON)
+    job_ids = [j.id for j in jobs]
+    latest_resumes = (
+        db.query(GeneratedResume)
+        .filter(GeneratedResume.job_analysis_id.in_(job_ids))
+        .order_by(
+            GeneratedResume.job_analysis_id,
+            GeneratedResume.created_at.desc(),
+        )
+        .distinct(GeneratedResume.job_analysis_id)
+        .all()
+    )
+    resume_by_job = {r.job_analysis_id: r for r in latest_resumes}
+
+    result = []
     for job in jobs:
         item = SubmittableResumeOut.model_validate(job).model_dump(mode="json")
-        # Attach the most recent generated resume if any
-        latest_resume = (
-            db.query(GeneratedResume)
-            .filter(GeneratedResume.job_analysis_id == job.id)
-            .order_by(GeneratedResume.created_at.desc())
-            .first()
-        )
-        if latest_resume:
-            item["pdf_url"] = latest_resume.pdf_url
-            item["resume_id"] = str(latest_resume.id)
-        else:
-            item["pdf_url"] = None
-            item["resume_id"] = None
-        resumes.append(item)
+        latest = resume_by_job.get(job.id)
+        item["pdf_url"] = latest.pdf_url if latest else None
+        item["resume_id"] = str(latest.id) if latest else None
+        result.append(item)
 
-    return success(resumes, count=len(resumes))
+    return success(result, count=len(result))
 
 
 @router.get("/history/{job_id}")
