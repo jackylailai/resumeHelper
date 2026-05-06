@@ -11,6 +11,7 @@ import logging
 import uuid
 from typing import Any, Callable, Optional
 
+from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.job_analysis import JobAnalysis, STATUS_NEEDS_TAILORING
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.services.llm import LLMClient
@@ -56,9 +57,15 @@ def run_tailoring(
             return
 
         logger.info("tailor_start job_id=%s score=%s", job_analysis_id, job.score)
+        baseline = db.query(BaselineProfile).order_by(BaselineProfile.id.desc()).first()
+        if baseline is None:
+            logger.error("tailor_no_baseline job_id=%s", job_analysis_id)
+            return
+
+        baseline_text = baseline.skills_text
 
         try:
-            result = _call_tailor_llm(llm, job)
+            result = _call_tailor_llm(llm, job, baseline_text)
         except Exception as exc:
             logger.error("tailor_llm_failed job_id=%s error=%s", job_analysis_id, exc)
             return
@@ -81,7 +88,7 @@ def run_tailoring(
         )
 
 
-def _call_tailor_llm(llm: LLMClient, job: JobAnalysis) -> dict:
+def _call_tailor_llm(llm: LLMClient, job: JobAnalysis, baseline_text: str = "") -> dict:
     """Call the LLM to produce tailoring suggestions and a tailored resume.
 
     Uses the LLMClient's `tailor` method if available (AnthropicLLMClient),
@@ -89,7 +96,7 @@ def _call_tailor_llm(llm: LLMClient, job: JobAnalysis) -> dict:
     """
     if hasattr(llm, "tailor"):
         return llm.tailor(  # type: ignore[union-attr]
-            baseline_text=job.jd_full_text,
+            baseline_text=baseline_text,
             jd_text=job.jd_full_text,
             gaps=job.gaps or [],
             score=job.score or 0,

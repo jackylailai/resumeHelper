@@ -45,9 +45,12 @@ jobs:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           ANTHROPIC_API_KEY: fake-key-for-tests
         run: |
+          set +e
           python -m pytest backend/tests/unit/ backend/tests/integration/v2/ \
             -q --tb=short 2>&1 | tee test-results.txt
-          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          exit_code=${PIPESTATUS[0]}
+          echo "exit_code=${exit_code}" >> "$GITHUB_ENV"
+          exit "${exit_code}"
 
       - name: Post test results to PR
         if: github.event_name == 'pull_request'
