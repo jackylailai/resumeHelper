@@ -30,12 +30,17 @@ TDD: write tests RED before implementation.
 | Endpoint | Test file | Status |
 |----------|-----------|--------|
 | `POST /api/profile` | `test_profile_endpoint.py` | ✅ |
+| `POST /api/profile/upload` | — | ✅ (PDF → pypdf extract → upsert) |
 | `GET /api/profile` | `test_profile_endpoint.py` | ✅ |
 | `POST /api/evaluate` | `test_evaluate_endpoint.py` | ✅ |
 | `POST /api/callback` | `test_callback_endpoint.py` | ✅ |
 | `GET /api/history` | `test_history_endpoint.py` | ✅ |
 | `GET /api/history/{id}` | `test_history_detail.py` | ✅ |
 | `GET /api/submittable` | `test_submittable_endpoint.py` | ✅ |
+
+**Bug fixes shipped with P1-T04:**
+- `upsert_baseline`: strips NUL (`\x00`) bytes before DB write (fixes 500 on PDF-pasted text)
+- `set_profile`: `ValueError` now returns HTTP 400 with message instead of crashing
 
 ### P1-T05 · Three-tier logic tests ✅
 - [x] `test_three_tier_evaluate.py`: ready_to_submit / needs_tailoring / skip
@@ -44,6 +49,7 @@ TDD: write tests RED before implementation.
 ### P1-T06 · E2E UI ✅
 - [x] `static/app.js`: Evaluate tab, History tab, Profile tab
 - [x] `static/index.html`: single-page app
+- [x] Profile tab: PDF file picker replaces textarea input; extracted text shown as read-only preview
 
 ---
 

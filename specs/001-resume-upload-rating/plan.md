@@ -1,14 +1,14 @@
 # Implementation Plan: Resume Scoring & Generation
 
-**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-05
+**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-06
 **Scope authority**: `scope-correction.md` — read before making any implementation decision.
 
 ## Summary
 
 Single-user FastAPI service that:
-1. Stores a one-time **baseline skills profile** (user's raw skills/experience)
+1. Stores a one-time **baseline skills profile** via raw text or PDF upload
 2. Accepts a **job description (JD)** and scores the fit (0–100) via LLM
-3. If score ≥ `RESUME_GEN_THRESHOLD`, triggers **n8n** to generate a tailored resume
+3. If score ≥ `RESUME_GEN_THRESHOLD`, triggers a **FastAPI BackgroundTask** to generate a tailored resume via Anthropic API directly (n8n removed)
 4. Stores all analyses and generated resumes; serves them via a minimal browser UI
 
 No resume versioning. No async job queue (Phase 1). No auth. Runs locally on Mac.
@@ -19,15 +19,16 @@ No resume versioning. No async job queue (Phase 1). No auth. Runs locally on Mac
 Browser
   │
 FastAPI (uvicorn, single process)
-  ├── POST /api/profile        → upsert baseline_profile
-  ├── POST /api/evaluate       → score JD; if threshold → POST n8n webhook
-  ├── POST /api/callback       → n8n posts generated resume back here
+  ├── POST /api/profile        → upsert baseline_profile (text)
+  ├── POST /api/profile/upload → upsert baseline_profile (PDF, pypdf extraction)
+  ├── POST /api/evaluate       → score JD; if threshold → BackgroundTask (Anthropic API)
+  ├── POST /api/callback       → external resume delivery (e.g. CI pipeline)
   ├── GET  /api/history        → list past job_analyses
   ├── GET  /api/history/{id}   → one analysis + all generated_resumes
   └── GET  /api/health
   │
   ├── PostgreSQL  (3 tables: baseline_profile, job_analyses, generated_resumes)
-  └── n8n         (resume generation workflow, prompt editable in UI)
+  └── Anthropic API (tailoring via BackgroundTask — no n8n)
 ```
 
 ## LLM Strategy
@@ -67,4 +68,4 @@ See `specs/roadmap.md` for full Phase 1 → 3 plan:
 | **V. Performance** | ✅ | Sync reads ≤200ms; cached JD eval ≤500ms; LLM ≤30s |
 | **No Redis (Phase 1)** | ✅ waiver | Single user; jd_hash dedup in DB; Redis added in Phase 3 |
 | **No auth** | ✅ waiver | Single user, local only |
-| **No BackgroundTasks** | ✅ | Generation delegated to n8n; scoring is synchronous |
+| **BackgroundTasks** | ✅ | Tailoring uses FastAPI BackgroundTask → Anthropic API directly; scoring is synchronous |

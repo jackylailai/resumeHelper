@@ -1,7 +1,7 @@
 # Feature Specification: Resume Fit Evaluator
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-06
+**Updated**: 2026-05-06 (rev 2)
 **Status**: Phase 1 (implemented)
 **Authoritative direction**: `feat/e2e-ui` three-tier evaluation flow
 
@@ -23,8 +23,8 @@ three tiers that determine the next action automatically.
 
 ### Story 1 — Set Up Baseline Profile (P1)
 
-A user saves their resume/skills text as the baseline profile. All JD
-evaluations compare against this profile.
+A user saves their resume as the baseline profile via PDF upload or raw text.
+All JD evaluations compare against this profile.
 
 **Acceptance Scenarios**:
 
@@ -34,6 +34,11 @@ evaluations compare against this profile.
    replaced — there is only ever one baseline.
 3. **Given** a GET to `/api/profile` before any profile exists, **Then** a 404
    with code `not_found` is returned.
+4. **Given** a POST to `/api/profile/upload` with a PDF file (multipart), **Then**
+   text is extracted server-side (via pypdf), NUL bytes stripped, and the profile
+   is upserted identically to scenario 1.
+5. **Given** `skills_text` contains NUL (`\x00`) bytes, **Then** they are silently
+   stripped before persistence — no 500 crash.
 
 ---
 
@@ -95,7 +100,7 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 
 ## Functional Requirements
 
-- **FR-001**: System MUST accept and store a single baseline profile text.
+- **FR-001**: System MUST accept and store a single baseline profile via raw text (`POST /api/profile`) or PDF upload (`POST /api/profile/upload`); NUL bytes are stripped before storage.
 - **FR-002**: System MUST deduplicate JDs by SHA-256 hash of canonicalized text; re-submitting the same JD skips the LLM call.
 - **FR-003**: System MUST score each JD 0–100 and classify it into one of three tiers: `ready_to_submit`, `needs_tailoring`, or `skip`.
 - **FR-004**: System MUST trigger background tailoring for `needs_tailoring` jobs using the saved baseline profile text, not the JD.
@@ -122,7 +127,6 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 
 ## Out of Scope (Phase 1)
 
-- Resume file upload (PDF/DOCX)
 - Resume versioning
 - Async job polling (`job_id`)
 - Compare endpoint

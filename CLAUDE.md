@@ -38,6 +38,16 @@ python -m pytest backend/tests/integration/v2/ -x -q
 ## Stack
 FastAPI + PostgreSQL (via SQLAlchemy/Alembic) + Claude API (anthropic SDK) + Docker Compose
 
+## PR workflow (REQUIRED)
+Always work on a feature branch and open a PR — never push directly to `main`.
+Branch naming: `fix/<short-desc>`, `feat/<short-desc>`.
+
+## Speckit sync (REQUIRED)
+After every completed task, update the relevant speckit files in `specs/`:
+- `spec.md` — add/update acceptance scenarios and FRs for any new or changed behaviour
+- `plan.md` — keep architecture diagram and constitution table current
+- `tasks.md` — tick off completed items; add new task rows for anything shipped outside the original list
+
 ## Discord notification (REQUIRED)
 At the end of every completed task, send a summary to Discord using the MCP reply tool.
 Full rules in `agent.md` — End-of-Process Discord Notification section.
