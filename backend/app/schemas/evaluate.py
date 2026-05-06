@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from typing import Annotated, Optional, List
+from typing import Annotated, Literal, Optional, List
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -17,9 +17,9 @@ class EvaluateOut(BaseModel):
     gaps: List[str]
     threshold_met: bool
     # Three-tier fields
-    status: str
+    status: Literal["ready_to_submit", "needs_tailoring", "skip"]
     message: str
-    action: str
+    action: Literal["none", "tailoring", "skip"]
 
 
 class CallbackIn(BaseModel):
@@ -81,7 +81,7 @@ class BulkEvaluateResult(BaseModel):
     job_analysis_id: uuid.UUID
     jd_snippet: Optional[str]
     score: int
-    status: str
+    status: Literal["ready_to_submit", "needs_tailoring", "skip"]
     cached: bool
 
 

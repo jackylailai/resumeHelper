@@ -21,7 +21,7 @@ Evaluates job descriptions (JD) against a baseline resume profile, scores them, 
 | `backend/app/models/job_analysis.py` | JobAnalysis model — status, can_submit, skip_reason, thresholds |
 | `backend/app/models/generated_resume.py` | GeneratedResume — resume_text, pdf_url, prompt_version |
 | `backend/alembic/versions/` | 0001 initial, 0002 POC schema, 0003 three-tier fields |
-| `backend/tests/integration/v2/` | All v2 tests (30 pass) |
+| `backend/tests/integration/v2/` | All v2 tests (62 pass) |
 | `todo.md` | Full spec and DB schema |
 
 ## Architecture decisions
