@@ -37,3 +37,12 @@ python -m pytest backend/tests/integration/v2/ -x -q
 
 ## Stack
 FastAPI + PostgreSQL (via SQLAlchemy/Alembic) + Claude API (anthropic SDK) + Docker Compose
+
+## Discord notification (REQUIRED)
+At the end of every completed task, send a summary to Discord using the MCP reply tool.
+Full rules in `agent.md` — End-of-Process Discord Notification section.
+
+```
+chat_id: 1241933442434732128
+format:  [role] title\n\n✅/⚠️/❌ outcome\n• bullets\n\nBranch: x  |  PR: #n
+```
