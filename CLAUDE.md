@@ -39,7 +39,7 @@ python -m pytest backend/tests/integration/v2/ -x -q
 FastAPI + PostgreSQL (via SQLAlchemy/Alembic) + Claude API (anthropic SDK) + Docker Compose
 
 ## PR workflow (REQUIRED)
-Always work on a feature branch and open a PR — never push directly to `main`.
+**NEVER push directly to `main` or `develop`.** Always work on a feature branch and open a PR.
 Branch naming: `fix/<short-desc>`, `feat/<short-desc>`.
 
 ## Speckit sync (REQUIRED)
