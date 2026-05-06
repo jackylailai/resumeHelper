@@ -17,6 +17,9 @@ from backend.app.models.job_analysis import (
     STATUS_SKIP,
 )
 from backend.app.schemas.evaluate import (
+    BulkEvaluateIn,
+    BulkEvaluateOut,
+    BulkEvaluateResult,
     CallbackIn,
     EvaluateIn,
     EvaluateOut,
@@ -96,6 +99,62 @@ def evaluate(
         out.model_dump(mode="json"),
         cached=cached,
     )
+
+
+@router.post("/evaluate/bulk")
+def bulk_evaluate(
+    body: BulkEvaluateIn,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Evaluate multiple JDs in one request. Deduplicates by content hash."""
+    settings = get_settings()
+    llm = _get_llm(request)
+    results: list[BulkEvaluateResult] = []
+    new_count = 0
+    cached_count = 0
+
+    for jd_text in body.jd_texts:
+        try:
+            job, cached = evaluate_jd(
+                db, jd_text, llm,
+                prompt_version=settings.llm_prompt_version,
+                threshold=settings.resume_gen_threshold,
+            )
+        except LookupError as exc:
+            return error("not_found", str(exc), status_code=404)
+
+        if cached:
+            cached_count += 1
+        else:
+            new_count += 1
+            if job.status == STATUS_NEEDS_TAILORING:
+                from backend.app.workers.tailor import run_tailoring
+                session_factory = getattr(request.app.state, "session_factory", None)
+                background_tasks.add_task(
+                    run_tailoring,
+                    job_analysis_id=job.id,
+                    llm=llm,
+                    prompt_version=settings.llm_prompt_version,
+                    session_factory=session_factory,
+                )
+
+        results.append(BulkEvaluateResult(
+            job_analysis_id=job.id,
+            jd_snippet=job.jd_snippet,
+            score=job.score or 0,
+            status=job.status or STATUS_SKIP,
+            cached=cached,
+        ))
+
+    out = BulkEvaluateOut(
+        total=len(results),
+        new=new_count,
+        cached=cached_count,
+        results=results,
+    )
+    return success(out.model_dump(mode="json"))
 
 
 @router.post("/callback")

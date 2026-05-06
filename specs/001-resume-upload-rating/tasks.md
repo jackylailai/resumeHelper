@@ -1,83 +1,71 @@
 # Tasks
 
-**Scope authority**: `scope-correction.md`
+**Spec authority**: `spec.md` (three-tier evaluation flow)
 **Roadmap**: `specs/roadmap.md`
-**Agent roles**: `agent.md`
 
-TDD is non-negotiable: tests written and confirmed RED before implementation.
-
----
-
-## Phase 1 — POC (current)
-
-### P1-T01 · Schema + Migration
-- [ ] Delete old 4-table Alembic migration
-- [ ] Write new `0002_poc_schema.py`: `baseline_profile`, `job_analyses`, `generated_resumes`
-- [ ] New ORM models: `models/baseline_profile.py`, `models/job_analysis.py`, `models/generated_resume.py`
-- [ ] Delete old models: `resume.py`, `resume_version.py`, `resume_evaluation.py`, `evaluation_job.py`
-
-### P1-T02 · Pydantic Schemas
-- [ ] `schemas/profile.py`: `ProfileIn`, `ProfileOut`
-- [ ] `schemas/evaluate.py`: `EvaluateIn`, `EvaluateOut`, `CallbackIn`
-- [ ] `schemas/history.py`: `HistoryItemOut`, `GeneratedResumeOut`
-
-### P1-T03 · Services
-- [ ] `services/evaluator.py` rewrite: read baseline → build prompt → call LLMClient → return score
-- [ ] `services/generator.py`: POST n8n webhook with `{job_analysis_id, jd_full_text, baseline_skills}`
-- [ ] Keep: `services/hashing.py`, `services/parsing.py`
-- [ ] Delete: `services/storage.py`, `services/evaluator.py` (old), `workers/tasks.py`
-
-### P1-T04 · API Endpoints
-Write tests RED first, then implement:
-
-| Endpoint | Test file |
-|----------|-----------|
-| `POST /api/profile` | `test_profile_endpoint.py` |
-| `GET /api/profile` | `test_profile_endpoint.py` |
-| `POST /api/evaluate` | `test_evaluate_endpoint.py` |
-| `POST /api/callback` | `test_callback_endpoint.py` |
-| `GET /api/history` | `test_history_endpoint.py` |
-| `GET /api/history/{id}` | `test_history_detail.py` |
-| `POST /api/history/{id}/regenerate` | `test_regenerate.py` |
-
-### P1-T05 · ClaudeCLIClient unit test
-- [ ] `tests/unit/test_claude_cli_client.py`: mock subprocess, verify prompt rendering, JSON parse, error handling
-
-### P1-T06 · n8n workflow setup
-- [ ] `docker compose up n8n` → configure webhook trigger node
-- [ ] LLM node: use `modes/generate.md` prompt
-- [ ] Output node: POST to `http://host.docker.internal:8000/api/callback`
-- [ ] Document workflow export in `specs/n8n-workflow.json`
-
-### P1-T07 · UI rewrite
-- [ ] `static/upload.html`: profile setup section + JD input + evaluate button + result card + history list
-- [ ] `static/app.js`: full rewrite for new API surface
-
-### P1-T08 · Cleanup
-- [ ] Delete old test files: `test_upload_sync.py`, `test_upload_async.py`, `test_upload_rejections.py`, `test_version_increments.py`, `test_history_endpoint.py` (old), `test_dedupe_cache_hit.py`
-- [ ] `ruff check` + `mypy --strict` clean
-- [ ] Coverage ≥ 85% on `backend/app/`
-- [ ] Update README: quickstart section
-
-**Checkpoint**: `docker compose up -d postgres n8n` → `uvicorn` → paste JD → get score → get resume.
+TDD: write tests RED before implementation.
 
 ---
 
-## Phase 2 — Infra (future)
+## Phase 1 — Core (complete)
 
-- [ ] `GroqLLMClient` + `LLM_BACKEND` env switch
-- [ ] LangChain: `PromptTemplate`, `StructuredOutputParser`, streaming
-- [ ] `nginx` in docker-compose (reverse proxy + rate limit)
-- [ ] `Dockerfile` for FastAPI
-- [ ] `docker-compose.prod.yml`
-- [ ] SSL setup (Let's Encrypt)
+### P1-T01 · Schema + Migration ✅
+- [x] `0002_poc_schema.py`: `baseline_profile`, `job_analyses`, `generated_resumes`
+- [x] `0003_three_tier_fields.py`: `status`, `can_submit`, `skip_reason`, `explanation`, `strengths`, `gaps`
+- [x] ORM models: `baseline_profile.py`, `job_analysis.py`, `generated_resume.py`
 
-## Phase 3 — High Concurrency (future)
+### P1-T02 · Pydantic Schemas ✅
+- [x] `schemas/profile.py`: `ProfileIn`, `ProfileOut`
+- [x] `schemas/evaluate.py`: `EvaluateIn`, `EvaluateOut`, `CallbackIn`, `HistoryItemOut`, `HistoryDetailOut`, `SubmittableResumeOut`
 
-See `specs/roadmap.md` for full design.
+### P1-T03 · Services ✅
+- [x] `services/evaluator_v2.py`: read baseline → call LLM → three-tier classification
+- [x] `services/hashing.py`: `jd_hash()` deduplication
+- [x] `workers/tailor.py`: background tailoring using saved baseline profile
+- [x] `services/llm/anthropic.py`: `evaluate()` and `tailor()` via Anthropic API
+- [x] `services/llm/fake.py`: deterministic stub for tests
 
-- [ ] Redis + Celery workers (replace n8n for generation)
-- [ ] pgBouncer connection pooling
-- [ ] Kubernetes manifests + Ingress
-- [ ] Multi-user (add `user_id` to all tables)
-- [ ] LangSmith tracing
+### P1-T04 · API Endpoints ✅
+
+| Endpoint | Test file | Status |
+|----------|-----------|--------|
+| `POST /api/profile` | `test_profile_endpoint.py` | ✅ |
+| `GET /api/profile` | `test_profile_endpoint.py` | ✅ |
+| `POST /api/evaluate` | `test_evaluate_endpoint.py` | ✅ |
+| `POST /api/callback` | `test_callback_endpoint.py` | ✅ |
+| `GET /api/history` | `test_history_endpoint.py` | ✅ |
+| `GET /api/history/{id}` | `test_history_detail.py` | ✅ |
+| `GET /api/submittable` | `test_submittable_endpoint.py` | ✅ |
+
+### P1-T05 · Three-tier logic tests ✅
+- [x] `test_three_tier_evaluate.py`: ready_to_submit / needs_tailoring / skip
+- [x] `test_tailor_worker.py`: tailoring uses baseline profile, not JD
+
+### P1-T06 · E2E UI ✅
+- [x] `static/app.js`: Evaluate tab, History tab, Profile tab
+- [x] `static/index.html`: single-page app
+
+---
+
+## Phase 2 — Bulk Ingestion (in progress)
+
+### P2-T01 · Bulk JD Evaluate endpoint
+- [ ] `schemas/evaluate.py`: add `BulkEvaluateIn`, `BulkEvaluateResult`, `BulkEvaluateOut`
+- [ ] `api/evaluate.py`: add `POST /api/evaluate/bulk`
+  - Deduplicate by jd_hash
+  - Trigger background tailoring per new needs_tailoring job
+  - Return totals: `total`, `new`, `cached`
+- [ ] Test: `tests/integration/v2/test_bulk_evaluate.py`
+  - bulk returns correct totals
+  - duplicate JDs in same batch are cached
+  - needs_tailoring JDs trigger tailoring tasks
+
+---
+
+## Phase 3 — Roadmap (future)
+
+- Crawler / n8n job ingestion pipeline
+- Multi-user authentication
+- PDF generation (weasyprint)
+- LLM audit log (token cost / latency)
+- Kubernetes deployment

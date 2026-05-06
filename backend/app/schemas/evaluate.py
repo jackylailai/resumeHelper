@@ -1,8 +1,8 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from typing import Annotated, Optional, List
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EvaluateIn(BaseModel):
@@ -71,3 +71,22 @@ class SubmittableResumeOut(BaseModel):
     status: Optional[str]
     can_submit: bool
     created_at: datetime
+
+
+class BulkEvaluateIn(BaseModel):
+    jd_texts: Annotated[List[str], Field(min_length=1)]
+
+
+class BulkEvaluateResult(BaseModel):
+    job_analysis_id: uuid.UUID
+    jd_snippet: Optional[str]
+    score: int
+    status: str
+    cached: bool
+
+
+class BulkEvaluateOut(BaseModel):
+    total: int
+    new: int
+    cached: int
+    results: List[BulkEvaluateResult]
