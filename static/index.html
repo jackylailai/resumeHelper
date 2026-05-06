@@ -1,391 +1,204 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Project Preview — AI Career Intelligence System</title>
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/vs2015.min.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resume Helper</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #111827;
+      --border: rgba(255,255,255,0.07);
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --accent: #7c3aed;
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { background: linear-gradient(90deg, var(--accent), #2dd4bf); padding: 1rem 1.5rem; }
+    header h1 { font-size: 1.2rem; font-weight: 700; }
+    header .sub { font-size: 0.8rem; opacity: 0.8; }
+    .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--card); }
+    .tab-btn { padding: 0.75rem 1.5rem; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+    .tab-btn:hover { color: var(--text); }
+    .page { display: none; padding: 1.5rem; max-width: 900px; margin: 0 auto; }
+    .page.active { display: block; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.4rem; font-size: 0.85rem; color: var(--muted); }
+    textarea { width: 100%; background: #0f172a; border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 0.75rem; font-size: 0.9rem; resize: vertical; font-family: inherit; }
+    textarea:focus { outline: none; border-color: var(--accent); }
+    .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1.25rem; border-radius: 6px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-sm { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
+    .btn-muted { background: #1e293b; color: var(--muted); }
+    .btn-green { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .mt { margin-top: 1rem; }
+    .score-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 1.1rem; font-weight: 700; }
+    .badge-ready { background: rgba(16,185,129,0.15); color: var(--green); }
+    .badge-tailoring { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .badge-skip { background: rgba(239,68,68,0.15); color: var(--red); }
+    .result-block { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+    .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; margin-top: 0.9rem; }
+    ul.tag-list { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    ul.tag-list li { background: rgba(255,255,255,0.05); border-radius: 4px; padding: 0.2rem 0.6rem; font-size: 0.82rem; color: var(--muted); }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.15); border-top-color: var(--yellow); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-msg { font-size: 0.85rem; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { text-align: left; padding: 0.5rem 0.75rem; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    td { padding: 0.65rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .pill-ready { background: rgba(16,185,129,0.15); color: var(--green); }
+    .pill-tailoring { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .pill-skip { background: rgba(239,68,68,0.12); color: var(--red); }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 1.5rem; text-align: center; }
+    .resume-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+    .resume-modal.open { display: flex; }
+    .modal-box { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; width: 90%; max-width: 700px; max-height: 85vh; overflow: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-header h3 { font-size: 1rem; }
+    pre.resume-text { white-space: pre-wrap; word-break: break-word; font-size: 0.82rem; line-height: 1.6; color: var(--muted); background: #0f172a; padding: 1rem; border-radius: 6px; max-height: 55vh; overflow: auto; }
+    .flex { display: flex; align-items: center; gap: 0.5rem; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    .history-section { margin-bottom: 1.5rem; }
+    .history-section-hdr { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); margin-bottom: 0.5rem; }
+    .error-msg { color: var(--red); font-size: 0.85rem; margin-top: 0.5rem; }
+    .success-msg { color: var(--green); font-size: 0.85rem; margin-top: 0.5rem; }
+    .jd-preview { max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 0.82rem; }
+    .profile-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 10px; }
+    .profile-set { background: rgba(16,185,129,0.1); color: var(--green); }
+    .profile-unset { background: rgba(239,68,68,0.1); color: var(--red); }
+    .notice { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.85rem; color: var(--yellow); margin-bottom: 1rem; }
+  </style>
 </head>
 <body>
-    <header class="site-header">
-        <div class="wrap">
-            <h1>AI Career Intelligence System</h1>
-            <p class="sub">A hybrid AI workflow system for job matching and resume optimization</p>
-        </div>
-    </header>
 
-    <main class="wrap main-grid">
-        <aside class="panel toc" id="toc">
-            <h3>Contents</h3>
-            <nav id="toc-links"></nav>
-        </aside>
-
-        <article class="panel content">
-            <div id="content">Loading content…</div>
-        </article>
-    </main>
-
-    <footer class="site-footer">
-        <div class="wrap">Rendered from <strong>readme.md</strong></div>
-    </footer>
-
-    <template id="md-content">
-# 🧠 AI Career Intelligence System
-
-> A hybrid AI workflow system for job matching and resume optimization, combining SDD architecture, LLM reasoning, and workflow automation.
-
----
-
-## 🚀 Motivation
-
-This project is inspired by agent-based resume optimization tools.
-
-Recently, I needed to apply for jobs and realized:
-
-* Resume tailoring is repetitive
-* Job matching is time-consuming
-* Most tools are either too manual or too "black-box"
-
-So I decided to build:
-
-> **A controllable AI system that can parse jobs, evaluate fit, and iteratively improve resumes — while also exploring modern AI + system design patterns**
-
----
-
-## 🎯 Goals
-
-* Build a **production-style backend system (SDD-driven)**
-* Integrate **LLM for decision-making (not control flow)**
-* Use **n8n for workflow automation**
-* Experiment with **agent-based interaction (Discord + natural language)**
-* Deploy on **Kubernetes for scalability**
-
----
-
-## 🧱 System Architecture
-
-### High-level Design
-
-```mermaid
-flowchart TB
-        User --> Ingress
-        Ingress --> API[FastAPI (SDD Core)]
-
-        API --> Workflow[Workflow Engine]
-        Workflow --> Redis[(Redis)]
-        Workflow --> DB[(PostgreSQL)]
-
-        Workflow --> LLM[LLM Service]
-        LLM --> OpenAI[LLM API]
-
-        API --> Queue[(Kafka / Redis Stream)]
-        Queue --> Worker[Async Worker]
-
-        Worker --> DB
-        Worker --> Redis
-
-        n8n[n8n Workflow] --> API
-        n8n --> LLM
-```
-
----
-
-## 🧩 Core Concepts
-
-### SDD (System Design Driven)
-
-* Workflow is controlled by backend (not LLM)
-* Explicit state machine
-* Deterministic orchestration
-
----
-
-### LLM Usage
-
-LLM is used for:
-
-* Job description parsing
-* Resume matching / scoring
-* Explanation generation
-
-LLM is **NOT used for:**
-
-* Workflow control
-* State management
-
----
-
-### n8n (Workflow Layer)
-
-Used for:
-
-* Job ingestion (scraping / API)
-* Automation pipelines
-* External integrations
-
----
-
-### Agent (Future Extension)
-
-* Discord bot
-* Natural language commands:
-
-    * “re-score this job”
-    * “rewrite my resume for backend role”
-* Controlled via backend API
-
----
-
-## 🧪 Tech Stack
-
-### Backend (Core)
-
-* Python (FastAPI)
-* Pydantic (schema validation)
-* SQLAlchemy
-
----
-
-### AI Layer
-
-* LLM API (OpenAI / Anthropic)
-* Prompt templates
-* (Optional) LangChain (for experimentation only)
-
----
-
-### Workflow / Automation
-
-* n8n (Docker-based workflow engine)
-
----
-
-### State & Data
-
-* PostgreSQL (persistent storage)
-* Redis (state machine / cache / idempotency)
-
----
-
-### Async Processing
-
-* Kafka (or Redis Streams for simpler setup)
-* Worker service (Python)
-
----
-
-### Infra
-
-* Docker
-* Kubernetes (EKS / GKE / local k3d)
-
----
-
-### Dev Tooling
-
-* Claude Code (agent-assisted development)
-* Spec Kit (spec-driven workflow)
-
----
-
-## 🛠 Development Phases
-
----
-
-### Phase 1 — Minimal AI API
-
-* FastAPI
-* `/evaluate` endpoint
-* Call LLM directly
-
-```text
-Input: job + CV
-Output: score + explanation
-```
-
----
-
-### Phase 2 — State Management (SDD)
-
-* Introduce job_id
-* Add Redis state machine
-
-```text
-INIT → PARSING → SCORING → DONE
-```
-
----
-
-### Phase 3 — Async Processing
-
-* Introduce queue (Redis / Kafka)
-* Add worker service
-
-```text
-API → Queue → Worker → LLM → DB
-```
-
----
-
-### Phase 4 — n8n Integration
-
-* Use n8n to:
-
-    * Fetch jobs
-    * Trigger evaluation
-    * Send notifications
-
----
-
-### Phase 5 — Kubernetes Deployment
-
-* Deploy:
-
-    * FastAPI
-    * n8n
-    * Worker
-    * Redis / DB
-
-* Add:
-
-    * HPA (auto scaling)
-    * service separation
-
----
-
-### Phase 6 — Agent Layer (Discord)
-
-* Discord bot
-* Natural language → API mapping
-
-Examples:
-
-```text
-"Re-evaluate job 123"
-"Optimize my resume for this JD"
-```
-
----
-
-## 🤖 Claude Code + Spec Kit
-
-### Why
-
-* Enforce structured development
-* Define system behavior before implementation
-* Assist with prompt + code generation
-
----
-
-### Usage
-
-* Define specs:
-
-    * workflow.md
-    * llm-contract.md
-    * api-spec.yaml
-
-* Claude Code:
-
-    * generates code
-    * refactors workflows
-    * assists debugging
-
----
-
-## 📂 Project Structure (Planned)
-
-```text
-backend/
-    app/
-        api/
-        services/
-        workflows/
-        models/
-
-    llm/
-        prompts/
-        parser.py
-        scorer.py
-
-    worker/
-        consumer.py
-
-infra/
-    k8s/
-    docker/
-
-n8n/
-    workflows/
-
-specs/
-    workflow.md
-    state-machine.md
-```
-
----
-
-## 🔮 Future Improvements
-
-* Resume auto-rewriting pipeline
-* Multi-agent orchestration (LangGraph)
-* Vector DB for job similarity
-* Observability (Prometheus + Grafana)
-
----
-
-## 🧠 Key Takeaways
-
-This project focuses on:
-
-* Separating **LLM reasoning** from **system control**
-* Designing **stateful workflows**
-* Building **scalable AI backend systems**
-
----
-
-## 📌 Status
-
-🚧 In Progress — actively building and iterating
-
----
-
-## 📬 Notes
-
-This is both:
-
-* A **practical tool** for job applications
-* A **technical playground** for modern AI system design
-
----
-
-    </template>
-
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
-    <script>
-        // Render markdown from template
-        const raw = document.getElementById('md-content').innerHTML.trim();
-        const contentEl = document.getElementById('content');
-        // Use marked to parse
-        contentEl.innerHTML = marked.parse(raw);
-        // Highlight code blocks
-        document.querySelectorAll('pre code').forEach((block) => {
-            hljs.highlightElement(block);
-        });
-
-        // Build simple TOC
-        const toc = document.getElementById('toc-links');
-        const headings = contentEl.querySelectorAll('h1, h2, h3');
-        headings.forEach((h, i) => {
-            const id = 'heading-' + i;
-            h.id = id;
-            const a = document.createElement('a');
-            a.href = '#' + id;
-            a.textContent = h.textContent;
-            toc.appendChild(a);
-        });
-    </script>
+<header>
+  <h1>Resume Helper &nbsp;<span id="header-profile-badge"></span></h1>
+  <div class="sub">End-to-end JD evaluation &amp; tailoring</div>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="evaluate" onclick="switchTab('evaluate')">Evaluate</button>
+  <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
+  <button class="tab-btn" data-tab="submittable" onclick="switchTab('submittable')">Submittable</button>
+  <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Profile</button>
+</div>
+
+<!-- EVALUATE -->
+<div id="tab-evaluate" class="page active">
+  <div id="no-profile-notice" class="notice" style="display:none">
+    No baseline profile set. Go to the <strong>Profile</strong> tab to add your resume/skills first.
+  </div>
+  <div class="card">
+    <label for="jd-input">Paste Job Description</label>
+    <textarea id="jd-input" rows="10" placeholder="Paste the full job description here…"></textarea>
+    <div class="mt flex-between">
+      <button class="btn btn-primary" id="eval-btn" onclick="runEvaluate()">Evaluate</button>
+      <span id="eval-status" class="status-msg"></span>
+    </div>
+    <div id="eval-error" class="error-msg"></div>
+  </div>
+
+  <div id="eval-result" style="display:none" class="result-block">
+    <div class="card">
+      <div class="flex-between">
+        <span id="result-badge" class="score-badge"></span>
+        <span id="result-cached" style="font-size:0.75rem;color:var(--muted)"></span>
+      </div>
+      <p id="result-message" style="margin-top:0.6rem;font-size:0.9rem;color:var(--muted)"></p>
+
+      <div id="tailoring-spinner" style="display:none;margin-top:1rem" class="flex">
+        <span class="spinner"></span>
+        <span style="font-size:0.85rem;color:var(--yellow)">Tailoring in progress — polling every 2s…</span>
+      </div>
+      <div id="tailoring-done" style="display:none;margin-top:1rem" class="flex">
+        <span style="color:var(--green);font-size:1.1rem">&#10003;</span>
+        <span style="font-size:0.85rem;color:var(--green)">Resume tailored and ready!</span>
+        <button class="btn btn-sm btn-muted" onclick="openModal()">View Resume</button>
+      </div>
+
+      <div id="result-detail">
+        <div class="section-title">Explanation</div>
+        <p id="result-explanation" style="font-size:0.88rem;color:var(--muted)"></p>
+        <div class="section-title">Strengths</div>
+        <ul class="tag-list" id="result-strengths"></ul>
+        <div class="section-title">Gaps</div>
+        <ul class="tag-list" id="result-gaps"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div id="tab-history" class="page">
+  <div class="flex-between" style="margin-bottom:1rem">
+    <span class="status-msg">Last 100 evaluations</span>
+    <button class="btn btn-primary btn-sm" onclick="loadHistory()">Refresh</button>
+  </div>
+  <div id="history-content"><div class="empty">Loading…</div></div>
+</div>
+
+<!-- SUBMITTABLE -->
+<div id="tab-submittable" class="page">
+  <div class="flex-between" style="margin-bottom:1rem">
+    <span class="status-msg">Resumes ready to submit</span>
+    <button class="btn btn-primary btn-sm" onclick="loadSubmittable()">Refresh</button>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table>
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>Status</th>
+          <th>JD Preview</th>
+          <th>Created</th>
+          <th>Resume</th>
+        </tr>
+      </thead>
+      <tbody id="submittable-body">
+        <tr><td colspan="5" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div id="tab-profile" class="page">
+  <div class="card">
+    <label for="profile-input">Baseline Resume / Skills</label>
+    <p class="status-msg" style="margin-bottom:0.75rem">This is your base resume. The LLM will compare JDs against this text to score and tailor.</p>
+    <textarea id="profile-input" rows="14" placeholder="Paste your resume or skills summary here&#10;&#10;Example:&#10;5 years backend experience. Python, FastAPI, PostgreSQL, Redis, Docker, Kubernetes.&#10;Led design and deployment of REST APIs serving 1M+ daily requests.&#10;Strong in system design, CI/CD, and cloud infrastructure (AWS)."></textarea>
+    <div class="mt flex-between">
+      <button class="btn btn-primary" id="profile-save-btn" onclick="saveProfile()">Save Profile</button>
+      <span id="profile-status" class="status-msg"></span>
+    </div>
+    <div id="profile-error" class="error-msg"></div>
+    <div id="profile-success" class="success-msg"></div>
+  </div>
+</div>
+
+<!-- RESUME MODAL -->
+<div id="resume-modal" class="resume-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Tailored Resume</h3>
+      <div class="flex">
+        <button class="btn btn-sm btn-muted" onclick="copyResume()">Copy</button>
+        <button class="btn btn-sm btn-muted" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+    <pre class="resume-text" id="modal-resume-text"></pre>
+  </div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>

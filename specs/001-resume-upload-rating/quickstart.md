@@ -1,4 +1,4 @@
-# Quickstart: Resume Upload & Rating
+# Quickstart: Resume Fit Evaluator
 
 Single-machine developer setup. Target time: 5 minutes from clone to first
 evaluation.
@@ -7,7 +7,7 @@ evaluation.
 
 - Python 3.11 or newer
 - Docker + Docker Compose (for PostgreSQL)
-- An Anthropic API key (`ANTHROPIC_API_KEY`)
+- `claude` CLI installed and authenticated (used by the LLM service)
 
 ## 1. Clone & enter the repo
 
@@ -22,16 +22,8 @@ cd resumeHelper
 cp .env.example .env
 ```
 
-Then edit `.env` and set:
-
-```ini
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/resume_helper
-ANTHROPIC_API_KEY=sk-ant-...        # required
-STORAGE_DIR=./backend/storage
-LLM_PROMPT_VERSION=resume-fit-v1
-MAX_UPLOAD_BYTES=10485760
-PORT=8000
-```
+The defaults in `.env.example` work for local development. No API key needed —
+the backend uses the local `claude` CLI.
 
 ## 3. Start PostgreSQL
 
@@ -74,42 +66,46 @@ INFO:     Uvicorn running on http://127.0.0.1:8000
 curl -s http://localhost:8000/api/health
 # → {"data":{"status":"ok"},"error":null,"meta":{...}}
 
-# Upload + evaluate
-curl -s -X POST http://localhost:8000/api/resumes \
-  -F "file=@./samples/sample_resume.pdf" \
-  -F "job_description=We need a senior backend engineer with FastAPI and Postgres."
-```
+# Save your baseline profile
+curl -s -X POST http://localhost:8000/api/profile \
+  -H "Content-Type: application/json" \
+  -d '{"skills_text": "Python, FastAPI, PostgreSQL, Docker, 5 years backend experience"}'
 
-If the file is small the response is a synchronous `200` with the evaluation.
-If processing exceeds 5 s the response is `202` with a `job_id` — poll it:
+# Evaluate a job description
+curl -s -X POST http://localhost:8000/api/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"jd_text": "We need a senior backend engineer with FastAPI and Postgres."}'
+# → {"data":{"score":82,"status":"needs_tailoring",...},"error":null,"meta":{...}}
 
-```bash
-curl -s http://localhost:8000/api/jobs/<job_id>
+# Check history
+curl -s http://localhost:8000/api/history
 ```
 
 ## 8. Open the UI
 
 ```bash
-open http://localhost:8000/upload.html
+open http://localhost:8000
 ```
 
-The existing project docs page remains at `http://localhost:8000/`.
+The UI has three tabs: **Evaluate**, **History**, and **Profile**.
+
+## 9. Bulk evaluate (optional)
+
+```bash
+curl -s -X POST http://localhost:8000/api/evaluate/bulk \
+  -H "Content-Type: application/json" \
+  -d '{"jd_texts": ["JD one...", "JD two...", "JD three..."]}'
+# → {"data":{"total":3,"new":3,"cached":0,"results":[...]},...}
+```
 
 ## Running the test suite
 
 ```bash
+# Unit tests (no Docker needed)
+python -m pytest backend/tests/unit/ -q
+
 # Unit + integration (uses testcontainers-postgres)
-pytest backend/tests
-
-# Contract conformance against the OpenAPI doc
-schemathesis run --base-url=http://localhost:8000 \
-  specs/001-resume-upload-rating/contracts/openapi.yaml
-```
-
-Coverage gate (constitution Principle III):
-
-```bash
-pytest --cov=backend/app --cov-fail-under=85
+python -m pytest backend/tests/unit/ backend/tests/integration/v2/ -q
 ```
 
 ## Common issues
@@ -117,7 +113,6 @@ pytest --cov=backend/app --cov-fail-under=85
 | Symptom | Fix |
 |---|---|
 | `connection refused` to Postgres | `docker compose up -d postgres`; wait for healthy |
-| `ANTHROPIC_API_KEY` missing | Set it in `.env`; restart uvicorn |
-| Upload returns `unsupported_format` | Only `.pdf` and `.docx` are accepted in v1 |
-| Upload returns `no_extractable_text` | Scanned-image PDFs are rejected per FR-010 |
-| Job stuck in `pending` after server restart | Crash recovery marks orphaned jobs as `failed`; re-upload to retry |
+| `claude: command not found` | Install claude CLI: `npm install -g @anthropic-ai/claude-code` |
+| Profile 404 on evaluate | POST to `/api/profile` first |
+| Score always 0 | LLM client may be using fake/stub — check `app.state.llm_client` |
