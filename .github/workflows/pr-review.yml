@@ -43,6 +43,10 @@ jobs:
       - name: Lint (ruff)
         run: python -m ruff check backend/app
 
+      - name: Type check (mypy, soft gate)
+        continue-on-error: true
+        run: python -m mypy
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
