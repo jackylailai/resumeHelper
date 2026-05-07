@@ -100,8 +100,10 @@ TDD: write tests RED before implementation.
 - [x] `services/scrapers/persistence.py`: `upsert_drafts()` with Postgres `ON CONFLICT DO NOTHING` on `uq_job_listings_source`
 - [x] `tests/unit/test_scraper_104.py` (9 tests, mocked httpx) + `tests/integration/v2/test_scraper_persistence.py` (3 tests)
 
-### P2.5-T03 · Yourator scraper (issue #41)
-- [ ] `services/scrapers/scraper_yourator.py`: v4 API `/api/v4/jobs?term=...`
+### P2.5-T03 · Yourator scraper (issue #41) ✅
+- [x] `services/scrapers/scraper_yourator.py`: paginates `/api/v4/jobs?page=N` until `hasMore=false` (server-side `term`/`keyword` filters are no-ops, so we filter titles client-side)
+- [x] Detail enrichment: GET the public job HTML page, extract description from the embedded `application/ld+json` JobPosting block (no working JSON detail endpoint)
+- [x] `tests/unit/test_scraper_yourator.py` (13 tests, mocked httpx): pagination via `hasMore`, dedup, case-insensitive title match, JSON-LD extraction, HTTP-error fallback
 
 ### P2.5-T04 · LinkedIn scraper (P2, issue #42)
 - [ ] `services/scrapers/scraper_linkedin.py`: guest jobs HTML; rate-limit handling
