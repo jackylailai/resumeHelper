@@ -118,6 +118,7 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `pdf_path` (TEXT, optional — set when created via PDF upload), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
 - **JobAnalysis**: One row per unique `(jd_hash, profile_id)` pair. Stores score, status, strengths, gaps, can_submit, skip_reason, `profile_id` FK (SET NULL on profile delete).
 - **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url` (null), `prompt_version`.
+- **JobListing** (Phase 2.5): One row per scraped JD. `source` (`104`/`yourator`/`linkedin`), `source_id` (per-platform job id), `title`, `company`, `location`, `url`, `description` (full JD), `raw_json`, `scraped_at`, `job_analysis_id` FK (SET NULL). Unique on `(source, source_id)`.
 
 ## Success Criteria
 
@@ -126,6 +127,8 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **SC-003**: `needs_tailoring` jobs produce a generated resume in the background without blocking the HTTP response.
 - **SC-004**: All evaluated JDs visible in history with correct status.
 - **SC-005**: Submittable list shows only `can_submit=true` jobs with resume text.
+- **SC-006** (Phase 2.5): A single CLI run scrapes ~100 JDs across 104 / Yourator / LinkedIn into `job_listings`, deduped by `(source, source_id)`.
+- **SC-007** (Phase 2.5): Each scraped JobListing produces exactly one JobAnalysis (via the existing three-tier evaluator) and `needs_tailoring` rows trigger background tailoring without manual intervention.
 
 ## Out of Scope (Phase 1)
 

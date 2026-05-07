@@ -55,6 +55,7 @@ Switching is a one-line config change — `LLMClient` Protocol isolates this.
 - **LLM (scoring)**: local `claude` CLI → `ClaudeCLIClient`
 - **LLM (generation)**: Anthropic SDK directly via FastAPI BackgroundTask in `workers/tailor.py` (n8n removed in #19)
 - **PDF storage**: uploaded PDFs persisted under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf`; absolute path stored on `baseline_profile.pdf_path` (#35; S3 deferred)
+- **Job-board crawlers (Phase 2.5)**: per-source scrapers under `services/scrapers/` implement `BaseScraper`; outputs land in `job_listings`; a separate batch evaluator feeds `evaluator_v2` to keep crawl and scoring decoupled. No headless browser — only public JSON / guest HTML endpoints; failures in one source must not block the others.
 - **Prompt files**: `modes/score.md`, `modes/generate.md`
 - **Testing**: pytest; `FakeLLMClient` for unit tests; testcontainers-postgres for integration
 - **Lint/Type**: ruff (hard gate, target py311, `UP` enabled) + mypy (soft gate, `continue-on-error`)
