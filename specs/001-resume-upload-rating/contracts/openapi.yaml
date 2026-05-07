@@ -1,10 +1,13 @@
 openapi: 3.1.0
 info:
   title: Resume Fit Evaluator API
-  version: 0.2.0
+  version: 0.3.0
   description: |
-    Single-user FastAPI service. Saves a baseline resume profile, evaluates
-    job descriptions against it with three-tier scoring, and tracks history.
+    Single-user FastAPI service. Maintains a library of baseline resume
+    profiles, evaluates job descriptions against a selected profile with
+    three-tier scoring, and tracks history. Uploaded PDFs are persisted on
+    local disk under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf` and the
+    absolute path is returned on the response.
     All responses follow the envelope `{ data, error, meta }`.
 
 servers:
@@ -51,7 +54,7 @@ paths:
           $ref: "#/components/responses/Error"
     get:
       tags: [profile]
-      summary: Retrieve the saved baseline profile
+      summary: Retrieve the most recently created baseline profile (legacy)
       responses:
         "200":
           description: Profile found
@@ -59,6 +62,153 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProfileEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/profile/upload:
+    post:
+      tags: [profile]
+      summary: Upload a PDF and create a baseline profile (legacy singular endpoint)
+      description: |
+        Server extracts text via pypdf, strips NUL bytes, persists the
+        original PDF under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf`, and
+        returns the new profile with `pdf_path` populated.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Profile created from PDF
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /api/profiles:
+    get:
+      tags: [profile]
+      summary: List all baseline profiles
+      responses:
+        "200":
+          description: Profile list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileListEnvelope"
+    post:
+      tags: [profile]
+      summary: Create a baseline profile from raw text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileIn"
+      responses:
+        "200":
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /api/profiles/upload:
+    post:
+      tags: [profile]
+      summary: Create a baseline profile from a PDF upload
+      description: |
+        Server extracts text via pypdf, strips NUL bytes, persists the
+        original PDF under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf`, and
+        returns the new profile with `pdf_path` populated.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                name:
+                  type: string
+      responses:
+        "200":
+          description: Profile created from PDF
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /api/profiles/{profile_id}:
+    parameters:
+      - in: path
+        name: profile_id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [profile]
+      summary: Get one baseline profile
+      responses:
+        "200":
+          description: Profile found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [profile]
+      summary: Update name and/or skills_text on a baseline profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdateIn"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileEnvelope"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [profile]
+      summary: Delete a baseline profile
+      responses:
+        "200":
+          description: Profile deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdEnvelope"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -203,12 +353,25 @@ components:
       required: [skills_text]
       properties:
         skills_text: { type: string }
+        name: { type: string, nullable: true }
+
+    ProfileUpdateIn:
+      type: object
+      properties:
+        skills_text: { type: string, nullable: true }
+        name: { type: string, nullable: true }
 
     Profile:
       type: object
       properties:
         id: { type: integer }
+        name: { type: string, nullable: true }
         skills_text: { type: string }
+        pdf_path:
+          type: string
+          nullable: true
+          description: Absolute path to the persisted PDF on local disk; null if the profile was created from raw text.
+        created_at: { type: string, format: date-time, nullable: true }
         updated_at: { type: string, format: date-time }
 
     EvaluateIn:
@@ -216,6 +379,10 @@ components:
       required: [jd_text]
       properties:
         jd_text: { type: string }
+        profile_id:
+          type: integer
+          nullable: true
+          description: If omitted, the most recently created profile is used.
 
     EvaluateOut:
       type: object
@@ -336,6 +503,15 @@ components:
       type: object
       properties:
         data: { $ref: "#/components/schemas/Profile" }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    ProfileListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Profile" }
         error: { type: "null" }
         meta: { $ref: "#/components/schemas/Meta" }
 

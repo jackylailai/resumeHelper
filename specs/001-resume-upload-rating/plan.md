@@ -49,13 +49,15 @@ Switching is a one-line config change — `LLMClient` Protocol isolates this.
 
 ## Technical Context
 
-- **Language**: Python 3.9+ (venv at `.venv/`)
+- **Language**: Python 3.11+ (`requires-python = ">=3.11"`; SQLAlchemy 2.x evaluates `Mapped[...]` at runtime, so PEP 604 unions and `datetime.UTC` rule out 3.9/3.10)
 - **Framework**: FastAPI + SQLAlchemy 2.x + Pydantic v2
-- **DB**: PostgreSQL 16 (docker-compose)
+- **DB**: PostgreSQL 16 (docker-compose, bind-mounted at `${RESUMEHELPER_DATA_PATH:-~/resumeHelper_data}`)
 - **LLM (scoring)**: local `claude` CLI → `ClaudeCLIClient`
-- **LLM (generation)**: n8n workflow (port 5678, docker-compose)
+- **LLM (generation)**: Anthropic SDK directly via FastAPI BackgroundTask in `workers/tailor.py` (n8n removed in #19)
+- **PDF storage**: uploaded PDFs persisted under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf`; absolute path stored on `baseline_profile.pdf_path` (#35; S3 deferred)
 - **Prompt files**: `modes/score.md`, `modes/generate.md`
 - **Testing**: pytest; `FakeLLMClient` for unit tests; testcontainers-postgres for integration
+- **Lint/Type**: ruff (hard gate, target py311, `UP` enabled) + mypy (soft gate, `continue-on-error`)
 - **Target**: local Mac only (Phase 1)
 
 ## Roadmap

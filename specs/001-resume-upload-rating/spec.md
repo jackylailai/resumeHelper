@@ -1,9 +1,9 @@
 # Feature Specification: Resume Fit Evaluator
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-06 (rev 3)
+**Updated**: 2026-05-07 (rev 4)
 **Status**: Phase 1 (implemented)
-**Authoritative direction**: `feat/multi-profile` multi-profile CRUD + profile-scoped evaluation
+**Authoritative direction**: multi-profile CRUD + profile-scoped evaluation; uploaded PDFs persisted on disk; v1 dead code removed; Python 3.11 floor
 
 ## Overview
 
@@ -40,6 +40,7 @@ preserved for backward compatibility.
 8. **Given** `skills_text` contains NUL (`\x00`) bytes, **Then** they are silently stripped before persistence — no 500 crash.
 9. **Given** a POST to the legacy `/api/profile`, **Then** a new profile row is created (same as `/api/profiles`).
 10. **Given** a GET to the legacy `/api/profile`, **Then** the most recently created profile is returned.
+11. **Given** a POST to `/api/profiles/upload`, **Then** the original PDF bytes are written to `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf` and the absolute path is returned on the response as `pdf_path` and saved on `baseline_profile.pdf_path`.
 
 ---
 
@@ -110,10 +111,11 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **FR-009**: System MUST accept bulk JD evaluation (list of texts) in a single request, deduplicated and summarized.
 - **FR-010**: No authentication or multi-user support required. Single-user tool.
 - **FR-011**: PDF generation is out of scope for Phase 1; `pdf_url` is null.
+- **FR-012**: System MUST persist uploaded profile PDFs on local disk and store the absolute path on `baseline_profile.pdf_path`. Path scheme is `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf`. Multiple uploads against the same profile accumulate as separate timestamped files; the latest path is what lives on the row. S3 is deferred to a later phase — column type is plain TEXT so the migration is path-scheme-only.
 
 ## Key Entities
 
-- **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
+- **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `pdf_path` (TEXT, optional — set when created via PDF upload), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
 - **JobAnalysis**: One row per unique `(jd_hash, profile_id)` pair. Stores score, status, strengths, gaps, can_submit, skip_reason, `profile_id` FK (SET NULL on profile delete).
 - **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url` (null), `prompt_version`.
 
