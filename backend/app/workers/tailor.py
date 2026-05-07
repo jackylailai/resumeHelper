@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
@@ -29,7 +30,7 @@ def run_tailoring(
     job_analysis_id: uuid.UUID,
     llm: LLMClient,
     prompt_version: str = "tailor-v1",
-    session_factory: Optional[Callable] = None,
+    session_factory: Callable | None = None,
 ) -> None:
     """BackgroundTasks entrypoint — runs in-process after /api/evaluate response is sent.
 

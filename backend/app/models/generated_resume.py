@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -11,7 +10,7 @@ from backend.app.db import Base
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class GeneratedResume(Base):
@@ -22,8 +21,8 @@ class GeneratedResume(Base):
         ForeignKey("job_analyses.id", ondelete="CASCADE"), nullable=False, index=True
     )
     resume_text: Mapped[str] = mapped_column(Text, nullable=False)
-    pdf_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    prompt_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )

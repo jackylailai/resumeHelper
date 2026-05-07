@@ -38,6 +38,9 @@ python -m pytest backend/tests/integration/v2/ -x -q
 ## Stack
 FastAPI + PostgreSQL (via SQLAlchemy/Alembic) + Claude API (anthropic SDK) + Docker Compose
 
+## Python version
+**3.11+ required.** Ruff target is `py311`, mypy `python_version = "3.11"`, Dockerfile uses `python:3.11-slim`, CI runs 3.11. SQLAlchemy 2.x evaluates `Mapped[...]` annotations at runtime, so PEP 604 unions and `datetime.UTC` would crash on 3.9/3.10 — there is no fallback path.
+
 ## PR workflow (REQUIRED)
 **NEVER push directly to `main` or `develop`.** Always work on a feature branch and open a PR.
 Branch naming: `fix/<short-desc>`, `feat/<short-desc>`.

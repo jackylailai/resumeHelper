@@ -45,6 +45,12 @@ profile and automatically tailors your resume for strong-but-not-perfect matches
 
 ## Quickstart
 
+> **Python 3.11+ required.** The codebase uses `datetime.UTC`, PEP 604
+> unions inside SQLAlchemy `Mapped[...]` annotations (which are evaluated
+> at runtime), and other typing-modernise constructs. There is no 3.9/3.10
+> fallback — `pyenv install 3.11 && pyenv local 3.11` if you're on Anaconda
+> 3.9 or similar.
+
 See [specs/001-resume-upload-rating/quickstart.md](specs/001-resume-upload-rating/quickstart.md).
 
 ```bash

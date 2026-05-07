@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from backend.app.services.llm import EvaluationResult
 
 
@@ -47,7 +45,7 @@ class FakeLLMClient:
         self,
         baseline_text: str,
         jd_text: str,
-        gaps: List[str],
+        gaps: list[str],
         score: int,
     ) -> dict:
         """Fake tailoring — returns deterministic output for tests."""

@@ -1,25 +1,24 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
 
 class ProfileIn(BaseModel):
     skills_text: str
-    name: Optional[str] = None
+    name: str | None = None
 
 
 class ProfileUpdateIn(BaseModel):
-    skills_text: Optional[str] = None
-    name: Optional[str] = None
+    skills_text: str | None = None
+    name: str | None = None
 
 
 class ProfileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    name: Optional[str]
+    name: str | None
     skills_text: str
-    created_at: Optional[datetime]
+    created_at: datetime | None
     updated_at: datetime

@@ -1,9 +1,9 @@
+[project]
+requires-python = ">=3.11"
+
 [tool.ruff]
 line-length = 100
-# target-version pinned to py39: SQLAlchemy 2.x evaluates `Mapped[...]` annotations
-# at runtime, so PEP 604 (`X | None`) and `datetime.UTC` would crash anyone still
-# on 3.9/3.10. Bump this once the project drops 3.9 support.
-target-version = "py39"
+target-version = "py311"
 extend-exclude = ["backend/alembic/versions"]
 
 [tool.ruff.lint]
@@ -13,6 +13,7 @@ select = [
     "B",             # bugbear
     "SIM",           # simplify
     "RUF",           # ruff-specific
+    "UP",            # pyupgrade — safe now that py311 is the floor
 ]
 ignore = [
     "B008",  # FastAPI relies on `Depends(...)` / `File(...)` in defaults.
