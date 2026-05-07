@@ -43,6 +43,9 @@ jobs:
       - name: Lint (ruff)
         run: python -m ruff check backend/app
 
+      - name: Shell script syntax check
+        run: bash -n scripts/e2e-check.sh && bash -n scripts/start.sh && bash -n scripts/restart-app.sh
+
       - name: Type check (mypy, soft gate)
         continue-on-error: true
         run: python -m mypy
