@@ -27,7 +27,7 @@ Evaluates job descriptions (JD) against a baseline resume profile, scores them, 
 ## Architecture decisions
 - **No n8n** — tailoring runs as FastAPI BackgroundTask calling Claude API directly
 - **PDF**: weasyprint not installed; pdf_url is null from background task, can be set via POST /api/callback
-- **v1 endpoints** (`/api/resumes`, `/api/jobs`) were removed in migration 0002 — their tests (22) are expected failures
+- **v1 endpoints** (`/api/resumes`, `/api/jobs`) were removed in migration 0002 and their orphaned modules deleted in #26 follow-up — only v2 (profile + evaluate + history) remains
 
 ## Running tests
 ```bash

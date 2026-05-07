@@ -73,7 +73,11 @@ def upload_profile_pdf(
         skills_text = _extract_pdf(file)
     except Exception as exc:
         logger.error("PDF extraction failed: %s", exc, exc_info=True)
-        return error("pdf_error", "Could not extract text from PDF. Please check the file format.", status_code=422)
+        return error(
+            "pdf_error",
+            "Could not extract text from PDF. Please check the file format.",
+            status_code=422,
+        )
     try:
         profile = create_profile(db, skills_text, name)
     except ValueError as exc:
