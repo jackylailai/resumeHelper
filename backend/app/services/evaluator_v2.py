@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -44,7 +43,7 @@ def get_baseline(db: Session) -> BaselineProfile | None:
     return get_latest_profile(db)
 
 
-def create_profile(db: Session, skills_text: str, name: Optional[str] = None) -> BaselineProfile:
+def create_profile(db: Session, skills_text: str, name: str | None = None) -> BaselineProfile:
     skills_text = skills_text.replace("\x00", "")
     profile = BaselineProfile(skills_text=skills_text, name=name)
     db.add(profile)
@@ -56,8 +55,8 @@ def create_profile(db: Session, skills_text: str, name: Optional[str] = None) ->
 def update_profile(
     db: Session,
     profile_id: int,
-    skills_text: Optional[str] = None,
-    name: Optional[str] = None,
+    skills_text: str | None = None,
+    name: str | None = None,
 ) -> BaselineProfile:
     profile = db.get(BaselineProfile, profile_id)
     if profile is None:
@@ -66,7 +65,7 @@ def update_profile(
         profile.skills_text = skills_text.replace("\x00", "")
     if name is not None:
         profile.name = name
-    profile.updated_at = datetime.now(timezone.utc)
+    profile.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(profile)
     return profile
@@ -90,7 +89,7 @@ def evaluate_jd(
     llm: LLMClient,
     prompt_version: str,
     threshold: int,
-    profile_id: Optional[int] = None,
+    profile_id: int | None = None,
 ) -> tuple[JobAnalysis, bool]:
     """Score JD against a profile. Returns (job_analysis, cache_hit)."""
     # Resolve profile

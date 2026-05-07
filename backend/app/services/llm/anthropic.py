@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import List
 
 import anthropic
 
@@ -102,7 +101,7 @@ class AnthropicLLMClient:
         self,
         baseline_text: str,
         jd_text: str,
-        gaps: List[str],
+        gaps: list[str],
         score: int,
     ) -> dict:
         """Generate tailoring suggestions and a tailored resume text."""

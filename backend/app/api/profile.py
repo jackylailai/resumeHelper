@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
@@ -64,7 +63,7 @@ def create_profile_endpoint(body: ProfileIn, db: Session = Depends(get_db)) -> J
 @router.post("/profiles/upload")
 def upload_profile_pdf(
     file: UploadFile = File(...),
-    name: Optional[str] = Form(None),
+    name: str | None = Form(None),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
