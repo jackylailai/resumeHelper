@@ -1,0 +1,4 @@
+# Force LF for shell scripts so `bash -n` doesn't choke on CRLF
+# when the repo is checked out on Windows or via tools that translate
+# line endings.
+*.sh text eol=lf
