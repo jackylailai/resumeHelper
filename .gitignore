@@ -2,7 +2,8 @@
 .specify/
 
 # IDE/Editor specific
-.claude/
+.claude/*
+!.claude/skills/
 .vscode/
 *.swp
 *.swo
