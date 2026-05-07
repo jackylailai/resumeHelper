@@ -17,7 +17,6 @@ from backend.app.models.resume_version import ResumeVersion
 from backend.app.schemas.evaluation import EvaluationOut, JobOut
 from backend.app.schemas.resume import ResumeOut, ResumeVersionOut
 from backend.app.services import hashing, parsing, storage
-from backend.app.services.evaluator import LLMInvalidScoreError, LLMUnavailableError, run_evaluation
 from backend.app.services.llm import LLMClient
 from backend.app.services.parsing import NoExtractableTextError
 from backend.app.workers.tasks import enqueue_evaluation
@@ -48,18 +47,30 @@ async def upload_resume(
     filename = file.filename or ""
     ext = Path(filename).suffix.lstrip(".").lower()
     if ext not in _ALLOWED_EXTENSIONS:
-        return error("unsupported_format", f"Only pdf and docx are accepted, got {ext!r}", status_code=415)
+        return error(
+            "unsupported_format",
+            f"Only pdf and docx are accepted, got {ext!r}",
+            status_code=415,
+        )
 
     # --- Read and validate size ---
     data = await file.read()
     if len(data) > settings.max_upload_bytes:
-        return error("file_too_large", f"File exceeds {settings.max_upload_bytes} bytes limit", status_code=413)
+        return error(
+            "file_too_large",
+            f"File exceeds {settings.max_upload_bytes} bytes limit",
+            status_code=413,
+        )
 
     # --- Validate magic bytes ---
     try:
         text = parsing.parse(data, ext)
     except NoExtractableTextError:
-        return error("no_extractable_text", "No parseable text found. Scanned-image files are not supported.", status_code=422)
+        return error(
+            "no_extractable_text",
+            "No parseable text found. Scanned-image files are not supported.",
+            status_code=422,
+        )
     except ValueError as exc:
         return error("unsupported_format", str(exc), status_code=415)
 

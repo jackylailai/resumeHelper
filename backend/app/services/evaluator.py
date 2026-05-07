@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
-from backend.app.models.evaluation_job import EvaluationCache, EvaluationJob
+from backend.app.models.evaluation_job import EvaluationCache
 from backend.app.models.resume_evaluation import ResumeEvaluation
 from backend.app.models.resume_version import ResumeVersion
 from backend.app.services.hashing import cache_key, jd_hash

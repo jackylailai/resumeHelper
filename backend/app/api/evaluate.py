@@ -1,10 +1,10 @@
 from __future__ import annotations
+
 import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
@@ -12,10 +12,10 @@ from backend.app.config import get_settings
 from backend.app.db import get_db
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import (
-    JobAnalysis,
-    STATUS_READY_TO_SUBMIT,
     STATUS_NEEDS_TAILORING,
+    STATUS_READY_TO_SUBMIT,
     STATUS_SKIP,
+    JobAnalysis,
 )
 from backend.app.schemas.evaluate import (
     BulkEvaluateIn,
@@ -29,7 +29,8 @@ from backend.app.schemas.evaluate import (
     HistoryItemOut,
     SubmittableResumeOut,
 )
-from backend.app.services.evaluator_v2 import evaluate_jd, get_latest_profile as get_baseline
+from backend.app.services.evaluator_v2 import evaluate_jd
+from backend.app.services.evaluator_v2 import get_latest_profile as get_baseline
 from backend.app.services.llm import LLMClient
 
 logger = logging.getLogger(__name__)

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
 from backend.app.db import get_db
-from backend.app.schemas.evaluation import EvaluationOut, JobOut
+from backend.app.schemas.evaluation import JobOut
 
 router = APIRouter()
 

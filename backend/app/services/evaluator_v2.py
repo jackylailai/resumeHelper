@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -7,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.job_analysis import (
-    JobAnalysis,
-    STATUS_READY_TO_SUBMIT,
     STATUS_NEEDS_TAILORING,
+    STATUS_READY_TO_SUBMIT,
     STATUS_SKIP,
     THRESHOLD_HIGH,
     THRESHOLD_MID,
+    JobAnalysis,
 )
 from backend.app.services import hashing
 from backend.app.services.llm import LLMClient

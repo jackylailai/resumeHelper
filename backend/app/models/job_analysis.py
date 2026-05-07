@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import List, Optional
+
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from backend.app.db import Base
 
 
