@@ -44,7 +44,7 @@ jobs:
         run: python -m ruff check backend/app
 
       - name: Shell script syntax check
-        run: bash -n scripts/e2e-check.sh && bash -n scripts/start.sh && bash -n scripts/restart-app.sh
+        run: bash -n scripts/e2e-check.sh && bash -n scripts/start.sh && bash -n scripts/restart-app.sh && bash -n scripts/test.sh
 
       - name: Type check (mypy, soft gate)
         continue-on-error: true
