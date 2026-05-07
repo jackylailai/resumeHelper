@@ -51,6 +51,13 @@ TDD: write tests RED before implementation.
 - [x] `static/index.html`: single-page app
 - [x] Profile tab: PDF file picker replaces textarea input; extracted text shown as read-only preview
 
+### P1-T08 · Post-#16 cleanup wave ✅ (PRs #31–#35, 2026-05-07)
+- [x] **#31 ci/mypy-soft-gate** — `Type check (mypy, soft gate)` step in pr-review.yml with `continue-on-error: true`
+- [x] **#32 ci/shell-script-gate** — `.gitattributes` pins `*.sh` to `eol=lf`; CI runs `bash -n` against `e2e-check.sh`/`start.sh`/`restart-app.sh`
+- [x] **#33 refactor/remove-v1-deadcode** — deleted orphaned v1 surface: `api/{resumes,jobs,evaluations}.py`, `services/{evaluator,storage}.py`, `workers/tasks.py`, v1 models + schemas, 6 v1 integration tests; closes the `_job_description` cross-session bug from #26
+- [x] **#34 chore/python311-policy** — drop Py3.9, ruff target `py311`, re-enable `UP`, `requires-python = ">=3.11"`, `.python-version`, README/CLAUDE.md state the floor + rationale
+- [x] **#35 feat/persist-uploaded-pdf** — alembic 0005 adds `baseline_profile.pdf_path TEXT NULL`; `/api/profiles/upload` and `/api/profile/upload` now write the original bytes under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf` and store the absolute path on the row
+
 ### P1-T07 · Multi-Profile CRUD + Profile-Scoped Evaluation ✅ (PR #17)
 - [x] `0004_multi_profile.py`: add `name`/`created_at` to `baseline_profile`; add `profile_id` FK on `job_analyses` (SET NULL); drop `jd_hash` unique; add composite unique `(jd_hash, profile_id)`
 - [x] `models/baseline_profile.py`: add `name`, `created_at` columns
@@ -82,8 +89,10 @@ TDD: write tests RED before implementation.
 
 ## Phase 3 — Roadmap (future)
 
-- Crawler / n8n job ingestion pipeline
+- Crawler / external job ingestion pipeline (n8n removed; will be re-introduced as a separate service if/when needed — `/api/callback` already accepts external resume delivery)
 - Multi-user authentication
 - PDF generation (weasyprint)
+- PDF blob storage (move `baseline_profile.pdf_path` from local disk to S3 — column is already TEXT, scheme-swap only)
 - LLM audit log (token cost / latency)
+- Type-check cleanup PRs to drop `continue-on-error` from the mypy gate
 - Kubernetes deployment
