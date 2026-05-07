@@ -87,6 +87,32 @@ TDD: write tests RED before implementation.
 
 ---
 
+## Phase 2.5 — Job-board crawlers (in progress, epic #38)
+
+### P2.5-T01 · JobListing model + scraper interface ✅ (issue #39)
+- [x] `models/job_listing.py`: `(source, source_id)` unique, JSONB `raw_json`, FK `job_analysis_id` (SET NULL)
+- [x] `services/scrapers/base.py`: `BaseScraper` ABC + `JobListingDraft` dataclass
+- [x] `alembic/versions/0006_job_listings.py`: create `job_listings` table + indexes
+- [x] `tests/integration/v2/test_job_listing.py`: persistence, unique constraint, BaseScraper abstract
+
+### P2.5-T02 · 104 scraper (issue #40)
+- [ ] `services/scrapers/scraper_104.py`: search via public `/jobs/search/api/jobs`, detail via `/job/ajax/content/{jobNo}`
+
+### P2.5-T03 · Yourator scraper (issue #41)
+- [ ] `services/scrapers/scraper_yourator.py`: v4 API `/api/v4/jobs?term=...`
+
+### P2.5-T04 · LinkedIn scraper (P2, issue #42)
+- [ ] `services/scrapers/scraper_linkedin.py`: guest jobs HTML; rate-limit handling
+
+### P2.5-T05 · Batch evaluator (issue #43)
+- [ ] `services/batch_evaluator.py`: pull unevaluated JobListings → evaluator_v2 → JobAnalysis; trigger tailor.py for `needs_tailoring`
+
+### P2.5-T06 · CLI / API trigger (issue #44)
+- [ ] `app/cli.py scrape --source ... --keyword ... --limit N`
+- [ ] `POST /api/scrape/run`, `GET /api/scrape/status`
+
+---
+
 ## Phase 3 — Roadmap (future)
 
 - Crawler / external job ingestion pipeline (n8n removed; will be re-introduced as a separate service if/when needed — `/api/callback` already accepts external resume delivery)
