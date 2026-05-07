@@ -72,8 +72,20 @@ open http://localhost:8000
 ## Running tests
 
 ```bash
+# Recommended: bootstraps a Python 3.11+ venv at .venv/ if missing,
+# installs requirements, runs pytest. Use this if your default `python`
+# is < 3.11 (e.g. Anaconda 3.9).
+./scripts/test.sh
+
+# Forward args:
+./scripts/test.sh -k some_test_name
+./scripts/test.sh --recreate    # blow away .venv and rebuild
+
+# Or directly, if you already have the right interpreter activated:
 python -m pytest backend/tests/unit/ backend/tests/integration/v2/ -q
 ```
+
+Docker must be running — testcontainers spawns a Postgres container for the integration suite.
 
 ---
 

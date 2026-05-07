@@ -32,8 +32,11 @@ Evaluates job descriptions (JD) against a baseline resume profile, scores them, 
 ## Running tests
 ```bash
 cd /Users/laijacky/resumeHelper
-python -m pytest backend/tests/integration/v2/ -x -q
+./scripts/test.sh                       # bootstraps .venv with python3.11+, runs full suite
+./scripts/test.sh -k some_test_name     # forwards args to pytest
+./scripts/test.sh --recreate            # rebuild .venv
 ```
+The default system `python` on this machine is Anaconda 3.9, which can't run the codebase post-#34 (`from datetime import UTC`). `scripts/test.sh` finds brew's `python3.11` / `python3.12` automatically.
 
 ## Stack
 FastAPI + PostgreSQL (via SQLAlchemy/Alembic) + Claude API (anthropic SDK) + Docker Compose
