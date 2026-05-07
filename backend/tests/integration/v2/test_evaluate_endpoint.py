@@ -49,3 +49,33 @@ def test_evaluate_stores_job_analysis(client: TestClient):
     history = client.get("/api/history").json()["data"]
     assert len(history) >= 1
     assert history[0]["score"] is not None
+
+
+@pytest.mark.integration
+def test_evaluate_returns_json_on_unhandled_exception(client: TestClient):
+    """#51: a blowup inside the LLM (e.g. context overflow) must still yield
+    JSON, not plain-text 'Internal Server Error' which crashes the front end."""
+    client.post("/api/profile", json={"skills_text": "Python"})
+
+    class _RaisingLLM:
+        def evaluate(self, *_args, **_kwargs):
+            raise RuntimeError("simulated LLM context overflow")
+
+        def tailor(self, *_args, **_kwargs):
+            raise NotImplementedError
+
+    client.app.state.llm_client = _RaisingLLM()
+
+    # The shared client fixture sets raise_server_exceptions=True (so unrelated
+    # bugs surface in tests). For this test we explicitly want to inspect the
+    # response, so wrap the same app with a non-raising client.
+    with TestClient(client.app, raise_server_exceptions=False) as nc:
+        r = nc.post(
+            "/api/evaluate",
+            json={"jd_text": _JD + " a different jd to bypass the cache"},
+        )
+    assert r.status_code == 500
+    body = r.json()
+    assert body["data"] is None
+    assert body["error"]["code"] == "internal_error"
+    assert "RuntimeError" in body["error"]["message"]
