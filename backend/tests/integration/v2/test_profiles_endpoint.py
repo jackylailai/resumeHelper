@@ -83,6 +83,28 @@ def test_upload_profile_pdf(client: TestClient):
 
 
 @pytest.mark.integration
+def test_upload_profile_pdf_persists_file(client: TestClient):
+    """The uploaded PDF bytes should be written to disk and the resulting
+    path should be saved on baseline_profile.pdf_path."""
+    from pathlib import Path
+
+    pdf_bytes = _make_minimal_pdf("Persisted resume content")
+    r = client.post(
+        "/api/profiles/upload",
+        files={"file": ("resume.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
+        data={"name": "Persisted"},
+    )
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["pdf_path"], "pdf_path should be set after upload"
+
+    saved = Path(d["pdf_path"])
+    assert saved.exists(), f"PDF should exist on disk at {saved}"
+    assert saved.read_bytes() == pdf_bytes
+    assert str(d["id"]) in str(saved), "path should be scoped to the profile id"
+
+
+@pytest.mark.integration
 def test_evaluate_with_explicit_profile_id(client: TestClient):
     p1 = client.post("/api/profiles", json={"skills_text": "Python FastAPI"}).json()["data"]
     p2 = client.post("/api/profiles", json={"skills_text": "Java Spring"}).json()["data"]

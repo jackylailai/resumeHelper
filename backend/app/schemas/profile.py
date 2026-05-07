@@ -20,5 +20,6 @@ class ProfileOut(BaseModel):
     id: int
     name: str | None
     skills_text: str
+    pdf_path: str | None = None
     created_at: datetime | None
     updated_at: datetime
