@@ -66,7 +66,6 @@ def enqueue_evaluation(job_id: uuid.UUID, llm: LLMClient) -> None:
 
 
 def _fail(db, job, reason: str) -> None:  # type: ignore[no-untyped-def]
-    from backend.app.models.evaluation_job import EvaluationJob
     job.status = "failed"
     job.failure_reason = reason
     job.finished_at = datetime.now(timezone.utc)

@@ -12,8 +12,8 @@ import uuid
 from typing import Any, Callable, Optional
 
 from backend.app.models.baseline_profile import BaselineProfile
-from backend.app.models.job_analysis import JobAnalysis, STATUS_NEEDS_TAILORING
 from backend.app.models.generated_resume import GeneratedResume
+from backend.app.models.job_analysis import STATUS_NEEDS_TAILORING, JobAnalysis
 from backend.app.services.llm import LLMClient
 
 logger = logging.getLogger(__name__)

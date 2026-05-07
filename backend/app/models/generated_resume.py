@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from backend.app.db import Base
 
 

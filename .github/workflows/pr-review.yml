@@ -40,6 +40,9 @@ jobs:
       - name: Install deps
         run: pip install -r backend/requirements.txt
 
+      - name: Lint (ruff)
+        run: python -m ruff check backend/app
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test

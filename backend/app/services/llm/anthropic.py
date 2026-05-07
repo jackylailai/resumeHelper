@@ -132,7 +132,9 @@ class AnthropicLLMClient:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"LLM returned invalid JSON for tailor: {exc}\nRaw: {raw[:200]}") from exc
+            raise ValueError(
+                f"LLM returned invalid JSON for tailor: {exc}\nRaw: {raw[:200]}"
+            ) from exc
 
         return {
             "tailoring_suggestions": data.get("tailoring_suggestions", []),
