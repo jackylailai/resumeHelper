@@ -95,8 +95,10 @@ TDD: write tests RED before implementation.
 - [x] `alembic/versions/0006_job_listings.py`: create `job_listings` table + indexes
 - [x] `tests/integration/v2/test_job_listing.py`: persistence, unique constraint, BaseScraper abstract
 
-### P2.5-T02 · 104 scraper (issue #40)
-- [ ] `services/scrapers/scraper_104.py`: search via public `/jobs/search/api/jobs`, detail via `/job/ajax/content/{jobNo}`
+### P2.5-T02 · 104 scraper (issue #40) ✅
+- [x] `services/scrapers/scraper_104.py`: search via public `/jobs/search/api/jobs`, detail via `/job/ajax/content/{slug}` (slug pulled from `link.job`)
+- [x] `services/scrapers/persistence.py`: `upsert_drafts()` with Postgres `ON CONFLICT DO NOTHING` on `uq_job_listings_source`
+- [x] `tests/unit/test_scraper_104.py` (9 tests, mocked httpx) + `tests/integration/v2/test_scraper_persistence.py` (3 tests)
 
 ### P2.5-T03 · Yourator scraper (issue #41)
 - [ ] `services/scrapers/scraper_yourator.py`: v4 API `/api/v4/jobs?term=...`
