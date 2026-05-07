@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import logging
+import unicodedata
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
@@ -8,7 +11,9 @@ from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
+from backend.app.config import get_settings
 from backend.app.db import get_db
+from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.schemas.profile import ProfileIn, ProfileOut, ProfileUpdateIn
 from backend.app.services.evaluator_v2 import (
     create_profile,
@@ -23,12 +28,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _extract_pdf(file: UploadFile) -> str:
-    """Extract text from PDF, normalising unicode and stripping JSON-unsafe bytes
-    (NUL, unpaired surrogates) while preserving line structure."""
-    import unicodedata
-
-    reader = PdfReader(file.file)
+def _extract_pdf_text(pdf_bytes: bytes) -> str:
+    """Extract text from PDF bytes, normalising unicode and stripping
+    JSON-unsafe bytes (NUL, unpaired surrogates) while preserving line
+    structure."""
+    reader = PdfReader(io.BytesIO(pdf_bytes))
     text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
     if not text:
         raise ValueError("No text could be extracted from the PDF")
@@ -39,6 +43,34 @@ def _extract_pdf(file: UploadFile) -> str:
 
     lines = [" ".join(line.split()) for line in text.splitlines()]
     return "\n".join(line for line in lines if line)
+
+
+def _save_pdf(profile_id: int, pdf_bytes: bytes) -> str:
+    """Persist the uploaded PDF under STORAGE_DIR/profiles/<id>/<ts>.pdf and
+    return the absolute path. Multiple uploads accumulate; the latest path
+    is what gets stored on the row."""
+    settings = get_settings()
+    profile_dir = settings.storage_dir / "profiles" / str(profile_id)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    target = profile_dir / f"{ts}.pdf"
+    target.write_bytes(pdf_bytes)
+    return str(target.resolve())
+
+
+def _persist_pdf_for_profile(
+    db: Session, profile: BaselineProfile, pdf_bytes: bytes
+) -> BaselineProfile:
+    profile.pdf_path = _save_pdf(profile.id, pdf_bytes)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+def _read_pdf_upload(file: UploadFile) -> bytes:
+    """Read the upload stream into memory once. We need the bytes twice:
+    parse for text extraction, and persist to disk."""
+    return file.file.read()
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +100,9 @@ def upload_profile_pdf(
 ) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return error("invalid_input", "Only PDF files are accepted", status_code=400)
+    pdf_bytes = _read_pdf_upload(file)
     try:
-        skills_text = _extract_pdf(file)
+        skills_text = _extract_pdf_text(pdf_bytes)
     except Exception as exc:
         logger.error("PDF extraction failed: %s", exc, exc_info=True)
         return error(
@@ -81,6 +114,7 @@ def upload_profile_pdf(
         profile = create_profile(db, skills_text, name)
     except ValueError as exc:
         return error("invalid_input", str(exc), status_code=400)
+    profile = _persist_pdf_for_profile(db, profile, pdf_bytes)
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
 
 
@@ -137,8 +171,9 @@ def upload_profile_legacy(
 ) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return error("invalid_input", "Only PDF files are accepted", status_code=400)
+    pdf_bytes = _read_pdf_upload(file)
     try:
-        skills_text = _extract_pdf(file)
+        skills_text = _extract_pdf_text(pdf_bytes)
     except Exception as exc:
         logger.error("PDF extraction failed: %s", exc, exc_info=True)
         return error("pdf_error", f"Could not read PDF: {exc}", status_code=422)
@@ -146,6 +181,7 @@ def upload_profile_legacy(
         profile = create_profile(db, skills_text)
     except ValueError as exc:
         return error("invalid_input", str(exc), status_code=400)
+    profile = _persist_pdf_for_profile(db, profile, pdf_bytes)
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
 
 
