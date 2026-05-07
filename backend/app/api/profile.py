@@ -24,11 +24,21 @@ router = APIRouter()
 
 
 def _extract_pdf(file: UploadFile) -> str:
+    """Extract text from PDF, normalising unicode and stripping JSON-unsafe bytes
+    (NUL, unpaired surrogates) while preserving line structure."""
+    import unicodedata
+
     reader = PdfReader(file.file)
     text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
     if not text:
         raise ValueError("No text could be extracted from the PDF")
-    return text
+
+    text = unicodedata.normalize("NFKC", text)
+    text = text.replace("\x00", "")
+    text = text.encode("utf-8", "ignore").decode("utf-8")
+
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +72,7 @@ def upload_profile_pdf(
         skills_text = _extract_pdf(file)
     except Exception as exc:
         logger.error("PDF extraction failed: %s", exc, exc_info=True)
-        return error("pdf_error", f"Could not read PDF: {exc}", status_code=422)
+        return error("pdf_error", "Could not extract text from PDF. Please check the file format.", status_code=422)
     try:
         profile = create_profile(db, skills_text, name)
     except ValueError as exc:
