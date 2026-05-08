@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.config import get_settings
+
 _JD = "Looking for a Python backend engineer with FastAPI and PostgreSQL experience."
 
 
@@ -43,6 +45,31 @@ def test_evaluate_missing_jd_returns_422(client: TestClient):
 
 
 @pytest.mark.integration
+def test_evaluate_long_google_bmc_jd_returns_json_400(client: TestClient):
+    """#51: long JD input should fail with a clear JSON envelope, not HTML/plain text."""
+    client.post("/api/profile", json={"skills_text": "Python, FastAPI, PostgreSQL"})
+    settings = get_settings()
+    jd = (
+        "Google Business Messages Commerce job description. "
+        "Responsibilities include backend platform ownership, distributed systems, "
+        "product collaboration, observability, privacy reviews, launch readiness, "
+        "API design, incident response, and partner integrations. "
+    )
+    repeats = (settings.max_jd_chars // len(jd)) + 2
+    long_jd = (jd * repeats)[: settings.max_jd_chars + 1]
+
+    r = client.post("/api/evaluate", json={"jd_text": long_jd})
+
+    assert r.status_code == 400
+    assert r.headers["content-type"].startswith("application/json")
+    body = r.json()
+    assert body["data"] is None
+    assert body["error"]["code"] == "jd_too_long"
+    assert body["error"]["details"]["actual_chars"] == settings.max_jd_chars + 1
+    assert body["error"]["details"]["max_chars"] == settings.max_jd_chars
+
+
+@pytest.mark.integration
 def test_evaluate_stores_job_analysis(client: TestClient):
     client.post("/api/profile", json={"skills_text": "Python, FastAPI"})
     client.post("/api/evaluate", json={"jd_text": _JD})
@@ -78,4 +105,4 @@ def test_evaluate_returns_json_on_unhandled_exception(client: TestClient):
     body = r.json()
     assert body["data"] is None
     assert body["error"]["code"] == "internal_error"
-    assert "RuntimeError" in body["error"]["message"]
+    assert body["error"]["details"]["request_id"]

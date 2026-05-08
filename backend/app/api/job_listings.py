@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
 from backend.app.db import get_db
+from backend.app.models.job_analysis import JobAnalysis
 from backend.app.models.job_listing import JobListing
 from backend.app.schemas.job_listing import JobListingDetailOut, JobListingSummaryOut
 
@@ -24,7 +25,10 @@ def _preview(text: str) -> str:
     return compact[: _PREVIEW_CHARS - 1].rstrip() + "..."
 
 
-def _summary(listing: JobListing) -> JobListingSummaryOut:
+def _summary(
+    listing: JobListing,
+    analysis: JobAnalysis | None = None,
+) -> JobListingSummaryOut:
     return JobListingSummaryOut(
         id=listing.id,
         source=listing.source,
@@ -37,6 +41,8 @@ def _summary(listing: JobListing) -> JobListingSummaryOut:
         has_description=bool(listing.description.strip()),
         analyzed=listing.job_analysis_id is not None,
         job_analysis_id=listing.job_analysis_id,
+        last_score=analysis.score if analysis else None,
+        last_status=analysis.status if analysis else None,
         scraped_at=listing.scraped_at,
     )
 
@@ -78,7 +84,15 @@ def list_job_listings(
         .limit(limit)
         .all()
     )
-    data = [_summary(listing).model_dump(mode="json") for listing in listings]
+    analysis_ids = [listing.job_analysis_id for listing in listings if listing.job_analysis_id]
+    analyses = {}
+    if analysis_ids:
+        rows = db.query(JobAnalysis).filter(JobAnalysis.id.in_(analysis_ids)).all()
+        analyses = {row.id: row for row in rows}
+    data = [
+        _summary(listing, analyses.get(listing.job_analysis_id)).model_dump(mode="json")
+        for listing in listings
+    ]
     return success(data, total=total, limit=limit, offset=offset)
 
 
@@ -88,7 +102,8 @@ def get_job_listing(listing_id: uuid.UUID, db: Session = Depends(get_db)) -> JSO
     if listing is None:
         return error("not_found", f"Job listing {listing_id} not found", status_code=404)
 
-    summary = _summary(listing)
+    analysis = db.get(JobAnalysis, listing.job_analysis_id) if listing.job_analysis_id else None
+    summary = _summary(listing, analysis)
     detail = JobListingDetailOut(
         **summary.model_dump(),
         description=listing.description,
