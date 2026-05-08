@@ -5,24 +5,39 @@ import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.api.envelope import error
+from backend.app.api.envelope import error, reset_request_id, set_request_id
 from backend.app.api.evaluate import router as evaluate_router
 from backend.app.api.health import router as health_router
+from backend.app.api.job_listings import router as job_listings_router
 from backend.app.api.profile import router as profile_router
 from backend.app.config import get_settings
-from backend.app.services.llm.claude_cli import ClaudeCLIClient
+from backend.app.services.llm.factory import create_llm_client
 
 logger = logging.getLogger(__name__)
 
 
+def _validation_error_details(exc: RequestValidationError) -> list[dict[str, object]]:
+    details: list[dict[str, object]] = []
+    for item in exc.errors():
+        details.append(
+            {
+                "loc": [str(part) for part in item.get("loc", [])],
+                "msg": str(item.get("msg", "Validation error")),
+                "type": str(item.get("type", "validation_error")),
+            }
+        )
+    return details
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    app.state.llm_client = ClaudeCLIClient()
+    if not hasattr(app.state, "llm_client"):
+        app.state.llm_client = create_llm_client()
     yield
 
 
@@ -47,32 +62,71 @@ def create_app() -> FastAPI:
     async def attach_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        return response
+        token = set_request_id(request_id)
+        try:
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            reset_request_id(token)
 
-    # Without this handler, uncaught exceptions in routes (LLM context-window
-    # blowups, network errors, etc.) become plain-text "Internal Server Error"
-    # responses, which break the front-end JSON parser. See #51.
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_handler(  # type: ignore[no-untyped-def]
+        request: Request, exc: RequestValidationError
+    ):
+        details = _validation_error_details(exc)
+        logger.info(
+            "validation_error request_id=%s path=%s errors=%s",
+            getattr(request.state, "request_id", None),
+            request.url.path,
+            details,
+        )
+        return error(
+            "validation_failed",
+            "Request validation failed.",
+            status_code=422,
+            details={"errors": details},
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(  # type: ignore[no-untyped-def]
+        request: Request, exc: HTTPException
+    ):
+        message = exc.detail if isinstance(exc.detail, str) else "HTTP error"
+        details = {} if isinstance(exc.detail, str) else {"detail": str(exc.detail)}
+        code = "not_found" if exc.status_code == 404 else "http_error"
+        logger.info(
+            "http_error request_id=%s path=%s status=%s detail=%s",
+            getattr(request.state, "request_id", None),
+            request.url.path,
+            exc.status_code,
+            exc.detail,
+        )
+        return error(code, message, status_code=exc.status_code, details=details)
+
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def unhandled_exception_handler(  # type: ignore[no-untyped-def]
+        request: Request, exc: Exception
+    ):
         request_id = getattr(request.state, "request_id", None)
         logger.exception(
-            "unhandled %s on %s %s [request_id=%s]",
-            type(exc).__name__, request.method, request.url, request_id,
+            "unhandled_exception request_id=%s path=%s method=%s",
+            request_id,
+            request.url.path,
+            request.method,
         )
         return error(
             "internal_error",
-            f"{type(exc).__name__}: {exc}",
+            "Unexpected server error. Use the request_id when checking server logs.",
             status_code=500,
-            request_id=request_id,
+            details={"request_id": request_id},
         )
 
     app.include_router(health_router, prefix="/api")
     app.include_router(profile_router, prefix="/api")
     app.include_router(evaluate_router, prefix="/api")
+    app.include_router(job_listings_router, prefix="/api")
 
-    # Serve static UI at root — mount last so API routes take priority
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
     return app
