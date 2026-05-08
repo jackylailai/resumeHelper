@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JD Database - AI Career Intelligence System</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="wrap header-row">
+            <div>
+                <h1>JD Database</h1>
+                <p class="sub">Browse job descriptions stored by scrapers.</p>
+            </div>
+            <nav class="top-nav" aria-label="Primary">
+                <a href="/upload.html">Evaluate</a>
+                <a href="/jobs.html" aria-current="page">JD Database</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <section class="panel">
+            <form id="filters" class="filters">
+                <label>
+                    Search
+                    <input
+                        id="q"
+                        name="q"
+                        type="search"
+                        placeholder="Title, company, location, JD text"
+                    />
+                </label>
+                <label>
+                    Source
+                    <input
+                        id="source"
+                        name="source"
+                        type="text"
+                        placeholder="104, yourator, linkedin"
+                    />
+                </label>
+                <label>
+                    Status
+                    <select id="analyzed" name="analyzed">
+                        <option value="">All</option>
+                        <option value="false">Unanalyzed</option>
+                        <option value="true">Analyzed</option>
+                    </select>
+                </label>
+                <button type="submit">Search</button>
+            </form>
+        </section>
+
+        <section class="jobs-layout">
+            <aside class="panel job-list-panel">
+                <div class="list-header">
+                    <h2>Listings</h2>
+                    <span id="result-count" class="muted"></span>
+                </div>
+                <div id="list-status" class="muted"></div>
+                <ol id="job-list" class="job-list"></ol>
+            </aside>
+
+            <article class="panel job-detail-panel">
+                <div id="detail-empty" class="empty-state">
+                    Select a job listing to inspect its full JD.
+                </div>
+                <div id="detail" hidden>
+                    <div class="detail-header">
+                        <div>
+                            <p id="detail-source" class="eyebrow"></p>
+                            <h2 id="detail-title"></h2>
+                            <p id="detail-company" class="muted"></p>
+                        </div>
+                        <a
+                            id="detail-url"
+                            class="button-link"
+                            href="#"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            Open Source
+                        </a>
+                    </div>
+                    <dl class="meta-grid">
+                        <div>
+                            <dt>Location</dt>
+                            <dd id="detail-location"></dd>
+                        </div>
+                        <div>
+                            <dt>Scraped</dt>
+                            <dd id="detail-scraped"></dd>
+                        </div>
+                        <div>
+                            <dt>Status</dt>
+                            <dd id="detail-status"></dd>
+                        </div>
+                    </dl>
+                    <pre id="detail-description" class="jd-text"></pre>
+                </div>
+            </article>
+        </section>
+    </main>
+
+    <script src="/jobs.js" defer></script>
+</body>
+</html>
