@@ -31,6 +31,7 @@ class EvaluationJob(Base):
         ForeignKey("resume_versions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     jd_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    job_description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     evaluation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("resume_evaluations.id", ondelete="SET NULL"), nullable=True
