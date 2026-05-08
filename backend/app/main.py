@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.app.api.envelope import error, reset_request_id, set_request_id
 from backend.app.api.evaluations import router as evaluations_router
 from backend.app.api.health import router as health_router
+from backend.app.api.job_listings import router as job_listings_router
 from backend.app.api.jobs import router as jobs_router
 from backend.app.api.resumes import router as resumes_router
 from backend.app.config import get_settings
@@ -180,6 +181,7 @@ def create_app() -> FastAPI:
     app.include_router(resumes_router, prefix="/api")
     app.include_router(evaluations_router, prefix="/api")
     app.include_router(jobs_router, prefix="/api")
+    app.include_router(job_listings_router, prefix="/api")
 
     # Serve static UI at root — mount last so API routes take priority
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
