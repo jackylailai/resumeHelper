@@ -28,6 +28,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class UploadTooLargeError(ValueError):
+    def __init__(self, actual_bytes: int, max_bytes: int) -> None:
+        super().__init__(f"Uploaded file exceeds the {max_bytes} byte limit")
+        self.actual_bytes = actual_bytes
+        self.max_bytes = max_bytes
+
+
 def _extract_pdf_text(pdf_bytes: bytes) -> str:
     """Extract text from PDF bytes, normalising unicode and stripping
     JSON-unsafe bytes (NUL, unpaired surrogates) while preserving line
@@ -70,7 +77,20 @@ def _persist_pdf_for_profile(
 def _read_pdf_upload(file: UploadFile) -> bytes:
     """Read the upload stream into memory once. We need the bytes twice:
     parse for text extraction, and persist to disk."""
-    return file.file.read()
+    max_bytes = get_settings().max_upload_bytes
+    pdf_bytes = file.file.read(max_bytes + 1)
+    if len(pdf_bytes) > max_bytes:
+        raise UploadTooLargeError(len(pdf_bytes), max_bytes)
+    return pdf_bytes
+
+
+def _upload_too_large_response(exc: UploadTooLargeError) -> JSONResponse:
+    return error(
+        "payload_too_large",
+        "Uploaded PDF exceeds the configured size limit.",
+        status_code=413,
+        details={"actual_bytes": exc.actual_bytes, "max_bytes": exc.max_bytes},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +120,10 @@ def upload_profile_pdf(
 ) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return error("invalid_input", "Only PDF files are accepted", status_code=400)
-    pdf_bytes = _read_pdf_upload(file)
+    try:
+        pdf_bytes = _read_pdf_upload(file)
+    except UploadTooLargeError as exc:
+        return _upload_too_large_response(exc)
     try:
         skills_text = _extract_pdf_text(pdf_bytes)
     except Exception as exc:
@@ -171,7 +194,10 @@ def upload_profile_legacy(
 ) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return error("invalid_input", "Only PDF files are accepted", status_code=400)
-    pdf_bytes = _read_pdf_upload(file)
+    try:
+        pdf_bytes = _read_pdf_upload(file)
+    except UploadTooLargeError as exc:
+        return _upload_too_large_response(exc)
     try:
         skills_text = _extract_pdf_text(pdf_bytes)
     except Exception as exc:

@@ -6,7 +6,11 @@ import logging
 import anthropic
 
 from backend.app.config import get_settings
-from backend.app.services.llm import EvaluationResult
+from backend.app.services.llm import (
+    EvaluationResult,
+    LLMInvalidOutputError,
+    LLMUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +72,15 @@ class AnthropicLLMClient:
             f"<job_description>\n{job_description}\n</job_description>"
         )
 
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_content}],
-        )
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=1024,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_content}],
+            )
+        except anthropic.APIError as exc:
+            raise LLMUnavailableError(f"Anthropic API request failed: {exc}") from exc
 
         raw = response.content[0].text.strip()  # type: ignore[index]
         logger.info(
@@ -86,10 +93,17 @@ class AnthropicLLMClient:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"LLM returned invalid JSON: {exc}\nRaw: {raw[:200]}") from exc
+            raise LLMInvalidOutputError(f"LLM returned invalid JSON: {exc}") from exc
+
+        try:
+            score = int(data["score"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise LLMInvalidOutputError("LLM response did not include a valid score") from exc
+        if score < 0 or score > 100:
+            raise LLMInvalidOutputError(f"LLM score out of range: {score}")
 
         return EvaluationResult(
-            score=int(data["score"]),
+            score=score,
             explanation=data.get("explanation", ""),
             strengths=data.get("strengths", []),
             gaps=data.get("gaps", []),

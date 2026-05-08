@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from backend.app.config import get_settings
-from backend.app.services.llm import LLMClient
+from backend.app.services.llm import LLMClient, LLMUnavailableError
 from backend.app.services.llm.anthropic import AnthropicLLMClient
 from backend.app.services.llm.claude_cli import ClaudeCLIClient
 from backend.app.services.llm.fake import FakeLLMClient
@@ -21,7 +21,9 @@ def create_llm_client() -> LLMClient:
 
     if backend == "anthropic":
         if not settings.anthropic_api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY is required when LLM_BACKEND=anthropic")
+            raise LLMUnavailableError(
+                "ANTHROPIC_API_KEY is required when LLM_BACKEND=anthropic"
+            )
         logger.info("llm_backend=anthropic model=%s", settings.llm_model)
         return AnthropicLLMClient()
 
