@@ -17,11 +17,15 @@ from backend.app.models.job_analysis import (
     STATUS_SKIP,
     JobAnalysis,
 )
+from backend.app.models.job_listing import JobListing
 from backend.app.schemas.evaluate import (
     BulkEvaluateIn,
     BulkEvaluateOut,
     BulkEvaluateResult,
     CallbackIn,
+    EvaluateByListingsIn,
+    EvaluateByListingsOut,
+    EvaluateByListingsResult,
     EvaluateIn,
     EvaluateOut,
     GeneratedResumeOut,
@@ -31,6 +35,7 @@ from backend.app.schemas.evaluate import (
 )
 from backend.app.services.evaluator_v2 import evaluate_jd
 from backend.app.services.evaluator_v2 import get_latest_profile as get_baseline
+from backend.app.services.evaluator_v2 import get_profile
 from backend.app.services.llm import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -41,6 +46,63 @@ def _get_llm(request: Request) -> LLMClient:
     return request.app.state.llm_client  # type: ignore[no-any-return]
 
 
+def _jd_length_error(
+    jd_text: str,
+    max_chars: int,
+    *,
+    index: int | None = None,
+    listing_id: uuid.UUID | None = None,
+) -> JSONResponse | None:
+    actual_chars = len(jd_text)
+    if max_chars <= 0 or actual_chars <= max_chars:
+        return None
+
+    details: dict[str, int | str] = {
+        "actual_chars": actual_chars,
+        "max_chars": max_chars,
+    }
+    if index is not None:
+        details["index"] = index
+    if listing_id is not None:
+        details["listing_id"] = str(listing_id)
+
+    return error(
+        "jd_too_long",
+        f"Job description exceeds the {max_chars} character limit.",
+        status_code=400,
+        details=details,
+    )
+
+
+def _jd_too_long_message(actual_chars: int, max_chars: int) -> str:
+    return f"Job description has {actual_chars} characters; limit is {max_chars}."
+
+
+def _queue_tailoring_if_needed(
+    job: JobAnalysis,
+    cached: bool,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    llm: LLMClient,
+    prompt_version: str,
+) -> None:
+    if cached or job.status != STATUS_NEEDS_TAILORING:
+        return
+
+    # Lazy import avoids circular dependency: tailor -> db -> main -> evaluate -> tailor
+    from backend.app.workers.tailor import run_tailoring
+
+    session_factory = getattr(request.app.state, "session_factory", None)
+    background_tasks.add_task(
+        run_tailoring,
+        job_analysis_id=job.id,
+        llm=llm,
+        prompt_version=prompt_version,
+        session_factory=session_factory,
+    )
+    logger.info("tailor_task_queued job_id=%s score=%s", job.id, job.score)
+
+
 @router.post("/evaluate")
 def evaluate(
     body: EvaluateIn,
@@ -49,6 +111,10 @@ def evaluate(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     settings = get_settings()
+    length_error = _jd_length_error(body.jd_text, settings.max_jd_chars)
+    if length_error is not None:
+        return length_error
+
     llm = _get_llm(request)
     try:
         job, cached = evaluate_jd(
@@ -123,6 +189,11 @@ def bulk_evaluate(
     new_count = 0
     cached_count = 0
 
+    for index, jd_text in enumerate(body.jd_texts):
+        length_error = _jd_length_error(jd_text, settings.max_jd_chars, index=index)
+        if length_error is not None:
+            return length_error
+
     for jd_text in body.jd_texts:
         job, cached = evaluate_jd(
             db, jd_text, llm,
@@ -158,6 +229,90 @@ def bulk_evaluate(
         total=len(results),
         new=new_count,
         cached=cached_count,
+        results=results,
+    )
+    return success(out.model_dump(mode="json"))
+
+
+@router.post("/evaluate/by-listings")
+def evaluate_by_listings(
+    body: EvaluateByListingsIn,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Evaluate stored scraper JDs by listing id and link results back to the rows."""
+    if get_profile(db, body.profile_id) is None:
+        return error("not_found", f"profile {body.profile_id} not found", status_code=404)
+
+    settings = get_settings()
+    llm = _get_llm(request)
+    results: list[EvaluateByListingsResult] = []
+
+    for listing_id in body.job_listing_ids:
+        listing = db.get(JobListing, listing_id)
+        if listing is None:
+            results.append(EvaluateByListingsResult(
+                listing_id=listing_id,
+                error=f"Job listing {listing_id} not found.",
+            ))
+            continue
+
+        jd_text = listing.description.strip()
+        if not jd_text:
+            results.append(EvaluateByListingsResult(
+                listing_id=listing_id,
+                error="Job listing has no job description text.",
+            ))
+            continue
+
+        actual_chars = len(jd_text)
+        if settings.max_jd_chars > 0 and actual_chars > settings.max_jd_chars:
+            results.append(EvaluateByListingsResult(
+                listing_id=listing_id,
+                error=_jd_too_long_message(actual_chars, settings.max_jd_chars),
+            ))
+            continue
+
+        try:
+            job, cached = evaluate_jd(
+                db,
+                jd_text,
+                llm,
+                prompt_version=settings.llm_prompt_version,
+                threshold=settings.resume_gen_threshold,
+                profile_id=body.profile_id,
+            )
+        except LookupError as exc:
+            results.append(EvaluateByListingsResult(
+                listing_id=listing_id,
+                error=str(exc),
+            ))
+            continue
+
+        listing.job_analysis_id = job.id
+        db.commit()
+        _queue_tailoring_if_needed(
+            job,
+            cached,
+            background_tasks,
+            request,
+            llm,
+            settings.llm_prompt_version,
+        )
+        results.append(EvaluateByListingsResult(
+            listing_id=listing.id,
+            job_analysis_id=job.id,
+            score=job.score or 0,
+            status=job.status or STATUS_SKIP,
+            cached=cached,
+        ))
+
+    succeeded = sum(1 for result in results if result.error is None)
+    out = EvaluateByListingsOut(
+        total=len(results),
+        succeeded=succeeded,
+        failed=len(results) - succeeded,
         results=results,
     )
     return success(out.model_dump(mode="json"))

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # Limits
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
+    max_jd_chars: int = 5000
 
     # Server
     port: int = 8000

@@ -14,7 +14,7 @@
                 <p class="sub">Browse job descriptions stored by scrapers.</p>
             </div>
             <nav class="top-nav" aria-label="Primary">
-                <a href="/upload.html">Evaluate</a>
+                <a href="/">Evaluate</a>
                 <a href="/jobs.html" aria-current="page">JD Database</a>
             </nav>
         </div>
@@ -51,6 +51,34 @@
                 </label>
                 <button type="submit">Search</button>
             </form>
+            <div class="batch-actions">
+                <label>
+                    Profile
+                    <select id="profile-select">
+                        <option value="">Loading profiles...</option>
+                    </select>
+                </label>
+                <button id="score-selected" type="button">Score selected</button>
+                <span id="batch-status" class="muted"></span>
+            </div>
+            <div id="batch-results" class="batch-results" hidden></div>
+        </section>
+
+        <section class="panel direct-evaluate-panel">
+            <h2>Paste JD</h2>
+            <label>
+                Job description
+                <textarea
+                    id="paste-jd"
+                    rows="5"
+                    placeholder="Paste a job description to score against the selected profile"
+                ></textarea>
+            </label>
+            <div class="inline-actions">
+                <button id="score-pasted" type="button">Score pasted JD</button>
+                <span id="paste-status" class="muted"></span>
+            </div>
+            <div id="paste-result" class="batch-results" hidden></div>
         </section>
 
         <section class="jobs-layout">

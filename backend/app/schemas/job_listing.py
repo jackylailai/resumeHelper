@@ -18,6 +18,8 @@ class JobListingSummaryOut(BaseModel):
     has_description: bool
     analyzed: bool
     job_analysis_id: uuid.UUID | None
+    last_score: int | None = None
+    last_status: str | None = None
     scraped_at: datetime
 
 

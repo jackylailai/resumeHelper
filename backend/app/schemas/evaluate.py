@@ -94,3 +94,24 @@ class BulkEvaluateOut(BaseModel):
     new: int
     cached: int
     results: list[BulkEvaluateResult]
+
+
+class EvaluateByListingsIn(BaseModel):
+    profile_id: int
+    job_listing_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=20)]
+
+
+class EvaluateByListingsResult(BaseModel):
+    listing_id: uuid.UUID
+    job_analysis_id: uuid.UUID | None = None
+    score: int | None = None
+    status: Literal["ready_to_submit", "needs_tailoring", "skip"] | None = None
+    cached: bool = False
+    error: str | None = None
+
+
+class EvaluateByListingsOut(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    results: list[EvaluateByListingsResult]

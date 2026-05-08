@@ -149,13 +149,12 @@ async function runEvaluate() {
   let data, cached;
   try {
     const profileId = document.getElementById('profile-select')?.value;
-    const res = await fetch('/api/evaluate', {
+    const { response: res, payload: body } = await apiFetch('/api/evaluate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jd_text: jd, profile_id: profileId ? parseInt(profileId) : null }),
     });
-    const body = await res.json();
-    if (!res.ok) { setEvalError(body?.error?.message || res.statusText); return; }
+    if (!res.ok) { setEvalError(formatApiError(res, body)); return; }
     data = body.data;
     cached = body.meta?.cached === true;
   } catch (e) {
@@ -352,6 +351,33 @@ function fmtStatus(s) {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function apiFetch(url, options) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let payload = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = {
+        error: {
+          code: 'non_json_response',
+          message: text.slice(0, 160),
+          details: {},
+        },
+        meta: {},
+      };
+    }
+  }
+  return { response, payload };
+}
+
+function formatApiError(response, payload) {
+  const message = payload?.error?.message || response.statusText || 'Request failed';
+  const requestId = payload?.meta?.request_id || response.headers.get('X-Request-ID');
+  return requestId ? message + ' Request ID: ' + requestId : message;
 }
 
 document.getElementById('resume-modal').addEventListener('click', function(e) {
