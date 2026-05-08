@@ -25,6 +25,9 @@ credentials.json
 backend/storage/
 storage/
 
+# PostgreSQL data (stored outside project)
+postgres_data/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -53,12 +56,12 @@ htmlcov/
 .ruff_cache/
 .mypy_cache/
 .tox/
+.hypothesis/
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
-postgres_data/
 
 # OS
 .DS_Store

@@ -32,6 +32,24 @@ Scoring guide:
 Return ONLY the JSON object, no markdown, no extra text.
 """
 
+_TAILOR_SYSTEM_PROMPT = """\
+You are an expert resume writer. Given a candidate's baseline skills/resume and a job description,
+plus a list of identified skill gaps, generate a tailored resume that:
+1. Highlights relevant skills matching the job requirements
+2. Reframes experience to align with the role
+3. Incorporates key keywords from the job description
+4. Addresses the identified gaps where possible
+
+Return ONLY valid JSON with this exact schema:
+{
+  "tailoring_suggestions": ["<actionable suggestion 1>", "<actionable suggestion 2>", ...],
+  "tailored_resume": "<full markdown resume text, professionally formatted>"
+}
+
+The tailored_resume should be a complete, polished resume in Markdown format.
+Return ONLY the JSON object, no markdown code fences, no extra text.
+"""
+
 
 class AnthropicLLMClient:
     def __init__(self) -> None:
@@ -78,3 +96,46 @@ class AnthropicLLMClient:
             token_count_input=response.usage.input_tokens,
             token_count_output=response.usage.output_tokens,
         )
+
+    def tailor(
+        self,
+        baseline_text: str,
+        jd_text: str,
+        gaps: list[str],
+        score: int,
+    ) -> dict:
+        """Generate tailoring suggestions and a tailored resume text."""
+        gaps_text = "\n".join(f"- {g}" for g in gaps) if gaps else "- No specific gaps identified"
+        user_content = (
+            f"<current_score>{score}</current_score>\n\n"
+            f"<identified_gaps>\n{gaps_text}\n</identified_gaps>\n\n"
+            f"<baseline_resume>\n{baseline_text}\n</baseline_resume>\n\n"
+            f"<job_description>\n{jd_text}\n</job_description>"
+        )
+
+        response = self._client.messages.create(
+            model=self._model,
+            max_tokens=4096,
+            system=_TAILOR_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_content}],
+        )
+
+        raw = response.content[0].text.strip()  # type: ignore[index]
+        logger.info(
+            "tailor_llm_response model=%s tokens_in=%d tokens_out=%d",
+            self._model,
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+        )
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"LLM returned invalid JSON for tailor: {exc}\nRaw: {raw[:200]}"
+            ) from exc
+
+        return {
+            "tailoring_suggestions": data.get("tailoring_suggestions", []),
+            "tailored_resume": data.get("tailored_resume", ""),
+        }

@@ -40,3 +40,24 @@ class FakeLLMClient:
             token_count_input=100,
             token_count_output=50,
         )
+
+    def tailor(
+        self,
+        baseline_text: str,
+        jd_text: str,
+        gaps: list[str],
+        score: int,
+    ) -> dict:
+        """Fake tailoring — returns deterministic output for tests."""
+        return {
+            "tailoring_suggestions": [
+                "Add quantified achievements",
+                "Highlight relevant keywords from the JD",
+            ],
+            "tailored_resume": (
+                f"# Tailored Resume (fake)\n\n"
+                f"**Score before tailoring:** {score}\n\n"
+                f"## Skills\n\nPython, FastAPI, PostgreSQL\n\n"
+                f"## Experience\n\nSoftware Engineer — tailored for this role.\n"
+            ),
+        }

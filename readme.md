@@ -1,328 +1,98 @@
-# 🧠 AI Career Intelligence System
+# Resume Fit Evaluator
 
-> A hybrid AI workflow system for job matching and resume optimization, combining SDD architecture, LLM reasoning, and workflow automation.
-
----
-
-## 🚀 Motivation
-
-This project is inspired by agent-based resume optimization tools.
-
-Recently, I needed to apply for jobs and realized:
-
-* Resume tailoring is repetitive
-* Job matching is time-consuming
-* Most tools are either too manual or too "black-box"
-
-So I decided to build:
-
-> **A controllable AI system that can parse jobs, evaluate fit, and iteratively improve resumes — while also exploring modern AI + system design patterns**
+A single-user tool that scores job descriptions against your baseline resume
+profile and automatically tailors your resume for strong-but-not-perfect matches.
 
 ---
 
-## 🎯 Goals
+## How it works
 
-* Build a **production-style backend system (SDD-driven)**
-* Integrate **LLM for decision-making (not control flow)**
-* Use **n8n for workflow automation**
-* Experiment with **agent-based interaction (Discord + natural language)**
-* Deploy on **Kubernetes for scalability**
+1. **Save your baseline profile** — paste your skills/experience text once.
+2. **Evaluate a JD** — paste any job description. The system scores it 0–100
+   against your baseline and classifies it into one of three tiers:
+
+| Score | Status | What happens |
+|-------|--------|-------------|
+| 85+ | `ready_to_submit` | Strong match — submit as-is |
+| 60–84 | `needs_tailoring` | Good match — resume tailored in background |
+| <60 | `skip` | Weak match — skip with a reason |
+
+3. **View history** — all evaluated JDs with scores and statuses.
+4. **Check submittable** — jobs with a generated resume ready to submit.
 
 ---
 
-## 🧱 System Architecture
+## Phase 1 (current)
 
-### High-level Design
+- FastAPI backend + PostgreSQL
+- Three-tier scoring via Claude API
+- Background tailoring (FastAPI BackgroundTasks)
+- Single-page UI (Evaluate / History / Profile tabs)
+- JD deduplication by content hash
+- Bulk JD evaluation endpoint
 
-```mermaid
-flowchart TB
-    User --> Ingress
-    Ingress --> API[FastAPI (SDD Core)]
+## Stack
 
-    API --> Workflow[Workflow Engine]
-    Workflow --> Redis[(Redis)]
-    Workflow --> DB[(PostgreSQL)]
+| Layer | Tech |
+|-------|------|
+| API | FastAPI |
+| DB | PostgreSQL (SQLAlchemy + Alembic) |
+| LLM | Claude (local `claude` CLI or Anthropic API) |
+| UI | Vanilla JS single-page app |
+| Tests | pytest + testcontainers |
 
-    Workflow --> LLM[LLM Service]
-    LLM --> OpenAI[LLM API]
+---
 
-    API --> Queue[(Kafka / Redis Stream)]
-    Queue --> Worker[Async Worker]
+## Quickstart
 
-    Worker --> DB
-    Worker --> Redis
+> **Python 3.11+ required.** The codebase uses `datetime.UTC`, PEP 604
+> unions inside SQLAlchemy `Mapped[...]` annotations (which are evaluated
+> at runtime), and other typing-modernise constructs. There is no 3.9/3.10
+> fallback — `pyenv install 3.11 && pyenv local 3.11` if you're on Anaconda
+> 3.9 or similar.
 
-    n8n[n8n Workflow] --> API
-    n8n --> LLM
+See [specs/001-resume-upload-rating/quickstart.md](specs/001-resume-upload-rating/quickstart.md).
+
+```bash
+# Start DB
+docker compose up -d postgres
+
+# Run migrations
+alembic -c backend/alembic.ini upgrade head
+
+# Start API
+uvicorn backend.app.main:app --reload --port 8000
+
+# Open UI
+open http://localhost:8000
 ```
 
 ---
 
-## 🧩 Core Concepts
+## Running tests
 
-### SDD (System Design Driven)
+```bash
+# Recommended: bootstraps a Python 3.11+ venv at .venv/ if missing,
+# installs requirements, runs pytest. Use this if your default `python`
+# is < 3.11 (e.g. Anaconda 3.9).
+./scripts/test.sh
 
-* Workflow is controlled by backend (not LLM)
-* Explicit state machine
-* Deterministic orchestration
+# Forward args:
+./scripts/test.sh -k some_test_name
+./scripts/test.sh --recreate    # blow away .venv and rebuild
 
----
-
-### LLM Usage
-
-LLM is used for:
-
-* Job description parsing
-* Resume matching / scoring
-* Explanation generation
-
-LLM is **NOT used for:**
-
-* Workflow control
-* State management
-
----
-
-### n8n (Workflow Layer)
-
-Used for:
-
-* Job ingestion (scraping / API)
-* Automation pipelines
-* External integrations
-
----
-
-### Agent (Future Extension)
-
-* Discord bot
-* Natural language commands:
-
-  * “re-score this job”
-  * “rewrite my resume for backend role”
-* Controlled via backend API
-
----
-
-## 🧪 Tech Stack
-
-### Backend (Core)
-
-* Python (FastAPI)
-* Pydantic (schema validation)
-* SQLAlchemy
-
----
-
-### AI Layer
-
-* LLM API (OpenAI / Anthropic)
-* Prompt templates
-* (Optional) LangChain (for experimentation only)
-
----
-
-### Workflow / Automation
-
-* n8n (Docker-based workflow engine)
-
----
-
-### State & Data
-
-* PostgreSQL (persistent storage)
-* Redis (state machine / cache / idempotency)
-
----
-
-### Async Processing
-
-* Kafka (or Redis Streams for simpler setup)
-* Worker service (Python)
-
----
-
-### Infra
-
-* Docker
-* Kubernetes (EKS / GKE / local k3d)
-
----
-
-### Dev Tooling
-
-* Claude Code (agent-assisted development)
-* Spec Kit (spec-driven workflow)
-
----
-
-## 🛠 Development Phases
-
----
-
-### Phase 1 — Minimal AI API
-
-* FastAPI
-* `/evaluate` endpoint
-* Call LLM directly
-
-```text
-Input: job + CV
-Output: score + explanation
+# Or directly, if you already have the right interpreter activated:
+python -m pytest backend/tests/unit/ backend/tests/integration/v2/ -q
 ```
 
----
-
-### Phase 2 — State Management (SDD)
-
-* Introduce job_id
-* Add Redis state machine
-
-```text
-INIT → PARSING → SCORING → DONE
-```
+Docker must be running — testcontainers spawns a Postgres container for the integration suite.
 
 ---
 
-### Phase 3 — Async Processing
+## Roadmap (future phases)
 
-* Introduce queue (Redis / Kafka)
-* Add worker service
-
-```text
-API → Queue → Worker → LLM → DB
-```
-
----
-
-### Phase 4 — n8n Integration
-
-* Use n8n to:
-
-  * Fetch jobs
-  * Trigger evaluation
-  * Send notifications
-
----
-
-### Phase 5 — Kubernetes Deployment
-
-* Deploy:
-
-  * FastAPI
-  * n8n
-  * Worker
-  * Redis / DB
-
-* Add:
-
-  * HPA (auto scaling)
-  * service separation
-
----
-
-### Phase 6 — Agent Layer (Discord)
-
-* Discord bot
-* Natural language → API mapping
-
-Examples:
-
-```text
-"Re-evaluate job 123"
-"Optimize my resume for this JD"
-```
-
----
-
-## 🤖 Claude Code + Spec Kit
-
-### Why
-
-* Enforce structured development
-* Define system behavior before implementation
-* Assist with prompt + code generation
-
----
-
-### Usage
-
-* Define specs:
-
-  * workflow.md
-  * llm-contract.md
-  * api-spec.yaml
-
-* Claude Code:
-
-  * generates code
-  * refactors workflows
-  * assists debugging
-
----
-
-## 📂 Project Structure (Planned)
-
-```text
-backend/
-  app/
-    api/
-    services/
-    workflows/
-    models/
-
-  llm/
-    prompts/
-    parser.py
-    scorer.py
-
-  worker/
-    consumer.py
-
-infra/
-  k8s/
-  docker/
-
-n8n/
-  workflows/
-
-specs/
-  workflow.md
-  state-machine.md
-```
-
----
-
-## 🔮 Future Improvements
-
-* Resume auto-rewriting pipeline
-* Multi-agent orchestration (LangGraph)
-* Vector DB for job similarity
-* Observability (Prometheus + Grafana)
-
----
-
-## 🧠 Key Takeaways
-
-This project focuses on:
-
-* Separating **LLM reasoning** from **system control**
-* Designing **stateful workflows**
-* Building **scalable AI backend systems**
-
----
-
-## 📌 Status
-
-🚧 In Progress — actively building and iterating
-
----
-
-## 📬 Notes
-
-This is both:
-
-* A **practical tool** for job applications
-* A **technical playground** for modern AI system design
-
----
+- Job crawler / n8n ingestion pipeline
+- PDF resume generation (weasyprint)
+- Multi-user support
+- Kubernetes deployment
+- Discord agent interface

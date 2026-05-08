@@ -1,83 +1,128 @@
 # Tasks
 
-**Scope authority**: `scope-correction.md`
+**Spec authority**: `spec.md` (three-tier evaluation flow)
 **Roadmap**: `specs/roadmap.md`
-**Agent roles**: `agent.md`
 
-TDD is non-negotiable: tests written and confirmed RED before implementation.
-
----
-
-## Phase 1 — POC (current)
-
-### P1-T01 · Schema + Migration
-- [ ] Delete old 4-table Alembic migration
-- [ ] Write new `0002_poc_schema.py`: `baseline_profile`, `job_analyses`, `generated_resumes`
-- [ ] New ORM models: `models/baseline_profile.py`, `models/job_analysis.py`, `models/generated_resume.py`
-- [ ] Delete old models: `resume.py`, `resume_version.py`, `resume_evaluation.py`, `evaluation_job.py`
-
-### P1-T02 · Pydantic Schemas
-- [ ] `schemas/profile.py`: `ProfileIn`, `ProfileOut`
-- [ ] `schemas/evaluate.py`: `EvaluateIn`, `EvaluateOut`, `CallbackIn`
-- [ ] `schemas/history.py`: `HistoryItemOut`, `GeneratedResumeOut`
-
-### P1-T03 · Services
-- [ ] `services/evaluator.py` rewrite: read baseline → build prompt → call LLMClient → return score
-- [ ] `services/generator.py`: POST n8n webhook with `{job_analysis_id, jd_full_text, baseline_skills}`
-- [ ] Keep: `services/hashing.py`, `services/parsing.py`
-- [ ] Delete: `services/storage.py`, `services/evaluator.py` (old), `workers/tasks.py`
-
-### P1-T04 · API Endpoints
-Write tests RED first, then implement:
-
-| Endpoint | Test file |
-|----------|-----------|
-| `POST /api/profile` | `test_profile_endpoint.py` |
-| `GET /api/profile` | `test_profile_endpoint.py` |
-| `POST /api/evaluate` | `test_evaluate_endpoint.py` |
-| `POST /api/callback` | `test_callback_endpoint.py` |
-| `GET /api/history` | `test_history_endpoint.py` |
-| `GET /api/history/{id}` | `test_history_detail.py` |
-| `POST /api/history/{id}/regenerate` | `test_regenerate.py` |
-
-### P1-T05 · ClaudeCLIClient unit test
-- [ ] `tests/unit/test_claude_cli_client.py`: mock subprocess, verify prompt rendering, JSON parse, error handling
-
-### P1-T06 · n8n workflow setup
-- [ ] `docker compose up n8n` → configure webhook trigger node
-- [ ] LLM node: use `modes/generate.md` prompt
-- [ ] Output node: POST to `http://host.docker.internal:8000/api/callback`
-- [ ] Document workflow export in `specs/n8n-workflow.json`
-
-### P1-T07 · UI rewrite
-- [ ] `static/upload.html`: profile setup section + JD input + evaluate button + result card + history list
-- [ ] `static/app.js`: full rewrite for new API surface
-
-### P1-T08 · Cleanup
-- [ ] Delete old test files: `test_upload_sync.py`, `test_upload_async.py`, `test_upload_rejections.py`, `test_version_increments.py`, `test_history_endpoint.py` (old), `test_dedupe_cache_hit.py`
-- [ ] `ruff check` + `mypy --strict` clean
-- [ ] Coverage ≥ 85% on `backend/app/`
-- [ ] Update README: quickstart section
-
-**Checkpoint**: `docker compose up -d postgres n8n` → `uvicorn` → paste JD → get score → get resume.
+TDD: write tests RED before implementation.
 
 ---
 
-## Phase 2 — Infra (future)
+## Phase 1 — Core (complete)
 
-- [ ] `GroqLLMClient` + `LLM_BACKEND` env switch
-- [ ] LangChain: `PromptTemplate`, `StructuredOutputParser`, streaming
-- [ ] `nginx` in docker-compose (reverse proxy + rate limit)
-- [ ] `Dockerfile` for FastAPI
-- [ ] `docker-compose.prod.yml`
-- [ ] SSL setup (Let's Encrypt)
+### P1-T01 · Schema + Migration ✅
+- [x] `0002_poc_schema.py`: `baseline_profile`, `job_analyses`, `generated_resumes`
+- [x] `0003_three_tier_fields.py`: `status`, `can_submit`, `skip_reason`, `explanation`, `strengths`, `gaps`
+- [x] ORM models: `baseline_profile.py`, `job_analysis.py`, `generated_resume.py`
 
-## Phase 3 — High Concurrency (future)
+### P1-T02 · Pydantic Schemas ✅
+- [x] `schemas/profile.py`: `ProfileIn`, `ProfileOut`
+- [x] `schemas/evaluate.py`: `EvaluateIn`, `EvaluateOut`, `CallbackIn`, `HistoryItemOut`, `HistoryDetailOut`, `SubmittableResumeOut`
 
-See `specs/roadmap.md` for full design.
+### P1-T03 · Services ✅
+- [x] `services/evaluator_v2.py`: read baseline → call LLM → three-tier classification
+- [x] `services/hashing.py`: `jd_hash()` deduplication
+- [x] `workers/tailor.py`: background tailoring using saved baseline profile
+- [x] `services/llm/anthropic.py`: `evaluate()` and `tailor()` via Anthropic API
+- [x] `services/llm/fake.py`: deterministic stub for tests
 
-- [ ] Redis + Celery workers (replace n8n for generation)
-- [ ] pgBouncer connection pooling
-- [ ] Kubernetes manifests + Ingress
-- [ ] Multi-user (add `user_id` to all tables)
-- [ ] LangSmith tracing
+### P1-T04 · API Endpoints ✅
+
+| Endpoint | Test file | Status |
+|----------|-----------|--------|
+| `POST /api/profile` | `test_profile_endpoint.py` | ✅ |
+| `POST /api/profile/upload` | — | ✅ (PDF → pypdf extract → upsert) |
+| `GET /api/profile` | `test_profile_endpoint.py` | ✅ |
+| `POST /api/evaluate` | `test_evaluate_endpoint.py` | ✅ |
+| `POST /api/callback` | `test_callback_endpoint.py` | ✅ |
+| `GET /api/history` | `test_history_endpoint.py` | ✅ |
+| `GET /api/history/{id}` | `test_history_detail.py` | ✅ |
+| `GET /api/submittable` | `test_submittable_endpoint.py` | ✅ |
+
+**Bug fixes shipped with P1-T04:**
+- `upsert_baseline`: strips NUL (`\x00`) bytes before DB write (fixes 500 on PDF-pasted text)
+- `set_profile`: `ValueError` now returns HTTP 400 with message instead of crashing
+
+### P1-T05 · Three-tier logic tests ✅
+- [x] `test_three_tier_evaluate.py`: ready_to_submit / needs_tailoring / skip
+- [x] `test_tailor_worker.py`: tailoring uses baseline profile, not JD
+
+### P1-T06 · E2E UI ✅
+- [x] `static/app.js`: Evaluate tab, History tab, Profile tab
+- [x] `static/index.html`: single-page app
+- [x] Profile tab: PDF file picker replaces textarea input; extracted text shown as read-only preview
+
+### P1-T08 · Post-#16 cleanup wave ✅ (PRs #31–#35, 2026-05-07)
+- [x] **#31 ci/mypy-soft-gate** — `Type check (mypy, soft gate)` step in pr-review.yml with `continue-on-error: true`
+- [x] **#32 ci/shell-script-gate** — `.gitattributes` pins `*.sh` to `eol=lf`; CI runs `bash -n` against `e2e-check.sh`/`start.sh`/`restart-app.sh`
+- [x] **#33 refactor/remove-v1-deadcode** — deleted orphaned v1 surface: `api/{resumes,jobs,evaluations}.py`, `services/{evaluator,storage}.py`, `workers/tasks.py`, v1 models + schemas, 6 v1 integration tests; closes the `_job_description` cross-session bug from #26
+- [x] **#34 chore/python311-policy** — drop Py3.9, ruff target `py311`, re-enable `UP`, `requires-python = ">=3.11"`, `.python-version`, README/CLAUDE.md state the floor + rationale
+- [x] **#35 feat/persist-uploaded-pdf** — alembic 0005 adds `baseline_profile.pdf_path TEXT NULL`; `/api/profiles/upload` and `/api/profile/upload` now write the original bytes under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf` and store the absolute path on the row
+
+### P1-T07 · Multi-Profile CRUD + Profile-Scoped Evaluation ✅ (PR #17)
+- [x] `0004_multi_profile.py`: add `name`/`created_at` to `baseline_profile`; add `profile_id` FK on `job_analyses` (SET NULL); drop `jd_hash` unique; add composite unique `(jd_hash, profile_id)`
+- [x] `models/baseline_profile.py`: add `name`, `created_at` columns
+- [x] `models/job_analysis.py`: add `profile_id` FK column
+- [x] `schemas/profile.py`: `ProfileIn` adds `name`; new `ProfileUpdateIn`; `ProfileOut` adds `name`, `created_at`
+- [x] `schemas/evaluate.py`: `EvaluateIn` adds `profile_id`; `HistoryItemOut` adds `profile_id`
+- [x] `services/evaluator_v2.py`: full CRUD (`list_profiles`, `get_profile`, `create_profile`, `update_profile`, `delete_profile`); `evaluate_jd` resolves profile by `profile_id` or latest; cache scoped to `(jd_hash, profile_id)`
+- [x] `api/profile.py`: `GET/POST/PUT/DELETE /api/profiles`; `POST /api/profiles/upload`; legacy singular endpoints preserved
+- [x] `workers/tailor.py`: looks up profile by `job.profile_id` (falls back to latest)
+- [x] `static/index.html` + `app.js`: Profile tab table + Add form; Evaluate tab profile selector dropdown
+- [x] `tests/integration/v2/test_profiles_endpoint.py`: 14 tests covering CRUD, upload, cache isolation, legacy compat
+
+---
+
+## Phase 2 — Bulk Ingestion (in progress)
+
+### P2-T01 · Bulk JD Evaluate endpoint
+- [ ] `schemas/evaluate.py`: add `BulkEvaluateIn`, `BulkEvaluateResult`, `BulkEvaluateOut`
+- [ ] `api/evaluate.py`: add `POST /api/evaluate/bulk`
+  - Deduplicate by jd_hash
+  - Trigger background tailoring per new needs_tailoring job
+  - Return totals: `total`, `new`, `cached`
+- [ ] Test: `tests/integration/v2/test_bulk_evaluate.py`
+  - bulk returns correct totals
+  - duplicate JDs in same batch are cached
+  - needs_tailoring JDs trigger tailoring tasks
+
+---
+
+## Phase 2.5 — Job-board crawlers (in progress, epic #38)
+
+### P2.5-T01 · JobListing model + scraper interface ✅ (issue #39)
+- [x] `models/job_listing.py`: `(source, source_id)` unique, JSONB `raw_json`, FK `job_analysis_id` (SET NULL)
+- [x] `services/scrapers/base.py`: `BaseScraper` ABC + `JobListingDraft` dataclass
+- [x] `alembic/versions/0006_job_listings.py`: create `job_listings` table + indexes
+- [x] `tests/integration/v2/test_job_listing.py`: persistence, unique constraint, BaseScraper abstract
+
+### P2.5-T02 · 104 scraper (issue #40) ✅
+- [x] `services/scrapers/scraper_104.py`: search via public `/jobs/search/api/jobs`, detail via `/job/ajax/content/{slug}` (slug pulled from `link.job`)
+- [x] `services/scrapers/persistence.py`: `upsert_drafts()` with Postgres `ON CONFLICT DO NOTHING` on `uq_job_listings_source`
+- [x] `tests/unit/test_scraper_104.py` (9 tests, mocked httpx) + `tests/integration/v2/test_scraper_persistence.py` (3 tests)
+
+### P2.5-T03 · Yourator scraper (issue #41) ✅
+- [x] `services/scrapers/scraper_yourator.py`: paginates `/api/v4/jobs?page=N` until `hasMore=false` (server-side `term`/`keyword` filters are no-ops, so we filter titles client-side)
+- [x] Detail enrichment: GET the public job HTML page, extract description from the embedded `application/ld+json` JobPosting block (no working JSON detail endpoint)
+- [x] `tests/unit/test_scraper_yourator.py` (13 tests, mocked httpx): pagination via `hasMore`, dedup, case-insensitive title match, JSON-LD extraction, HTTP-error fallback
+
+### P2.5-T04 · LinkedIn scraper (P2, issue #42)
+- [ ] `services/scrapers/scraper_linkedin.py`: guest jobs HTML; rate-limit handling
+
+### P2.5-T05 · Batch evaluator (issue #43)
+- [ ] `services/batch_evaluator.py`: pull unevaluated JobListings → evaluator_v2 → JobAnalysis; trigger tailor.py for `needs_tailoring`
+
+### P2.5-T06 · CLI / API trigger (issue #44)
+- [ ] `app/cli.py scrape --source ... --keyword ... --limit N`
+- [ ] `POST /api/scrape/run`, `GET /api/scrape/status`
+
+---
+
+## Phase 3 — Roadmap (future)
+
+- Crawler / external job ingestion pipeline (n8n removed; will be re-introduced as a separate service if/when needed — `/api/callback` already accepts external resume delivery)
+- Multi-user authentication
+- PDF generation (weasyprint)
+- PDF blob storage (move `baseline_profile.pdf_path` from local disk to S3 — column is already TEXT, scheme-swap only)
+- LLM audit log (token cost / latency)
+- Type-check cleanup PRs to drop `continue-on-error` from the mypy gate
+- Kubernetes deployment

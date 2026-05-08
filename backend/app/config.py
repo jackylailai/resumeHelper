@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Storage
     storage_dir: Path = Path("./backend/storage")
 
+    # Resume generation
+    resume_gen_threshold: int = 60
+    n8n_webhook_url: str = ""
+
     # Limits
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
 
