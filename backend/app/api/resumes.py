@@ -94,13 +94,11 @@ async def upload_resume(
     except ValueError as exc:
         return error("version_cap_exceeded", str(exc), status_code=422)
 
-    # --- Evaluate synchronously (small/fast) or async ---
-    version._job_description = job_description  # passed through to worker
-
     job = EvaluationJob(
         id=uuid.uuid4(),
         resume_version_id=version.id,
         jd_hash=hashing.jd_hash(job_description),
+        job_description=job_description,
         status="pending",
         created_at=datetime.now(timezone.utc),
     )

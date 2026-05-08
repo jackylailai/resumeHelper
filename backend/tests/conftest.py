@@ -60,6 +60,7 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
     # Override settings to point at test DB and temp storage
     os.environ["DATABASE_URL"] = str(db_engine.url)
     os.environ["STORAGE_DIR"] = str(tmp_path / "storage")
+    os.environ["LLM_BACKEND"] = "fake"
     os.environ["ANTHROPIC_API_KEY"] = "fake-key-for-tests"
 
     # Clear lru_cache so settings are re-read with test env

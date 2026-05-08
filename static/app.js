@@ -19,11 +19,13 @@ form.addEventListener("submit", async (event) => {
     scoreCard.hidden = true;
     historySection.hidden = true;
 
-    const response = await fetch("/api/resumes", { method: "POST", body: formData });
-    const payload = await response.json();
+    const { response, payload } = await safeApiFetch(
+        "/api/resumes",
+        { method: "POST", body: formData }
+    );
 
     if (!response.ok) {
-        statusLine.textContent = `Error: ${payload.error?.message ?? response.statusText}`;
+        statusLine.textContent = formatError(response, payload);
         return;
     }
 
@@ -40,13 +42,21 @@ async function pollJob(jobId) {
     statusLine.textContent = `Job ${jobId}: pending…`;
     while (true) {
         await new Promise((r) => setTimeout(r, 1500));
-        const res = await fetch(`/api/jobs/${jobId}`);
-        const body = await res.json();
+        const { response: res, payload: body } = await safeApiFetch(`/api/jobs/${jobId}`);
+        if (!res.ok) {
+            statusLine.textContent = formatError(res, body);
+            return;
+        }
         const job = body.data;
         statusLine.textContent = `Job ${jobId}: ${job.status}`;
         if (job.status === "succeeded") {
-            const evalRes = await fetch(`/api/evaluations/${job.evaluation_id}`);
-            const evalBody = await evalRes.json();
+            const { response: evalRes, payload: evalBody } = await safeApiFetch(
+                `/api/evaluations/${job.evaluation_id}`
+            );
+            if (!evalRes.ok) {
+                statusLine.textContent = formatError(evalRes, evalBody);
+                return;
+            }
             renderEvaluation(evalBody.data, false);
             return;
         }
@@ -91,27 +101,81 @@ function renderList(id, items) {
 
 async function loadHistory() {
     // Fetch most recently updated resume (current upload) to get its ID
-    const listRes = await fetch("/api/resumes");
+    const { response: listRes, payload: listBody } = await safeApiFetch("/api/resumes");
     if (!listRes.ok) return;
-    const resumes = (await listRes.json()).data;
+    const resumes = listBody.data;
     if (!resumes || resumes.length === 0) return;
 
     const resume = resumes[0];
     currentResumeId = resume.id;
 
     // Fetch its version history
-    const verRes = await fetch(`/api/resumes/${resume.id}/versions`);
+    const { response: verRes, payload: verBody } = await safeApiFetch(
+        `/api/resumes/${resume.id}/versions`
+    );
     if (!verRes.ok) return;
-    const versions = (await verRes.json()).data;
+    const versions = verBody.data;
 
     historyList.innerHTML = "";
     for (const v of versions) {
         const li = document.createElement("li");
         const date = new Date(v.uploaded_at).toLocaleString();
         const scoreText = v.evaluation ? ` — score ${v.evaluation.score}` : "";
-        li.textContent = `v${v.version_number}  ${date}  (${v.file_format.toUpperCase()}, ${(v.file_size_bytes / 1024).toFixed(1)} KB)${scoreText}`;
+        const fileSizeKb = (v.file_size_bytes / 1024).toFixed(1);
+        li.textContent = (
+            `v${v.version_number}  ${date}  ` +
+            `(${v.file_format.toUpperCase()}, ${fileSizeKb} KB)${scoreText}`
+        );
         historyList.appendChild(li);
     }
 
     historySection.hidden = versions.length === 0;
+}
+
+async function apiFetch(url, options) {
+    const response = await fetch(url, options);
+    const text = await response.text();
+    let payload = {};
+
+    if (text) {
+        try {
+            payload = JSON.parse(text);
+        } catch {
+            payload = {
+                error: {
+                    code: "non_json_response",
+                    message: text.slice(0, 160),
+                    details: {},
+                },
+                meta: {},
+            };
+        }
+    }
+
+    return { response, payload };
+}
+
+async function safeApiFetch(url, options) {
+    try {
+        return await apiFetch(url, options);
+    } catch (error) {
+        return {
+            response: { ok: false, status: 0, statusText: "Network error", headers: new Headers() },
+            payload: {
+                error: {
+                    code: "network_error",
+                    message: error instanceof Error ? error.message : "Network error",
+                    details: {},
+                },
+                meta: {},
+            },
+        };
+    }
+}
+
+function formatError(response, payload) {
+    const message = payload.error?.message ?? response.statusText ?? "Request failed";
+    const requestId = payload.meta?.request_id ?? response.headers.get("X-Request-ID");
+    const suffix = requestId ? ` Request ID: ${requestId}` : "";
+    return `Error ${response.status}: ${message}.${suffix}`;
 }

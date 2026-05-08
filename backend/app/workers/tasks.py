@@ -35,13 +35,8 @@ def enqueue_evaluation(job_id: uuid.UUID, llm: LLMClient) -> None:
             _fail(db, job, "version_not_found")
             return
 
-        # Reconstruct job_description from jd_hash is not possible —
-        # we need the original text. Fetch it from the evaluation if it
-        # was already cached, otherwise look it up from the job's stored hash.
-        # We store job_description on the version record via a temporary
-        # thread-local set before enqueueing (see api/resumes.py).
-        jd = getattr(version, "_job_description", None)
-        if jd is None:
+        jd = job.job_description.strip()
+        if not jd:
             _fail(db, job, "job_description_missing")
             return
 

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # LLM
     anthropic_api_key: str = ""
+    llm_backend: str = "claude_cli"
     llm_model: str = "claude-sonnet-4-6"
     llm_prompt_version: str = "resume-fit-v1"
 
@@ -38,6 +39,14 @@ class Settings(BaseSettings):
     def make_storage_dir(cls, v: Path) -> Path:
         v.mkdir(parents=True, exist_ok=True)
         return v
+
+    @field_validator("llm_backend", mode="after")
+    @classmethod
+    def normalize_llm_backend(cls, v: str) -> str:
+        backend = v.strip().lower()
+        if backend not in {"anthropic", "claude_cli", "fake"}:
+            raise ValueError("LLM_BACKEND must be one of: anthropic, claude_cli, fake")
+        return backend
 
 
 @lru_cache

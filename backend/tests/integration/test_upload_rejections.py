@@ -65,6 +65,10 @@ def test_missing_job_description_returns_422(client: TestClient, minimal_pdf_byt
         files={"file": ("resume.pdf", minimal_pdf_bytes, "application/pdf")},
     )
     assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "validation_failed"
+    assert body["meta"]["request_id"]
+    assert response.headers["X-Request-ID"] == body["meta"]["request_id"]
 
 
 @pytest.mark.integration
