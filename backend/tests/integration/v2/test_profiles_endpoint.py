@@ -105,6 +105,26 @@ def test_upload_profile_pdf_persists_file(client: TestClient):
 
 
 @pytest.mark.integration
+def test_upload_profile_pdf_rejects_oversized_file(client: TestClient, monkeypatch):
+    monkeypatch.setenv("MAX_UPLOAD_BYTES", "8")
+    from backend.app.config import get_settings
+    get_settings.cache_clear()
+    try:
+        r = client.post(
+            "/api/profiles/upload",
+            files={"file": ("resume.pdf", io.BytesIO(b"%PDF-oversized"), "application/pdf")},
+            data={"name": "Too Large"},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert r.status_code == 413
+    body = r.json()
+    assert body["error"]["code"] == "payload_too_large"
+    assert body["error"]["details"]["max_bytes"] == 8
+
+
+@pytest.mark.integration
 def test_evaluate_with_explicit_profile_id(client: TestClient):
     p1 = client.post("/api/profiles", json={"skills_text": "Python FastAPI"}).json()["data"]
     p2 = client.post("/api/profiles", json={"skills_text": "Java Spring"}).json()["data"]

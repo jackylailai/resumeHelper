@@ -14,6 +14,18 @@ class EvaluationResult:
     token_count_output: int | None = None
 
 
+class LLMError(RuntimeError):
+    """Base class for user-facing LLM failures."""
+
+
+class LLMUnavailableError(LLMError):
+    """Raised when the configured LLM backend cannot be reached or executed."""
+
+
+class LLMInvalidOutputError(LLMError):
+    """Raised when the LLM returns data that cannot be used safely."""
+
+
 class LLMClient(Protocol):
     def evaluate(
         self,

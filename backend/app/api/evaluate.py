@@ -36,7 +36,7 @@ from backend.app.schemas.evaluate import (
 from backend.app.services.evaluator_v2 import evaluate_jd
 from backend.app.services.evaluator_v2 import get_latest_profile as get_baseline
 from backend.app.services.evaluator_v2 import get_profile
-from backend.app.services.llm import LLMClient
+from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -125,6 +125,10 @@ def evaluate(
         )
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
+    except LLMUnavailableError as exc:
+        return error("llm_unavailable", str(exc), status_code=503)
+    except LLMInvalidOutputError as exc:
+        return error("llm_invalid_output", str(exc), status_code=502)
 
     # Determine three-tier action message
     status = job.status or STATUS_SKIP
@@ -195,11 +199,16 @@ def bulk_evaluate(
             return length_error
 
     for jd_text in body.jd_texts:
-        job, cached = evaluate_jd(
-            db, jd_text, llm,
-            prompt_version=settings.llm_prompt_version,
-            threshold=settings.resume_gen_threshold,
-        )
+        try:
+            job, cached = evaluate_jd(
+                db, jd_text, llm,
+                prompt_version=settings.llm_prompt_version,
+                threshold=settings.resume_gen_threshold,
+            )
+        except LLMUnavailableError as exc:
+            return error("llm_unavailable", str(exc), status_code=503)
+        except LLMInvalidOutputError as exc:
+            return error("llm_invalid_output", str(exc), status_code=502)
 
         if cached:
             cached_count += 1
@@ -287,6 +296,18 @@ def evaluate_by_listings(
             results.append(EvaluateByListingsResult(
                 listing_id=listing_id,
                 error=str(exc),
+            ))
+            continue
+        except LLMUnavailableError as exc:
+            results.append(EvaluateByListingsResult(
+                listing_id=listing_id,
+                error=f"llm_unavailable: {exc}",
+            ))
+            continue
+        except LLMInvalidOutputError as exc:
+            results.append(EvaluateByListingsResult(
+                listing_id=listing_id,
+                error=f"llm_invalid_output: {exc}",
             ))
             continue
 

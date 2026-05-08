@@ -6,7 +6,11 @@ import subprocess
 import time
 from pathlib import Path
 
-from backend.app.services.llm import EvaluationResult
+from backend.app.services.llm import (
+    EvaluationResult,
+    LLMInvalidOutputError,
+    LLMUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +41,21 @@ class ClaudeCLIClient:
         )
 
         start = time.time()
-        result = subprocess.run(
-            [_CLAUDE_BIN, "--print", "-p", prompt],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        try:
+            result = subprocess.run(
+                [_CLAUDE_BIN, "--print", "-p", prompt],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except FileNotFoundError as exc:
+            raise LLMUnavailableError("claude CLI executable was not found") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise LLMUnavailableError("claude CLI timed out") from exc
         latency_ms = int((time.time() - start) * 1000)
 
         if result.returncode != 0:
-            raise RuntimeError(f"claude CLI failed: {result.stderr[:200]}")
+            raise LLMUnavailableError(f"claude CLI failed: {result.stderr[:200]}")
 
         raw = result.stdout.strip()
         # Strip markdown code fences if present
@@ -57,12 +66,23 @@ class ClaudeCLIClient:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"claude CLI returned invalid JSON: {exc}\nRaw: {raw[:300]}") from exc
+            raise LLMInvalidOutputError(
+                f"claude CLI returned invalid JSON: {exc}"
+            ) from exc
 
-        logger.info("claude_cli score=%d latency_ms=%d", data.get("score", -1), latency_ms)
+        try:
+            score = int(data["score"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise LLMInvalidOutputError(
+                "claude CLI response did not include a valid score"
+            ) from exc
+        if score < 0 or score > 100:
+            raise LLMInvalidOutputError(f"claude CLI score out of range: {score}")
+
+        logger.info("claude_cli score=%d latency_ms=%d", score, latency_ms)
 
         return EvaluationResult(
-            score=int(data["score"]),
+            score=score,
             explanation=data.get("explanation", ""),
             strengths=data.get("strengths", []),
             gaps=data.get("gaps", []),

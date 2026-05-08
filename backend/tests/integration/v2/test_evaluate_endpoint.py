@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.config import get_settings
+from backend.app.services.llm import LLMInvalidOutputError, LLMUnavailableError
 
 _JD = "Looking for a Python backend engineer with FastAPI and PostgreSQL experience."
 
@@ -106,3 +107,37 @@ def test_evaluate_returns_json_on_unhandled_exception(client: TestClient):
     assert body["data"] is None
     assert body["error"]["code"] == "internal_error"
     assert body["error"]["details"]["request_id"]
+
+
+@pytest.mark.integration
+def test_evaluate_returns_json_on_llm_unavailable(client: TestClient):
+    client.post("/api/profile", json={"skills_text": "Python"})
+
+    class _UnavailableLLM:
+        def evaluate(self, *_args, **_kwargs):
+            raise LLMUnavailableError("claude CLI executable was not found")
+
+    client.app.state.llm_client = _UnavailableLLM()
+
+    r = client.post("/api/evaluate", json={"jd_text": _JD + " unavailable"})
+
+    assert r.status_code == 503
+    body = r.json()
+    assert body["error"]["code"] == "llm_unavailable"
+
+
+@pytest.mark.integration
+def test_evaluate_returns_json_on_llm_invalid_output(client: TestClient):
+    client.post("/api/profile", json={"skills_text": "Python"})
+
+    class _InvalidOutputLLM:
+        def evaluate(self, *_args, **_kwargs):
+            raise LLMInvalidOutputError("score out of range")
+
+    client.app.state.llm_client = _InvalidOutputLLM()
+
+    r = client.post("/api/evaluate", json={"jd_text": _JD + " invalid output"})
+
+    assert r.status_code == 502
+    body = r.json()
+    assert body["error"]["code"] == "llm_invalid_output"
