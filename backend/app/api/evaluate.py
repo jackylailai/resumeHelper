@@ -4,7 +4,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
@@ -37,6 +37,7 @@ from backend.app.services.evaluator_v2 import evaluate_jd
 from backend.app.services.evaluator_v2 import get_latest_profile as get_baseline
 from backend.app.services.evaluator_v2 import get_profile
 from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
+from backend.app.services.pdf import generated_resume_pdf_path, write_generated_resume_pdf
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -353,6 +354,13 @@ def n8n_callback(body: CallbackIn, db: Session = Depends(get_db)) -> JSONRespons
         prompt_version=body.prompt_version,
     )
     db.add(resume)
+    db.flush()
+    write_generated_resume_pdf(
+        get_settings().storage_dir,
+        resume.id,
+        resume.resume_text,
+    )
+    resume.pdf_url = f"/api/generated-resumes/{resume.id}/pdf"
 
     # Mark as submittable when a resume is delivered via callback
     job.can_submit = True
@@ -428,6 +436,32 @@ def list_submittable(db: Session = Depends(get_db)) -> JSONResponse:
         result.append(item)
 
     return success(result, count=len(result))
+
+
+@router.get("/generated-resumes/{resume_id}/pdf")
+def download_generated_resume_pdf(
+    resume_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> FileResponse | JSONResponse:
+    resume = db.get(GeneratedResume, resume_id)
+    if resume is None:
+        return error("not_found", f"generated_resume {resume_id} not found", status_code=404)
+
+    settings = get_settings()
+    path = generated_resume_pdf_path(settings.storage_dir, resume.id)
+    if not path.exists():
+        write_generated_resume_pdf(settings.storage_dir, resume.id, resume.resume_text)
+
+    expected_url = f"/api/generated-resumes/{resume.id}/pdf"
+    if resume.pdf_url != expected_url:
+        resume.pdf_url = expected_url
+        db.commit()
+
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=f"resume-{resume.id}.pdf",
+    )
 
 
 @router.get("/history/{job_id}")

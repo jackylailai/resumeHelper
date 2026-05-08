@@ -1,5 +1,6 @@
 // State
 let currentResumeText = null;
+let currentResumePdfUrl = null;
 let pollTimer = null;
 let profileLoaded = false;
 
@@ -211,7 +212,9 @@ function startPoll(jobId) {
       const job = body.data;
       if (job.can_submit && job.generated_resumes && job.generated_resumes.length > 0) {
         stopPoll();
-        currentResumeText = job.generated_resumes[0].resume_text;
+        const resume = job.generated_resumes[0];
+        currentResumeText = resume.resume_text;
+        currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
         document.getElementById('tailoring-spinner').style.display = 'none';
         document.getElementById('tailoring-done').style.display = 'flex';
       }
@@ -289,9 +292,7 @@ async function loadSubmittable() {
         + '<td><span class="' + statusPillClass(item.status) + '">' + fmtStatus(item.status) + '</span></td>'
         + '<td><div class="jd-preview">' + escHtml(item.jd_snippet || '') + '</div></td>'
         + '<td style="font-size:0.8rem;color:var(--muted)">' + fmtDate(item.created_at) + '</td>'
-        + '<td>' + (item.resume_id
-          ? '<button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal(\'' + item.id + '\')">View</button>'
-          : '<span style="color:var(--muted);font-size:0.8rem">—</span>') + '</td>'
+        + '<td>' + resumeActionsHtml(item) + '</td>'
         + '</tr>';
     }).join('');
   } catch (e) {
@@ -305,7 +306,9 @@ async function fetchAndOpenModal(jobId) {
     const body = await res.json();
     const resumes = body.data?.generated_resumes;
     if (resumes && resumes.length > 0) {
-      currentResumeText = resumes[0].resume_text;
+      const resume = resumes[0];
+      currentResumeText = resume.resume_text;
+      currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
       openModal();
     }
   } catch (_) {}
@@ -314,6 +317,7 @@ async function fetchAndOpenModal(jobId) {
 // ---- Modal ----
 function openModal() {
   document.getElementById('modal-resume-text').textContent = currentResumeText || '(no text)';
+  document.getElementById('download-resume-pdf').hidden = !currentResumePdfUrl;
   document.getElementById('resume-modal').classList.add('open');
 }
 
@@ -326,7 +330,23 @@ async function copyResume() {
   try { await navigator.clipboard.writeText(currentResumeText); } catch (_) {}
 }
 
+function downloadCurrentResumePdf() {
+  if (!currentResumePdfUrl) return;
+  window.open(currentResumePdfUrl, '_blank', 'noopener');
+}
+
 // ---- Helpers ----
+function resumeActionsHtml(item) {
+  if (!item.resume_id) {
+    return '<span style="color:var(--muted);font-size:0.8rem">—</span>';
+  }
+  const pdfUrl = item.pdf_url || '/api/generated-resumes/' + item.resume_id + '/pdf';
+  return `<div class="flex">
+    <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}')">View</button>
+    <a class="btn btn-sm btn-muted" href="${escHtml(pdfUrl)}" target="_blank" rel="noreferrer">PDF</a>
+  </div>`;
+}
+
 function renderTags(id, items) {
   const ul = document.getElementById(id);
   ul.innerHTML = (items || []).map(function(t) { return '<li>' + escHtml(t) + '</li>'; }).join('');
