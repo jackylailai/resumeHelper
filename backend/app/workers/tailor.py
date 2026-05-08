@@ -12,10 +12,12 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from backend.app.config import get_settings
 from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import STATUS_NEEDS_TAILORING, JobAnalysis
 from backend.app.services.llm import LLMClient
+from backend.app.services.pdf import write_generated_resume_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +79,18 @@ def run_tailoring(
         resume = GeneratedResume(
             job_analysis_id=job_analysis_id,
             resume_text=result["tailored_resume"],
-            pdf_url=None,   # PDF generation not available (weasyprint not installed)
+            pdf_url=None,
             prompt_version=prompt_version,
         )
         db.add(resume)
+        db.flush()
+
+        write_generated_resume_pdf(
+            get_settings().storage_dir,
+            resume.id,
+            resume.resume_text,
+        )
+        resume.pdf_url = f"/api/generated-resumes/{resume.id}/pdf"
 
         job.can_submit = True
         db.commit()
