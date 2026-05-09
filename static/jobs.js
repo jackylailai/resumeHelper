@@ -83,7 +83,7 @@ async function loadProfiles() {
 
     if (!response.ok) {
         appendOption(profileSelect, "", "Could not load profiles");
-        batchStatus.textContent = formatError(response, payload);
+        setApiError(batchStatus, response, payload);
         return;
     }
 
@@ -123,7 +123,7 @@ async function loadListings() {
 
     const { response, payload } = await safeApiFetch(`/api/job-listings?${params}`);
     if (!response.ok) {
-        listStatus.textContent = formatError(response, payload);
+        setApiError(listStatus, response, payload);
         currentListings = [];
         pagination.total = 0;
         updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });
@@ -283,7 +283,7 @@ async function scoreSelectedListings() {
 
     scoreSelected.disabled = false;
     if (!response.ok) {
-        batchStatus.textContent = formatError(response, payload);
+        setApiError(batchStatus, response, payload);
         return;
     }
 
@@ -373,7 +373,7 @@ async function scorePastedJd() {
 
     scorePasted.disabled = false;
     if (!response.ok) {
-        pasteStatus.textContent = formatError(response, payload);
+        setApiError(pasteStatus, response, payload);
         return;
     }
 
@@ -418,7 +418,7 @@ async function loadDetail(id) {
     if (!response.ok) {
         detailEmpty.hidden = false;
         detail.hidden = true;
-        detailEmpty.textContent = formatError(response, payload);
+        setApiError(detailEmpty, response, payload);
         return;
     }
 
@@ -468,4 +468,8 @@ async function safeApiFetch(url, options) {
 
 function formatError(response, payload) {
     return UI.formatApiError(response, payload, { includeStatus: true });
+}
+
+function setApiError(element, response, payload) {
+    element.innerHTML = UI.apiErrorBanner(response, payload, { includeStatus: true });
 }
