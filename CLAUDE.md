@@ -29,18 +29,29 @@ Evaluates job descriptions (JD) against a baseline resume profile, scores them, 
 - **PDF**: weasyprint not installed; pdf_url is null from background task, can be set via POST /api/callback
 - **v1 endpoints** (`/api/resumes`, `/api/jobs`) were removed in migration 0002 and their orphaned modules deleted in #26 follow-up — only v2 (profile + evaluate + history) remains
 
-## Running the app — host vs container
-Two ways to run the FastAPI app. Pick by which LLM credential you have:
+## Running the app — container is the default
+**One-time setup**: run `claude setup-token` on the host, paste the printed
+token into `.env` as `CLAUDE_CODE_OAUTH_TOKEN=...`, and leave `ANTHROPIC_API_KEY`
+empty. Token is long-lived — revoke at console.anthropic.com if leaked.
 
-| Mode | Command | When to use |
+**Daily**: `./scripts/restart-docker.sh --full` rebuilds the app image and
+brings up postgres + app together. After backend code edits, drop `--full` to
+rebuild app only. The container reads `CLAUDE_CODE_OAUTH_TOKEN` from `.env` and
+spawns `claude --print` per request — so the same machine running Claude Code
+on the host works fine; **never** bind-mount `~/.claude` or `~/.claude.json`,
+the container CLI will race the host's Claude Code and corrupt the host config.
+
+**Verify**: `./scripts/dev-verify.sh` — pings `/api/health` and
+`/api/debug/claude-cli-ping`, expects DB ok + `ok=true, stdout="PONG\n"` from
+the CLI. Latency is ~4-10s per call (CLI subprocess cold-start; same on host).
+
+See `scripts/README.md` for the full catalog of helper scripts.
+
+| Mode | When | Command |
 |---|---|---|
-| **Host (recommended for dev)** | `scripts/restart-app.sh` — uvicorn directly on host | You have `claude login` on your mac. Host's `claude` CLI is auto-picked up. No API key needed. |
-| **Container w/ subscription token** | `docker compose -f docker-compose.yml -f docker-compose.app.yml up -d app` | Run `claude setup-token` on host, paste the printed token into `.env` as `CLAUDE_CODE_OAUTH_TOKEN=...`, leave `ANTHROPIC_API_KEY` empty. Verified by `GET /api/debug/claude-cli-ping` (issue #100). |
-| **Container w/ API key** | same compose command | Set `ANTHROPIC_API_KEY` in `.env` and `LLM_BACKEND=anthropic`. |
-
-The container reads `CLAUDE_CODE_OAUTH_TOKEN` instead of the macOS Keychain — so do **not** bind-mount `~/.claude` or `~/.claude.json` from the host (the container CLI will race the host's Claude Code and corrupt the host config). The token is long-lived; revoke at console.anthropic.com if leaked.
-
-Smoke test (non-prod only): `curl http://localhost:8000/api/debug/claude-cli-ping` — expects `ok=true, returncode=0, stdout="PONG\n"`. Each invocation cold-starts the CLI subprocess, so latency is ~4-10s; this is inherent to `claude_cli` mode and matches host behaviour.
+| **Container (default)** | normal dev / running evaluator | `./scripts/restart-docker.sh --full` (or `... ` without `--full` for app-only) |
+| **Host fallback** | hacking on uvicorn reload, debugging without rebuild | `./scripts/start.sh` (boots postgres in docker, uvicorn on host with `--reload`) |
+| **Container w/ API key** | no Claude subscription | set `ANTHROPIC_API_KEY` and `LLM_BACKEND=anthropic` in `.env` |
 
 `docker compose up -d` (default `docker-compose.yml`) only brings up `postgres` — the DB is shared by both modes via `~/resumeHelper_data` bind mount.
 
