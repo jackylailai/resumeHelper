@@ -7,6 +7,7 @@ let profileLoaded = false;
 // ---- Init ----
 window.addEventListener('DOMContentLoaded', () => {
   checkProfile();
+  applyInitialHash();
 });
 
 // ---- Tab switching ----
@@ -16,6 +17,14 @@ function switchTab(name) {
   if (name === 'history') loadHistory();
   if (name === 'submittable') loadSubmittable();
   if (name === 'profile') loadProfile();
+}
+
+function applyInitialHash() {
+  const target = window.location.hash.replace('#', '');
+  const allowed = ['evaluate', 'history', 'submittable', 'profile'];
+  if (allowed.includes(target)) {
+    switchTab(target);
+  }
 }
 
 // ---- Profile ----
