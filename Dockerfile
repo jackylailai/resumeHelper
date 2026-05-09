@@ -6,7 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install claude CLI (uses Claude Code subscription — no API key needed)
+# Install claude CLI. In containers it needs ANTHROPIC_API_KEY or mounted Claude
+# credentials; the host interactive login is not available inside the image.
 RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /app
