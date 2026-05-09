@@ -47,10 +47,29 @@
                 </label>
                 <label>
                     Status
-                    <select id="analyzed" name="analyzed">
+                    <select id="status" name="status">
                         <option value="">All</option>
-                        <option value="false">Unanalyzed</option>
-                        <option value="true">Analyzed</option>
+                        <option value="unanalyzed">Unanalyzed</option>
+                        <option value="ready_to_submit">Ready to submit</option>
+                        <option value="needs_tailoring">Needs tailoring</option>
+                        <option value="skip">Skipped</option>
+                        <option value="failed-invalid">Failed invalid</option>
+                    </select>
+                </label>
+                <label>
+                    Sort by
+                    <select id="sort-by" name="sort_by">
+                        <option value="scraped_at">Scraped date</option>
+                        <option value="score">Score</option>
+                        <option value="company">Company</option>
+                        <option value="source">Source</option>
+                    </select>
+                </label>
+                <label>
+                    Direction
+                    <select id="sort-dir" name="sort_dir">
+                        <option value="desc">Descending</option>
+                        <option value="asc">Ascending</option>
                     </select>
                 </label>
                 <button type="submit">Search</button>
@@ -62,6 +81,11 @@
                         <option value="">Loading profiles...</option>
                     </select>
                 </label>
+                <div class="selection-actions">
+                    <button id="select-page" type="button">Select current page</button>
+                    <button id="clear-selection" type="button">Clear selection</button>
+                    <span id="selection-count" class="muted">0 selected</span>
+                </div>
                 <button id="score-selected" type="button">Score selected</button>
                 <span id="batch-status" class="muted"></span>
             </div>
@@ -89,7 +113,14 @@
             <aside class="panel job-list-panel">
                 <div class="list-header">
                     <h2>Listings</h2>
-                    <span id="result-count" class="muted"></span>
+                    <div class="list-counts">
+                        <span id="result-count" class="muted"></span>
+                        <div class="pagination-controls" aria-label="Listings pagination">
+                            <button id="prev-page" type="button">Previous</button>
+                            <span id="page-range" class="muted"></span>
+                            <button id="next-page" type="button">Next</button>
+                        </div>
+                    </div>
                 </div>
                 <div id="list-status" class="muted"></div>
                 <ol id="job-list" class="job-list"></ol>

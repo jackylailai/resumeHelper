@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
@@ -16,6 +17,18 @@ from backend.app.schemas.job_listing import JobListingDetailOut, JobListingSumma
 router = APIRouter()
 
 _PREVIEW_CHARS = 220
+_ANALYSIS_STATUSES = frozenset({"ready_to_submit", "needs_tailoring", "skip"})
+
+ListingStatusFilter = Literal[
+    "unanalyzed",
+    "ready_to_submit",
+    "needs_tailoring",
+    "skip",
+    "failed-invalid",
+    "failed_invalid",
+]
+ListingSortBy = Literal["scraped_at", "score", "company", "source"]
+SortDirection = Literal["asc", "desc"]
 
 
 def _preview(text: str) -> str:
@@ -39,6 +52,7 @@ def _summary(
         url=listing.url,
         description_preview=_preview(listing.description),
         has_description=bool(listing.description.strip()),
+        list_status=_listing_status(listing, analysis),
         analyzed=listing.job_analysis_id is not None,
         job_analysis_id=listing.job_analysis_id,
         last_score=analysis.score if analysis else None,
@@ -47,21 +61,51 @@ def _summary(
     )
 
 
+def _listing_status(listing: JobListing, analysis: JobAnalysis | None) -> str:
+    if not listing.description.strip():
+        return "failed-invalid"
+    if listing.job_analysis_id is None:
+        return "unanalyzed"
+    if analysis and analysis.status:
+        return analysis.status
+    return "analyzed"
+
+
 @router.get("/job-listings")
 def list_job_listings(
     q: str | None = Query(default=None, max_length=120),
     source: str | None = Query(default=None, max_length=32),
-    analyzed: bool | None = None,
+    analyzed: bool | None = Query(default=None),
+    status: ListingStatusFilter | None = Query(default=None),
+    sort_by: ListingSortBy = Query(default="scraped_at"),
+    sort_dir: SortDirection = Query(default="desc"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     query = db.query(JobListing)
+    joined_analysis = False
 
     if source:
         query = query.filter(JobListing.source == source)
 
-    if analyzed is True:
+    status_value = (
+        "failed-invalid"
+        if status in {"failed-invalid", "failed_invalid"}
+        else status
+    )
+    if status_value == "failed-invalid":
+        query = query.filter(func.length(func.trim(JobListing.description)) == 0)
+    elif status_value == "unanalyzed":
+        query = query.filter(
+            JobListing.job_analysis_id.is_(None),
+            func.length(func.trim(JobListing.description)) > 0,
+        )
+    elif status_value in _ANALYSIS_STATUSES:
+        query = query.join(JobAnalysis, JobListing.job_analysis_id == JobAnalysis.id)
+        joined_analysis = True
+        query = query.filter(JobAnalysis.status == status_value)
+    elif analyzed is True:
         query = query.filter(JobListing.job_analysis_id.isnot(None))
     elif analyzed is False:
         query = query.filter(JobListing.job_analysis_id.is_(None))
@@ -78,14 +122,52 @@ def list_job_listings(
         )
 
     total = query.count()
+    if sort_by == "score":
+        if not joined_analysis:
+            query = query.outerjoin(
+                JobAnalysis,
+                JobListing.job_analysis_id == JobAnalysis.id,
+            )
+        score_order = (
+            JobAnalysis.score.asc()
+            if sort_dir == "asc"
+            else JobAnalysis.score.desc()
+        )
+        order_by = [
+            score_order.nullslast(),
+            JobListing.scraped_at.desc(),
+            JobListing.id.asc(),
+        ]
+    elif sort_by == "company":
+        company_order = (
+            func.lower(JobListing.company).asc()
+            if sort_dir == "asc"
+            else func.lower(JobListing.company).desc()
+        )
+        order_by = [company_order, JobListing.scraped_at.desc(), JobListing.id.asc()]
+    elif sort_by == "source":
+        source_order = (
+            func.lower(JobListing.source).asc()
+            if sort_dir == "asc"
+            else func.lower(JobListing.source).desc()
+        )
+        order_by = [source_order, JobListing.scraped_at.desc(), JobListing.id.asc()]
+    else:
+        scraped_order = (
+            JobListing.scraped_at.asc()
+            if sort_dir == "asc"
+            else JobListing.scraped_at.desc()
+        )
+        order_by = [scraped_order, JobListing.id.asc()]
+
     listings = (
-        query.order_by(JobListing.scraped_at.desc())
+        query.order_by(*order_by)
         .offset(offset)
         .limit(limit)
         .all()
     )
     analysis_ids = [listing.job_analysis_id for listing in listings if listing.job_analysis_id]
-    analyses = {}
+    analyses: dict[uuid.UUID, JobAnalysis] = {}
     if analysis_ids:
         rows = db.query(JobAnalysis).filter(JobAnalysis.id.in_(analysis_ids)).all()
         analyses = {row.id: row for row in rows}
@@ -93,7 +175,23 @@ def list_job_listings(
         _summary(listing, analyses.get(listing.job_analysis_id)).model_dump(mode="json")
         for listing in listings
     ]
-    return success(data, total=total, limit=limit, offset=offset)
+    if total == 0 or not data:
+        range_start = 0
+        range_end = 0
+    else:
+        range_start = offset + 1
+        range_end = min(offset + len(data), total)
+    return success(
+        data,
+        total=total,
+        limit=limit,
+        offset=offset,
+        range_start=range_start,
+        range_end=range_end,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        status=status_value,
+    )
 
 
 @router.get("/job-listings/{listing_id}")

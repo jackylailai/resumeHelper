@@ -16,6 +16,7 @@ class JobListingSummaryOut(BaseModel):
     url: str
     description_preview: str
     has_description: bool
+    list_status: str
     analyzed: bool
     job_analysis_id: uuid.UUID | None
     last_score: int | None = None
