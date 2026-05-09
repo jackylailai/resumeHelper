@@ -33,9 +33,8 @@ from backend.app.schemas.evaluate import (
     HistoryItemOut,
     SubmittableResumeOut,
 )
-from backend.app.services.evaluator_v2 import evaluate_jd
+from backend.app.services.evaluator_v2 import evaluate_jd, get_profile
 from backend.app.services.evaluator_v2 import get_latest_profile as get_baseline
-from backend.app.services.evaluator_v2 import get_profile
 from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
 from backend.app.services.pdf import generated_resume_pdf_path, write_generated_resume_pdf
 
@@ -355,12 +354,13 @@ def n8n_callback(body: CallbackIn, db: Session = Depends(get_db)) -> JSONRespons
     )
     db.add(resume)
     db.flush()
-    write_generated_resume_pdf(
-        get_settings().storage_dir,
-        resume.id,
-        resume.resume_text,
-    )
-    resume.pdf_url = f"/api/generated-resumes/{resume.id}/pdf"
+    if not body.pdf_url:
+        write_generated_resume_pdf(
+            get_settings().storage_dir,
+            resume.id,
+            resume.resume_text,
+        )
+        resume.pdf_url = f"/api/generated-resumes/{resume.id}/pdf"
 
     # Mark as submittable when a resume is delivered via callback
     job.can_submit = True
@@ -438,7 +438,7 @@ def list_submittable(db: Session = Depends(get_db)) -> JSONResponse:
     return success(result, count=len(result))
 
 
-@router.get("/generated-resumes/{resume_id}/pdf")
+@router.get("/generated-resumes/{resume_id}/pdf", response_model=None)
 def download_generated_resume_pdf(
     resume_id: uuid.UUID,
     db: Session = Depends(get_db),
