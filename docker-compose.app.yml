@@ -10,6 +10,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/resume_helper
+      LLM_BACKEND: ${LLM_BACKEND:-claude_cli}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - ./backend/storage:/app/backend/storage
     depends_on:

@@ -122,6 +122,15 @@ Prompt files live in `modes/` (career-ops pattern):
 - `modes/score.md` — JD scoring prompt
 - `modes/generate.md` — resume generation prompt
 
+If `/api/evaluate` returns `llm_unavailable` with `Invalid API key` or
+`claude CLI failed`, check the app container first:
+```bash
+docker exec resumehelper-app sh -c 'test -n "$ANTHROPIC_API_KEY" && echo key-present || echo key-missing'
+docker exec resumehelper-app sh -c 'echo hello | claude --print'
+```
+For `docker-compose.app.yml`, put `ANTHROPIC_API_KEY=...` in `.env` and restart
+the app container. The compose file passes the key through explicitly.
+
 ---
 
 ## Scope Boundaries
