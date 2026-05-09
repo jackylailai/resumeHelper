@@ -5,6 +5,9 @@ const resultCount = document.getElementById("result-count");
 const detailEmpty = document.getElementById("detail-empty");
 const detail = document.getElementById("detail");
 const profileSelect = document.getElementById("profile-select");
+const selectPage = document.getElementById("select-page");
+const clearSelection = document.getElementById("clear-selection");
+const selectionCount = document.getElementById("selection-count");
 const scoreSelected = document.getElementById("score-selected");
 const batchStatus = document.getElementById("batch-status");
 const batchResults = document.getElementById("batch-results");
@@ -12,14 +15,35 @@ const pasteJd = document.getElementById("paste-jd");
 const scorePasted = document.getElementById("score-pasted");
 const pasteStatus = document.getElementById("paste-status");
 const pasteResult = document.getElementById("paste-result");
+const prevPage = document.getElementById("prev-page");
+const nextPage = document.getElementById("next-page");
+const pageRange = document.getElementById("page-range");
 const UI = window.ResumeHelper;
 
+const PAGE_SIZE = 20;
 let selectedListingId = null;
 let currentListings = [];
+let selectedListingIds = new Set();
+let failedBatchListingIds = new Set();
+const listingLabelsById = new Map();
+const pagination = {
+    limit: PAGE_SIZE,
+    offset: 0,
+    total: 0,
+};
 
 filters.addEventListener("submit", async (event) => {
     event.preventDefault();
+    pagination.offset = 0;
     await loadListings();
+});
+
+selectPage.addEventListener("click", () => {
+    selectCurrentPage();
+});
+
+clearSelection.addEventListener("click", () => {
+    clearSelectedListings();
 });
 
 scoreSelected.addEventListener("click", async () => {
@@ -30,9 +54,24 @@ scorePasted.addEventListener("click", async () => {
     await scorePastedJd();
 });
 
+prevPage.addEventListener("click", async () => {
+    pagination.offset = Math.max(0, pagination.offset - pagination.limit);
+    await loadListings();
+});
+
+nextPage.addEventListener("click", async () => {
+    const nextOffset = pagination.offset + pagination.limit;
+    if (nextOffset < pagination.total) {
+        pagination.offset = nextOffset;
+        await loadListings();
+    }
+});
+
 window.addEventListener("DOMContentLoaded", () => {
     loadProfiles();
     loadListings();
+    updateSelectionControls();
+    updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });
 });
 
 async function loadProfiles() {
@@ -73,24 +112,39 @@ async function loadListings() {
     resultCount.textContent = "";
 
     const params = new URLSearchParams();
-    for (const field of ["q", "source", "analyzed"]) {
+    for (const field of ["q", "source", "status"]) {
         const value = document.getElementById(field).value.trim();
         if (value) params.set(field, value);
     }
-    params.set("limit", "50");
+    params.set("sort_by", document.getElementById("sort-by").value);
+    params.set("sort_dir", document.getElementById("sort-dir").value);
+    params.set("limit", String(pagination.limit));
+    params.set("offset", String(pagination.offset));
 
     const { response, payload } = await safeApiFetch(`/api/job-listings?${params}`);
     if (!response.ok) {
         listStatus.textContent = formatError(response, payload);
+        currentListings = [];
+        pagination.total = 0;
+        updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });
+        updateSelectionControls();
         return;
     }
 
     const listings = payload.data ?? [];
     currentListings = listings;
-    resultCount.textContent = `${payload.meta?.total ?? listings.length} total`;
+    pagination.total = payload.meta?.total ?? listings.length;
+    pagination.limit = payload.meta?.limit ?? PAGE_SIZE;
+    pagination.offset = payload.meta?.offset ?? pagination.offset;
+    updateListingLabels(listings);
+    updatePaginationControls({
+        rangeStart: payload.meta?.range_start ?? 0,
+        rangeEnd: payload.meta?.range_end ?? 0,
+    });
 
     if (listings.length === 0) {
         listStatus.textContent = "No job listings found.";
+        updateSelectionControls();
         return;
     }
 
@@ -98,6 +152,8 @@ async function loadListings() {
     for (const listing of listings) {
         const item = document.createElement("li");
         item.className = "job-list-item";
+        item.dataset.listingId = listing.id;
+        item.classList.toggle("batch-failed", failedBatchListingIds.has(listing.id));
 
         const label = document.createElement("label");
         label.className = "job-select";
@@ -106,7 +162,17 @@ async function loadListings() {
         checkbox.value = listing.id;
         checkbox.dataset.selectListing = listing.id;
         checkbox.disabled = !listing.has_description;
+        checkbox.checked = selectedListingIds.has(listing.id);
         checkbox.setAttribute("aria-label", `Select ${listing.title}`);
+        checkbox.addEventListener("change", () => {
+            if (checkbox.checked) {
+                selectedListingIds.add(listing.id);
+                listingLabelsById.set(listing.id, listingLabelText(listing));
+            } else {
+                selectedListingIds.delete(listing.id);
+            }
+            updateSelectionControls();
+        });
         label.appendChild(checkbox);
 
         const button = document.createElement("button");
@@ -135,12 +201,56 @@ async function loadListings() {
         item.appendChild(button);
         jobList.appendChild(item);
     }
+    updateSelectionControls();
+}
+
+function updateListingLabels(listings) {
+    for (const listing of listings) {
+        listingLabelsById.set(listing.id, listingLabelText(listing));
+    }
+}
+
+function updatePaginationControls({ rangeStart, rangeEnd }) {
+    resultCount.textContent = `${pagination.total} total`;
+    if (pagination.total === 0) {
+        pageRange.textContent = "0 of 0";
+    } else {
+        pageRange.textContent = `${rangeStart}-${rangeEnd} of ${pagination.total}`;
+    }
+    prevPage.disabled = pagination.offset <= 0;
+    nextPage.disabled = pagination.offset + pagination.limit >= pagination.total;
+}
+
+function selectCurrentPage() {
+    for (const listing of currentListings) {
+        if (listing.has_description) {
+            selectedListingIds.add(listing.id);
+            listingLabelsById.set(listing.id, listingLabelText(listing));
+        }
+    }
+    for (const checkbox of document.querySelectorAll("[data-select-listing]")) {
+        checkbox.checked = !checkbox.disabled;
+    }
+    updateSelectionControls();
+}
+
+function clearSelectedListings() {
+    selectedListingIds = new Set();
+    for (const checkbox of document.querySelectorAll("[data-select-listing]")) {
+        checkbox.checked = false;
+    }
+    updateSelectionControls();
+}
+
+function updateSelectionControls() {
+    const count = selectedListingIds.size;
+    selectionCount.textContent = `${count} selected`;
+    clearSelection.disabled = count === 0;
+    selectPage.disabled = currentListings.every((listing) => !listing.has_description);
 }
 
 async function scoreSelectedListings() {
-    const ids = Array.from(
-        document.querySelectorAll("[data-select-listing]:checked")
-    ).map((input) => input.value);
+    const ids = Array.from(selectedListingIds);
     const profileId = profileSelect.value;
 
     batchResults.hidden = true;
@@ -152,6 +262,10 @@ async function scoreSelectedListings() {
     }
     if (ids.length === 0) {
         batchStatus.textContent = "Select at least one listing.";
+        return;
+    }
+    if (ids.length > 20) {
+        batchStatus.textContent = "Score up to 20 listings at a time.";
         return;
     }
 
@@ -178,6 +292,11 @@ async function scoreSelectedListings() {
         `Scored ${data.succeeded}/${data.total}; ${data.failed} failed.`
     );
     renderBatchResults(data.results ?? []);
+    for (const result of data.results ?? []) {
+        if (!result.error) {
+            selectedListingIds.delete(result.listing_id);
+        }
+    }
     await loadListings();
     if (selectedListingId) {
         await loadDetail(selectedListingId);
@@ -186,15 +305,31 @@ async function scoreSelectedListings() {
 
 function renderBatchResults(results) {
     batchResults.hidden = false;
+    failedBatchListingIds = new Set(
+        results.filter((result) => result.error).map((result) => result.listing_id)
+    );
     const list = document.createElement("ol");
     list.className = "batch-result-list";
 
-    for (const result of results) {
+    const orderedResults = [...results].sort((left, right) => (
+        Number(Boolean(right.error)) - Number(Boolean(left.error))
+    ));
+    for (const result of orderedResults) {
         const item = document.createElement("li");
         item.className = result.error ? "batch-result error" : "batch-result";
         const label = listingLabel(result.listing_id);
         if (result.error) {
-            item.textContent = `${label}: ${result.error}`;
+            const message = document.createElement("span");
+            message.textContent = `${label}: ${result.error}`;
+            const openButton = document.createElement("button");
+            openButton.type = "button";
+            openButton.className = "inline-button";
+            openButton.textContent = "View";
+            openButton.addEventListener("click", () => {
+                loadDetail(result.listing_id);
+            });
+            item.appendChild(message);
+            item.appendChild(openButton);
         } else {
             item.textContent = (
                 `${label}: ${result.score}/100 ${formatStatus(result.status)}`
@@ -266,9 +401,11 @@ function renderPastedResult(result, cached) {
 }
 
 function listingLabel(id) {
-    const listing = currentListings.find((item) => item.id === id);
-    if (!listing) return id;
-    return `${listing.title} - ${listing.company}`;
+    return listingLabelsById.get(id) || id;
+}
+
+function listingLabelText(listing) {
+    return `${listing.title} - ${listing.company} (${listing.source})`;
 }
 
 async function loadDetail(id) {
@@ -311,7 +448,8 @@ async function loadDetail(id) {
 }
 
 function listingStatusText(listing) {
-    if (!listing.analyzed) return "Unanalyzed";
+    if (listing.list_status === "failed-invalid") return "Failed invalid";
+    if (listing.list_status === "unanalyzed" || !listing.analyzed) return "Unanalyzed";
     if (listing.last_score == null) return "Analyzed";
     return `${listing.last_score}/100 ${formatStatus(listing.last_status)}`;
 }
@@ -320,6 +458,7 @@ function formatStatus(status) {
     if (status === "ready_to_submit") return "Ready";
     if (status === "needs_tailoring") return "Tailoring";
     if (status === "skip") return "Skipped";
+    if (status === "failed-invalid") return "Failed invalid";
     return status || "Analyzed";
 }
 
