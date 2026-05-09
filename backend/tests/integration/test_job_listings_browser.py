@@ -42,6 +42,7 @@ def test_list_job_listings_paginates_sorts_and_filters_status(
     client: TestClient, db_session: Session
 ):
     now = datetime.now(UTC)
+    source = f"workbench-{uuid.uuid4().hex[:8]}"
     ready_analysis = JobAnalysis(
         jd_hash=uuid.uuid4().hex,
         jd_full_text="Ready listing",
@@ -62,7 +63,7 @@ def test_list_job_listings_paginates_sorts_and_filters_status(
     db_session.flush()
 
     ready_listing = JobListing(
-        source="104",
+        source=source,
         source_id=f"ready-{uuid.uuid4()}",
         title="Ready Engineer",
         company="Alpha Co",
@@ -73,7 +74,7 @@ def test_list_job_listings_paginates_sorts_and_filters_status(
         job_analysis_id=ready_analysis.id,
     )
     unanalyzed_listing = JobListing(
-        source="yourator",
+        source=source,
         source_id=f"new-{uuid.uuid4()}",
         title="New Engineer",
         company="Beta Co",
@@ -83,7 +84,7 @@ def test_list_job_listings_paginates_sorts_and_filters_status(
         scraped_at=now - timedelta(minutes=3),
     )
     skip_listing = JobListing(
-        source="linkedin",
+        source=source,
         source_id=f"skip-{uuid.uuid4()}",
         title="Skip Engineer",
         company="Gamma Co",
@@ -94,7 +95,7 @@ def test_list_job_listings_paginates_sorts_and_filters_status(
         job_analysis_id=skip_analysis.id,
     )
     invalid_listing = JobListing(
-        source="104",
+        source=source,
         source_id=f"invalid-{uuid.uuid4()}",
         title="Invalid Engineer",
         company="Zeta Co",
@@ -112,7 +113,8 @@ def test_list_job_listings_paginates_sorts_and_filters_status(
     db_session.commit()
 
     page_response = client.get(
-        "/api/job-listings?limit=2&offset=1&sort_by=company&sort_dir=asc"
+        "/api/job-listings"
+        f"?source={source}&limit=2&offset=1&sort_by=company&sort_dir=asc"
     )
 
     assert page_response.status_code == 200
@@ -122,26 +124,34 @@ def test_list_job_listings_paginates_sorts_and_filters_status(
     assert page_body["meta"]["range_end"] == 3
     assert [item["company"] for item in page_body["data"]] == ["Beta Co", "Gamma Co"]
 
-    score_response = client.get("/api/job-listings?sort_by=score&sort_dir=desc&limit=4")
+    score_response = client.get(
+        f"/api/job-listings?source={source}&sort_by=score&sort_dir=desc&limit=4"
+    )
     assert score_response.status_code == 200
     assert [item["last_score"] for item in score_response.json()["data"][:2]] == [
         91,
         42,
     ]
 
-    ready_response = client.get("/api/job-listings?status=ready_to_submit")
+    ready_response = client.get(
+        f"/api/job-listings?source={source}&status=ready_to_submit"
+    )
     assert ready_response.status_code == 200
     ready_data = ready_response.json()["data"]
     assert [item["id"] for item in ready_data] == [str(ready_listing.id)]
     assert ready_data[0]["list_status"] == "ready_to_submit"
 
-    unanalyzed_response = client.get("/api/job-listings?status=unanalyzed")
+    unanalyzed_response = client.get(
+        f"/api/job-listings?source={source}&status=unanalyzed"
+    )
     assert unanalyzed_response.status_code == 200
     assert [item["id"] for item in unanalyzed_response.json()["data"]] == [
         str(unanalyzed_listing.id)
     ]
 
-    invalid_response = client.get("/api/job-listings?status=failed-invalid")
+    invalid_response = client.get(
+        f"/api/job-listings?source={source}&status=failed-invalid"
+    )
     assert invalid_response.status_code == 200
     invalid_data = invalid_response.json()["data"]
     assert [item["id"] for item in invalid_data] == [str(invalid_listing.id)]
