@@ -251,7 +251,11 @@ def evaluate_by_listings(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Evaluate stored scraper JDs by listing id and link results back to the rows."""
-    profile = get_profile(db, body.profile_id) if body.profile_id is not None else get_default_profile(db)
+    profile = (
+        get_profile(db, body.profile_id)
+        if body.profile_id is not None
+        else get_default_profile(db)
+    )
     if profile is None:
         return error("not_found", "baseline_profile not set", status_code=404)
     profile_id = profile.id
