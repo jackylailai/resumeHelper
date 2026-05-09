@@ -3,6 +3,7 @@ let currentResumeText = null;
 let currentResumePdfUrl = null;
 let pollTimer = null;
 let profileLoaded = false;
+const UI = window.ResumeHelper;
 
 // ---- Init ----
 window.addEventListener('DOMContentLoaded', () => {
@@ -30,8 +31,7 @@ function applyInitialHash() {
 // ---- Profile ----
 async function checkProfile() {
   try {
-    const res = await fetch('/api/profiles');
-    const body = await res.json();
+    const { response: res, payload: body } = await apiFetch('/api/profiles');
     const profiles = body.data || [];
     if (res.ok && profiles.length > 0) {
       profileLoaded = true;
@@ -68,15 +68,14 @@ function setHeaderBadge(hasProfile) {
 async function loadProfile() {
   const el = document.getElementById('profiles-list');
   if (!el) return;
-  el.innerHTML = '<div class="empty">Loading…</div>';
+  el.innerHTML = UI.loadingState('Loading...');
   try {
-    const res = await fetch('/api/profiles');
-    const body = await res.json();
-    if (!res.ok) { el.innerHTML = '<div class="empty">Error loading profiles.</div>'; return; }
+    const { response: res, payload: body } = await apiFetch('/api/profiles');
+    if (!res.ok) { el.innerHTML = UI.emptyState('Error loading profiles.'); return; }
     const profiles = body.data || [];
     populateProfileSelector(profiles);
     if (profiles.length === 0) {
-      el.innerHTML = '<div class="empty">No profiles yet. Click "+ Add Profile" to get started.</div>';
+      el.innerHTML = UI.emptyState('No profiles yet. Click "+ Add Profile" to get started.');
       return;
     }
     el.innerHTML = '<div class="card" style="padding:0;overflow:hidden"><table>'
@@ -90,7 +89,7 @@ async function loadProfile() {
         </tr>`).join('')
       + '</tbody></table></div>';
   } catch (e) {
-    el.innerHTML = '<div class="empty">Network error.</div>';
+    el.innerHTML = UI.emptyState('Network error.');
   }
 }
 
@@ -120,8 +119,7 @@ async function submitNewProfile() {
   form.append('file', file);
   if (name) form.append('name', name);
   try {
-    const res = await fetch('/api/profiles/upload', { method: 'POST', body: form });
-    const body = await res.json();
+    const { response: res, payload: body } = await apiFetch('/api/profiles/upload', { method: 'POST', body: form });
     if (!res.ok) { document.getElementById('add-profile-error').textContent = body?.error?.message || 'Upload failed.'; return; }
     document.getElementById('add-profile-success').textContent = 'Profile saved!';
     profileLoaded = true;
@@ -138,7 +136,7 @@ async function submitNewProfile() {
 async function deleteProfile(id) {
   if (!confirm('Delete this profile?')) return;
   try {
-    const res = await fetch('/api/profiles/' + id, { method: 'DELETE' });
+    const { response: res } = await apiFetch('/api/profiles/' + id, { method: 'DELETE' });
     if (!res.ok) { alert('Delete failed.'); return; }
     loadProfile();
     checkProfile();
@@ -200,23 +198,18 @@ function renderEvalResult(data, cached) {
 }
 
 function statusBadgeClass(status) {
-  if (status === 'ready_to_submit') return 'badge-ready';
-  if (status === 'needs_tailoring') return 'badge-tailoring';
-  return 'badge-skip';
+  return UI.statusBadgeClass(status);
 }
 
 function statusPillClass(status) {
-  if (status === 'ready_to_submit') return 'pill pill-ready';
-  if (status === 'needs_tailoring') return 'pill pill-tailoring';
-  return 'pill pill-skip';
+  return UI.statusPillClass(status);
 }
 
 // ---- Polling for tailoring ----
 function startPoll(jobId) {
   pollTimer = setInterval(async () => {
     try {
-      const res = await fetch('/api/history/' + jobId);
-      const body = await res.json();
+      const { response: res, payload: body } = await apiFetch('/api/history/' + jobId);
       if (!res.ok) return;
       const job = body.data;
       if (job.can_submit && job.generated_resumes && job.generated_resumes.length > 0) {
@@ -243,11 +236,10 @@ function showTailoringSpinner() {
 // ---- History ----
 async function loadHistory() {
   const el = document.getElementById('history-content');
-  el.innerHTML = '<div class="empty">Loading…</div>';
+  el.innerHTML = UI.loadingState('Loading...');
   try {
-    const res = await fetch('/api/history');
-    const body = await res.json();
-    if (!res.ok) { el.innerHTML = '<div class="empty">Error loading history.</div>'; return; }
+    const { response: res, payload: body } = await apiFetch('/api/history');
+    if (!res.ok) { el.innerHTML = UI.emptyState('Error loading history.'); return; }
     const grouped = body.meta?.grouped || {};
     const sections = [
       { key: 'ready_to_submit', label: 'Ready to Submit' },
@@ -278,17 +270,16 @@ async function loadHistory() {
     const subCount = body.meta?.submittable_count ?? 0;
     el.innerHTML = '<div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.75rem">Total: ' + total + ' &nbsp;|&nbsp; Submittable: ' + subCount + '</div>' + html;
   } catch (e) {
-    el.innerHTML = '<div class="empty">Network error.</div>';
+    el.innerHTML = UI.emptyState('Network error.');
   }
 }
 
 // ---- Submittable ----
 async function loadSubmittable() {
   const tbody = document.getElementById('submittable-body');
-  tbody.innerHTML = '<tr><td colspan="5" class="empty">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="empty">Loading...</td></tr>';
   try {
-    const res = await fetch('/api/submittable');
-    const body = await res.json();
+    const { response: res, payload: body } = await apiFetch('/api/submittable');
     if (!res.ok) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Error.</td></tr>'; return; }
     const items = body.data || [];
     if (items.length === 0) {
@@ -311,8 +302,7 @@ async function loadSubmittable() {
 
 async function fetchAndOpenModal(jobId) {
   try {
-    const res = await fetch('/api/history/' + jobId);
-    const body = await res.json();
+    const { response: res, payload: body } = await apiFetch('/api/history/' + jobId);
     const resumes = body.data?.generated_resumes;
     if (resumes && resumes.length > 0) {
       const resume = resumes[0];
@@ -379,34 +369,15 @@ function fmtStatus(s) {
 }
 
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return UI.escHtml(s);
 }
 
 async function apiFetch(url, options) {
-  const response = await fetch(url, options);
-  const text = await response.text();
-  let payload = {};
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = {
-        error: {
-          code: 'non_json_response',
-          message: text.slice(0, 160),
-          details: {},
-        },
-        meta: {},
-      };
-    }
-  }
-  return { response, payload };
+  return UI.apiFetch(url, options);
 }
 
 function formatApiError(response, payload) {
-  const message = payload?.error?.message || response.statusText || 'Request failed';
-  const requestId = payload?.meta?.request_id || response.headers.get('X-Request-ID');
-  return requestId ? message + ' Request ID: ' + requestId : message;
+  return UI.formatApiError(response, payload);
 }
 
 document.getElementById('resume-modal').addEventListener('click', function(e) {

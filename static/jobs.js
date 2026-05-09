@@ -12,6 +12,7 @@ const pasteJd = document.getElementById("paste-jd");
 const scorePasted = document.getElementById("score-pasted");
 const pasteStatus = document.getElementById("paste-status");
 const pasteResult = document.getElementById("paste-result");
+const UI = window.ResumeHelper;
 
 let selectedListingId = null;
 let currentListings = [];
@@ -322,55 +323,10 @@ function formatStatus(status) {
     return status || "Analyzed";
 }
 
-async function apiFetch(url, options) {
-    const response = await fetch(url, options);
-    const text = await response.text();
-    let payload = {};
-
-    if (text) {
-        try {
-            payload = JSON.parse(text);
-        } catch {
-            payload = {
-                error: {
-                    code: "non_json_response",
-                    message: text.slice(0, 160),
-                    details: {},
-                },
-                meta: {},
-            };
-        }
-    }
-
-    return { response, payload };
-}
-
 async function safeApiFetch(url, options) {
-    try {
-        return await apiFetch(url, options);
-    } catch (error) {
-        return {
-            response: {
-                ok: false,
-                status: 0,
-                statusText: "Network error",
-                headers: new Headers(),
-            },
-            payload: {
-                error: {
-                    code: "network_error",
-                    message: error instanceof Error ? error.message : "Network error",
-                    details: {},
-                },
-                meta: {},
-            },
-        };
-    }
+    return UI.safeApiFetch(url, options);
 }
 
 function formatError(response, payload) {
-    const message = payload.error?.message ?? response.statusText ?? "Request failed";
-    const requestId = payload.meta?.request_id ?? response.headers.get("X-Request-ID");
-    const suffix = requestId ? ` Request ID: ${requestId}` : "";
-    return `Error ${response.status}: ${message}.${suffix}`;
+    return UI.formatApiError(response, payload, { includeStatus: true });
 }

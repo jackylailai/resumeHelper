@@ -3,59 +3,24 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Resume Upload — AI Career Intelligence System</title>
+    <meta http-equiv="refresh" content="0; url=/" />
+    <title>Redirecting - Resume Helper</title>
     <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
     <header class="site-header">
         <div class="wrap header-row">
             <div>
-                <h1>Resume Upload &amp; Rating</h1>
-                <p class="sub">Upload a resume, paste a job description, get a fit score.</p>
+                <h1>Resume Helper</h1>
+                <p class="sub">The upload flow has moved to the main Profile tab.</p>
             </div>
-            <nav class="top-nav" aria-label="Primary">
-                <a href="/upload.html" aria-current="page">Evaluate</a>
-                <a href="/jobs.html">JD Database</a>
-            </nav>
         </div>
     </header>
-
     <main class="wrap">
         <section class="panel">
-            <form id="upload-form">
-                <label for="resume-file"><strong>Resume file</strong> (PDF or DOCX, ≤ 10 MB)</label>
-                <input id="resume-file" name="file" type="file" accept=".pdf,.docx" required />
-
-                <label for="job-description"><strong>Job description</strong></label>
-                <textarea id="job-description" name="job_description" rows="8" required
-                    placeholder="Paste the job description here…"></textarea>
-
-                <input id="resume-id" name="resume_id" type="hidden" />
-
-                <button type="submit">Evaluate</button>
-            </form>
-        </section>
-
-        <section id="result" class="panel" hidden>
-            <h2>Result</h2>
-            <p id="status-line"></p>
-            <div id="score-card" hidden>
-                <h3>Score: <span id="score-value"></span> / 100</h3>
-                <p id="explanation"></p>
-                <h4>Strengths</h4>
-                <ul id="strengths"></ul>
-                <h4>Gaps</h4>
-                <ul id="gaps"></ul>
-                <button id="reupload-btn" type="button" hidden>Upload new version</button>
-            </div>
-        </section>
-
-        <section id="history" class="panel" hidden>
-            <h2>Version history</h2>
-            <ol id="history-list"></ol>
+            <p class="muted">Redirecting to the current app.</p>
+            <p><a class="button-link" href="/">Open Resume Helper</a></p>
         </section>
     </main>
-
-    <script src="/app.js" defer></script>
 </body>
 </html>
