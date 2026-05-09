@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import csv
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,7 +30,10 @@ from backend.app.services.scrapers.persistence import upsert_drafts
 from backend.app.services.scrapers.scraper_104 import Scraper104
 from backend.app.services.scrapers.scraper_yourator import ScraperYourator
 
-BACKUP_DIR = PROJECT_ROOT / "backend" / "storage" / "backups"
+_DEFAULT_BACKUP_DIR = Path.home() / "resumeHelper_data" / "backups"
+BACKUP_DIR = Path(
+    os.environ.get("RESUMEHELPER_BACKUP_DIR") or _DEFAULT_BACKUP_DIR
+).expanduser()
 
 SCRAPERS: dict[str, type[BaseScraper]] = {
     "104": Scraper104,
@@ -86,7 +90,7 @@ async def run(keyword: str, limit: int, sites: list[str]) -> int:
                 row.scraped_at.isoformat(),
                 "" if row.job_analysis_id is None else str(row.job_analysis_id),
             ])
-    print(f"Backup written → {backup_path.relative_to(PROJECT_ROOT)}")
+    print(f"Backup written → {backup_path}")
 
     return total_inserted
 

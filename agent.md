@@ -105,8 +105,10 @@ scripts/e2e.sh -k batch_analyze    # forwards args to pytest
 
 ## LLM Backend
 
-This project uses the local `claude` CLI (Claude Code subscription) as the LLM backend.
-No separate Anthropic API key required.
+Two backends available, selected by `LLM_BACKEND` in `.env`:
+
+- **`claude_cli`** (default) — shells out to the local `claude` CLI from a Claude Code subscription. No `ANTHROPIC_API_KEY` needed. **Requires the app to run on the host** (`scripts/restart-app.sh`), because on macOS the CLI stores its session in the system Keychain and a Linux container has no way to read it. Running `claude_cli` mode inside `docker-compose.app.yml` will return `llm_unavailable: claude CLI failed: Invalid API key`.
+- **`anthropic`** — uses the Anthropic SDK directly with `ANTHROPIC_API_KEY`. Works in any environment, including the docker container. Pick this for production / CI / API-key based deployments.
 
 Pattern (see `backend/app/services/llm/claude_cli.py`):
 ```python

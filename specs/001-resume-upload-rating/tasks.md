@@ -140,6 +140,11 @@ TDD: write tests RED before implementation.
 - [x] `download_generated_resume_pdf` decorator gets `response_model=None` so FastAPI does not try to build a Pydantic response model from `FileResponse | JSONResponse` (was crashing app construction → 61 integration tests in ERROR)
 - [x] `POST /api/callback` only generates + points at a local PDF when the caller did not supply `pdf_url` — restores the contract for externally-hosted PDFs
 
+### P2.5-T14 · backup dir env var + host-vs-container LLM docs ✅
+- [x] `scripts/scrape_jobs.py` — backup dir resolved from `RESUMEHELPER_BACKUP_DIR`; defaults to `~/resumeHelper_data/backups` (outside repo, never committed)
+- [x] `.env.example` — documents `RESUMEHELPER_BACKUP_DIR` placeholder
+- [x] `CLAUDE.md` / `agent.md` — explain the host-vs-container app trade-off; `claude_cli` mode requires host-mode on macOS because Keychain isn't reachable from a Linux container
+
 ### P2.5-T13 · E2E DB isolation + scrape backup ✅ (issue #87)
 - [x] `tools/e2e/tests/conftest.py` — testcontainers postgres per session; uvicorn always bound to that DB; `DATABASE_URL` is no longer read from the parent env
 - [x] `clean_db` is opt-in (no longer autouse); `seeded_profile` / `seeded_listings` depend on it
