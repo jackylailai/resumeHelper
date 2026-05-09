@@ -39,7 +39,7 @@
   </div>
   <div class="card">
     <label for="profile-select">Profile to evaluate against</label>
-    <select id="profile-select" style="width:100%;background:#0f172a;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.55rem 0.75rem;font-size:0.9rem;margin-bottom:0.75rem">
+    <select id="profile-select" class="text-input" style="margin-bottom:0.75rem">
       <option value="">Loading profiles...</option>
     </select>
     <label for="jd-input">Paste Job Description</label>
@@ -129,9 +129,8 @@
       <span style="font-weight:600">New Profile</span>
       <button class="btn btn-sm btn-muted" onclick="toggleAddForm(false)">Cancel</button>
     </div>
-    <label>Name (optional)</label>
-    <input type="text" id="new-profile-name" placeholder="e.g. Backend Engineer Resume"
-      style="width:100%;background:#0f172a;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.6rem 0.75rem;font-size:0.9rem;margin-bottom:0.75rem">
+    <label for="new-profile-name">Name</label>
+    <input type="text" id="new-profile-name" placeholder="e.g. Backend Engineer Resume" class="text-input">
     <label>Upload PDF</label>
     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-top:0.4rem">
       <label class="btn btn-primary" style="cursor:pointer">
@@ -139,16 +138,44 @@
         <input type="file" id="new-profile-pdf" accept=".pdf" style="display:none" onchange="updateFilename(this)">
       </label>
       <span id="new-profile-filename" class="status-msg">No file chosen</span>
+      <button class="btn btn-sm btn-muted" type="button" onclick="previewNewProfilePdf()">Preview Text</button>
     </div>
+    <label for="new-profile-skills" class="mt">Skills Text</label>
+    <textarea id="new-profile-skills" rows="9" placeholder="Preview a PDF first, or paste profile skills text here."></textarea>
+    <label class="checkbox-row">
+      <input type="checkbox" id="new-profile-default">
+      Use as default profile
+    </label>
     <div id="add-profile-progress" style="display:none;margin-top:0.75rem" class="flex">
       <span class="spinner"></span>
-      <span style="font-size:0.85rem;color:var(--muted)">Uploading...</span>
+      <span id="add-profile-progress-label" style="font-size:0.85rem;color:var(--muted)">Working...</span>
     </div>
     <div class="mt">
       <button class="btn btn-primary" onclick="submitNewProfile()">Save Profile</button>
     </div>
     <div id="add-profile-error" class="error-msg"></div>
     <div id="add-profile-success" class="success-msg"></div>
+  </div>
+
+  <div id="edit-profile-card" class="card" style="display:none">
+    <div class="flex-between" style="margin-bottom:0.75rem">
+      <span style="font-weight:600">Edit Profile</span>
+      <button class="btn btn-sm btn-muted" onclick="cancelEditProfile()">Cancel</button>
+    </div>
+    <input type="hidden" id="edit-profile-id">
+    <label for="edit-profile-name">Name</label>
+    <input type="text" id="edit-profile-name" class="text-input">
+    <label for="edit-profile-skills">Skills Text</label>
+    <textarea id="edit-profile-skills" rows="10"></textarea>
+    <label class="checkbox-row">
+      <input type="checkbox" id="edit-profile-default">
+      Use as default profile
+    </label>
+    <div class="mt">
+      <button class="btn btn-primary" onclick="saveProfileEdit()">Save Changes</button>
+    </div>
+    <div id="edit-profile-error" class="error-msg"></div>
+    <div id="edit-profile-success" class="success-msg"></div>
   </div>
 </div>
 

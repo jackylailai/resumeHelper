@@ -97,7 +97,7 @@ class BulkEvaluateOut(BaseModel):
 
 
 class EvaluateByListingsIn(BaseModel):
-    profile_id: int
+    profile_id: int | None = None
     job_listing_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=20)]
 
 

@@ -58,6 +58,43 @@ def test_evaluate_by_listings_scores_and_links_job_analysis(
 
 
 @pytest.mark.integration
+def test_evaluate_by_listings_uses_default_profile_when_omitted(
+    client: TestClient,
+    db_session: Session,
+):
+    profile = client.post(
+        "/api/profile",
+        json={"skills_text": "Python, FastAPI, PostgreSQL"},
+    ).json()["data"]
+    listing = JobListing(
+        source="yourator",
+        source_id=f"default-{uuid.uuid4()}",
+        title="Backend Engineer",
+        company="Example Co",
+        location="Taipei",
+        url="https://example.com/jobs/backend-default",
+        description="Build FastAPI services and maintain PostgreSQL systems.",
+    )
+    db_session.add(listing)
+    db_session.commit()
+
+    response = client.post(
+        "/api/evaluate/by-listings",
+        json={"job_listing_ids": [str(listing.id)]},
+    )
+
+    assert response.status_code == 200
+    result = response.json()["data"]["results"][0]
+    assert result["job_analysis_id"]
+    assert result["error"] is None
+
+    listing_response = client.get(f"/api/job-listings/{listing.id}")
+    listing_data = listing_response.json()["data"]
+    assert listing_data["analyzed"] is True
+    assert profile["is_default"] is True
+
+
+@pytest.mark.integration
 def test_evaluate_by_listings_rejects_more_than_20_ids(client: TestClient):
     profile = client.post(
         "/api/profile",
