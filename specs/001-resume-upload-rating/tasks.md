@@ -145,6 +145,13 @@ TDD: write tests RED before implementation.
 - [x] `.env.example` — documents `RESUMEHELPER_BACKUP_DIR` placeholder
 - [x] `CLAUDE.md` / `agent.md` — explain the host-vs-container app trade-off; `claude_cli` mode requires host-mode on macOS because Keychain isn't reachable from a Linux container
 
+### P2.5-T14 · Claude CLI in Docker spike ✅ (issue #100)
+- [x] `backend/app/api/debug.py` — `GET /api/debug/claude-cli-ping` (non-prod only) spawns `claude --print` and returns returncode/stdout/stderr/latency plus diagnostics
+- [x] `docker-compose.app.yml` — adds `CLAUDE_CODE_OAUTH_TOKEN` env passthrough; no host bind-mounts (a `~/.claude.json` mount races the host CLI and corrupts the config — use the long-lived token instead)
+- [x] `.env` reflects new `CLAUDE_CODE_OAUTH_TOKEN` slot; `ANTHROPIC_API_KEY` and the OAuth token are mutually exclusive auth paths
+- [x] `CLAUDE.md` — host-vs-container table updated; container path with subscription token is now supported via `claude setup-token` → `.env`
+- [x] Verified inside container: `curl /api/debug/claude-cli-ping` → `ok=true, returncode=0, stdout="PONG\n"`, ~4-10s latency (CLI subprocess cold start is the dominant cost on every call)
+
 ### P2.5-T13 · E2E DB isolation + scrape backup ✅ (issue #87)
 - [x] `tools/e2e/tests/conftest.py` — testcontainers postgres per session; uvicorn always bound to that DB; `DATABASE_URL` is no longer read from the parent env
 - [x] `clean_db` is opt-in (no longer autouse); `seeded_profile` / `seeded_listings` depend on it

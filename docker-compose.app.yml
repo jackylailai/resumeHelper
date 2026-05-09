@@ -11,7 +11,12 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/resume_helper
       LLM_BACKEND: ${LLM_BACKEND:-claude_cli}
+      # claude_cli mode: leave ANTHROPIC_API_KEY blank and provide a long-lived
+      # subscription token via CLAUDE_CODE_OAUTH_TOKEN. Generate one on the host
+      # by running `claude setup-token` and paste it into .env. The token is
+      # read in lieu of macOS Keychain (which the container cannot reach).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     volumes:
       - ./backend/storage:/app/backend/storage
     depends_on:
