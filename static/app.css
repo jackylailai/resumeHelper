@@ -58,6 +58,21 @@
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .modal-header h3 { font-size: 1rem; }
     pre.resume-text { white-space: pre-wrap; word-break: break-word; font-size: 0.82rem; line-height: 1.6; color: var(--muted); background: #0f172a; padding: 1rem; border-radius: 6px; max-height: 55vh; overflow: auto; }
+    .readiness-panel { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .readiness-header { gap: 1rem; margin-bottom: 0.75rem; }
+    .readiness-title { display: block; margin: 0 0 0.2rem; }
+    .readiness-summary { font-size: 0.9rem; font-weight: 700; }
+    .readiness-pass { color: var(--green); }
+    .readiness-warn { color: var(--yellow); }
+    .readiness-fail { color: var(--red); }
+    .readiness-list { display: grid; gap: 0.55rem; list-style: none; }
+    .readiness-item { display: grid; grid-template-columns: 4.8rem minmax(0, 1fr); gap: 0.6rem; align-items: start; padding: 0.65rem; border: 1px solid var(--border); border-radius: 6px; }
+    .readiness-item strong { display: block; color: var(--text); font-size: 0.84rem; margin-bottom: 0.2rem; }
+    .readiness-item span:last-child { display: block; color: var(--muted); font-size: 0.8rem; line-height: 1.4; overflow-wrap: anywhere; }
+    .readiness-status { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; }
+    .readiness-item.readiness-pass { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.25); }
+    .readiness-item.readiness-warn { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.25); }
+    .readiness-item.readiness-fail { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25); }
     .flex { display: flex; align-items: center; gap: 0.5rem; }
     .flex-between { display: flex; justify-content: space-between; align-items: center; }
     .history-section { margin-bottom: 1.5rem; }
@@ -96,5 +111,6 @@
       .tabs { overflow-x: auto; }
       .tab-btn { white-space: nowrap; padding: 0.75rem 1rem; }
       .health-grid { grid-template-columns: 1fr; }
-      .system-status-header, .health-action { align-items: flex-start; flex-direction: column; }
+      .system-status-header, .health-action, .readiness-header { align-items: flex-start; flex-direction: column; }
+      .readiness-item { grid-template-columns: 1fr; }
     }
