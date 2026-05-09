@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 
@@ -101,18 +102,25 @@ def test_health_distinguishes_liveness_and_readiness(client: TestClient):
     assert set(data["readiness"]["checks"]) == {"db", "llm"}
 
 
-def test_request_logs_are_structured(
-    client: TestClient,
-    caplog: pytest.LogCaptureFixture,
-):
-    caplog.set_level(logging.INFO, logger="backend.app.main")
+def test_request_logs_are_structured(client: TestClient):
+    log_stream = io.StringIO()
+    handler = logging.StreamHandler(log_stream)
+    app_logger = logging.getLogger("backend.app.main")
+    previous_level = app_logger.level
+    app_logger.setLevel(logging.INFO)
+    app_logger.addHandler(handler)
 
-    response = client.get("/api/health")
+    try:
+        response = client.get("/api/health")
+    finally:
+        app_logger.removeHandler(handler)
+        app_logger.setLevel(previous_level)
+        handler.close()
 
     records = [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.name == "backend.app.main" and record.getMessage().startswith("{")
+        json.loads(line)
+        for line in log_stream.getvalue().splitlines()
+        if line.startswith("{")
     ]
     assert records
     log = records[-1]
