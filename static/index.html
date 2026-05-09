@@ -169,6 +169,22 @@
         <button class="btn btn-sm btn-muted" onclick="closeModal()">Close</button>
       </div>
     </div>
+    <div id="readiness-panel" class="readiness-panel" hidden>
+      <div class="flex-between readiness-header">
+        <div>
+          <span class="section-title readiness-title">Readiness Checklist</span>
+          <div id="readiness-summary" class="readiness-summary"></div>
+        </div>
+        <button
+          class="btn btn-sm btn-primary"
+          id="confirm-download-pdf"
+          onclick="confirmResumePdfDownload()"
+        >
+          Download Anyway
+        </button>
+      </div>
+      <ul id="readiness-list" class="readiness-list"></ul>
+    </div>
     <pre class="resume-text" id="modal-resume-text"></pre>
   </div>
 </div>

@@ -1,6 +1,7 @@
 // State
 let currentResumeText = null;
 let currentResumePdfUrl = null;
+let currentJdText = null;
 let pollTimer = null;
 let profileLoaded = false;
 const UI = window.ResumeHelper;
@@ -42,7 +43,7 @@ async function loadSystemStatus() {
     const { response: res, payload: body } = await apiFetch('/api/health');
     if (!res.ok) {
       summaryEl.textContent = 'Health check failed';
-      bodyEl.innerHTML = '<div class="health-message health-error">' + escHtml(formatApiError(res, body, { includeStatus: true })) + '</div>';
+      bodyEl.innerHTML = UI.apiErrorBanner(res, body, { includeStatus: true });
       return;
     }
     renderSystemStatus(body.data || {}, body.meta || {});
@@ -208,7 +209,7 @@ async function submitNewProfile() {
   if (name) form.append('name', name);
   try {
     const { response: res, payload: body } = await apiFetch('/api/profiles/upload', { method: 'POST', body: form });
-    if (!res.ok) { document.getElementById('add-profile-error').textContent = body?.error?.message || 'Upload failed.'; return; }
+    if (!res.ok) { document.getElementById('add-profile-error').innerHTML = UI.apiErrorBanner(res, body); return; }
     document.getElementById('add-profile-success').textContent = 'Profile saved!';
     profileLoaded = true;
     setHeaderBadge(true);
@@ -238,6 +239,7 @@ async function runEvaluate() {
   const jd = document.getElementById('jd-input').value.trim();
   if (!jd) { setEvalError('Please paste a job description.'); return; }
 
+  currentJdText = jd;
   setEvalError('');
   setEvalStatus('Evaluating…');
   setEvalBtnDisabled(true);
@@ -252,7 +254,7 @@ async function runEvaluate() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jd_text: jd, profile_id: profileId ? parseInt(profileId) : null }),
     });
-    if (!res.ok) { setEvalError(formatApiError(res, body)); return; }
+    if (!res.ok) { setEvalApiError(res, body); return; }
     data = body.data;
     cached = body.meta?.cached === true;
   } catch (e) {
@@ -307,6 +309,7 @@ function startPoll(jobId) {
         const resume = job.generated_resumes[0];
         currentResumeText = resume.resume_text;
         currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
+        currentJdText = job.jd_full_text || currentJdText;
         document.getElementById('tailoring-spinner').style.display = 'none';
         document.getElementById('tailoring-done').style.display = 'flex';
       }
@@ -390,7 +393,7 @@ async function loadSubmittable() {
   }
 }
 
-async function fetchAndOpenModal(jobId) {
+async function fetchAndOpenModal(jobId, showChecklist) {
   try {
     const { response: res, payload: body } = await apiFetch('/api/history/' + jobId);
     const resumes = body.data?.generated_resumes;
@@ -398,7 +401,9 @@ async function fetchAndOpenModal(jobId) {
       const resume = resumes[0];
       currentResumeText = resume.resume_text;
       currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
+      currentJdText = body.data?.jd_full_text || body.data?.jd_snippet || currentJdText;
       openModal();
+      if (showChecklist) showReadinessChecklist();
     }
   } catch (_) {}
 }
@@ -407,6 +412,7 @@ async function fetchAndOpenModal(jobId) {
 function openModal() {
   document.getElementById('modal-resume-text').textContent = currentResumeText || '(no text)';
   document.getElementById('download-resume-pdf').hidden = !currentResumePdfUrl;
+  hideReadinessChecklist();
   document.getElementById('resume-modal').classList.add('open');
 }
 
@@ -421,7 +427,138 @@ async function copyResume() {
 
 function downloadCurrentResumePdf() {
   if (!currentResumePdfUrl) return;
+  showReadinessChecklist();
+}
+
+function confirmResumePdfDownload() {
+  if (!currentResumePdfUrl) return;
   window.open(currentResumePdfUrl, '_blank', 'noopener');
+}
+
+function showReadinessChecklist() {
+  const panel = document.getElementById('readiness-panel');
+  const summary = document.getElementById('readiness-summary');
+  const list = document.getElementById('readiness-list');
+  if (!panel || !summary || !list) return;
+
+  const checks = buildReadinessChecks(currentResumeText || '', currentJdText || '');
+  const failCount = checks.filter(c => c.status === 'fail').length;
+  const warnCount = checks.filter(c => c.status === 'warn').length;
+  summary.textContent = failCount > 0
+    ? `${failCount} fail, ${warnCount} warn before download`
+    : warnCount > 0
+      ? `${warnCount} warnings before download`
+      : 'Ready for PDF download';
+  summary.className = 'readiness-summary ' + (
+    failCount > 0 ? 'readiness-fail' : warnCount > 0 ? 'readiness-warn' : 'readiness-pass'
+  );
+  list.innerHTML = checks.map(function(check) {
+    return '<li class="readiness-item readiness-' + check.status + '">'
+      + '<span class="readiness-status">' + check.status.toUpperCase() + '</span>'
+      + '<div><strong>' + escHtml(check.label) + '</strong><span>' + escHtml(check.message) + '</span></div>'
+      + '</li>';
+  }).join('');
+  panel.hidden = false;
+}
+
+function hideReadinessChecklist() {
+  const panel = document.getElementById('readiness-panel');
+  if (panel) panel.hidden = true;
+}
+
+function buildReadinessChecks(resumeText, jdText) {
+  const resume = normalizeText(resumeText);
+  const jd = normalizeText(jdText);
+  const resumeWords = wordList(resume);
+  const jdWords = wordList(jd);
+  const jdKeywords = topKeywords(jdWords, 12);
+  const matchedKeywords = jdKeywords.filter(word => resume.includes(word));
+  const jdKeywordRatio = jdKeywords.length === 0 ? 0 : matchedKeywords.length / jdKeywords.length;
+  const jdKeywordCheck = jdKeywords.length === 0
+    ? readiness('warn', 'JD keywords', 'No full JD text is available, so keyword alignment cannot be verified.')
+    : jdKeywordRatio >= 0.5
+      ? readiness('pass', 'JD keywords', `Matches ${matchedKeywords.length}/${jdKeywords.length} important JD terms.`)
+      : jdKeywordRatio >= 0.25
+        ? readiness('warn', 'JD keywords', `Matches ${matchedKeywords.length}/${jdKeywords.length} important JD terms; add missing role keywords if they are truthful.`)
+        : readiness('fail', 'JD keywords', `Only ${matchedKeywords.length}/${jdKeywords.length} important JD terms appear in the resume.`);
+
+  const jdSkills = skillKeywords(jd);
+  const matchedSkills = jdSkills.filter(skill => resume.includes(skill));
+  const skillCheck = jdSkills.length === 0
+    ? readiness('warn', 'Required skills', 'No recognizable must-have skills were found in the JD text.')
+    : matchedSkills.length === jdSkills.length
+      ? readiness('pass', 'Required skills', `Covers ${matchedSkills.length}/${jdSkills.length} detected JD skills.`)
+      : matchedSkills.length > 0
+        ? readiness('warn', 'Required skills', `Covers ${matchedSkills.length}/${jdSkills.length} detected JD skills; review the missing ones.`)
+        : readiness('fail', 'Required skills', 'Detected JD skills are not visible in the tailored resume.');
+
+  const wordCount = resumeWords.length;
+  const lengthCheck = wordCount >= 250 && wordCount <= 900
+    ? readiness('pass', 'Resume length', `${wordCount} words is within a recruiter-friendly range.`)
+    : wordCount >= 150 && wordCount <= 1200
+      ? readiness('warn', 'Resume length', `${wordCount} words may be acceptable, but review density before sending.`)
+      : readiness('fail', 'Resume length', `${wordCount} words is outside the expected range for a focused resume.`);
+
+  const hasPlaceholders = /\b(todo|tbd|lorem|placeholder|xxx)\b/i.test(resumeText);
+  const hasSections = /\b(experience|skills|projects|education|summary)\b/i.test(resumeText);
+  const formatCheck = !hasPlaceholders && hasSections && resumeText.split('\n').length >= 6
+    ? readiness('pass', 'Format', 'Contains resume sections and no obvious placeholders.')
+    : hasPlaceholders
+      ? readiness('fail', 'Format', 'Remove placeholder text before exporting.')
+      : readiness('warn', 'Format', 'Section structure is not obvious; review formatting before exporting.');
+
+  const metricMatches = resumeText.match(/\b(\d+[%+]|\$[\d,.]+|\d+x|\d+\s*(users|customers|requests|hours|days|weeks|months|years|people|teams))\b/gi) || [];
+  const metricsCheck = metricMatches.length >= 2
+    ? readiness('pass', 'Quantified impact', `Includes ${metricMatches.length} quantified proof points.`)
+    : metricMatches.length === 1
+      ? readiness('warn', 'Quantified impact', 'Only one quantified result is visible; add more evidence if accurate.')
+      : readiness('fail', 'Quantified impact', 'No quantified achievements detected.');
+
+  const riskyClaims = resumeText.match(/\b(expert in everything|guaranteed|world-class|best-in-class|master of all|flawless)\b/gi) || [];
+  const riskCheck = riskyClaims.length === 0
+    ? readiness('pass', 'Risk statement', 'No obvious overclaiming markers detected.')
+    : readiness('warn', 'Risk statement', `Review potentially risky wording: ${riskyClaims.slice(0, 3).join(', ')}.`);
+
+  return [jdKeywordCheck, skillCheck, lengthCheck, formatCheck, metricsCheck, riskCheck];
+}
+
+function readiness(status, label, message) {
+  return { status, label, message };
+}
+
+function normalizeText(text) {
+  return String(text || '').toLowerCase();
+}
+
+function wordList(text) {
+  return normalizeText(text).match(/[a-z][a-z0-9+#.-]{2,}/g) || [];
+}
+
+function topKeywords(words, limit) {
+  const stop = new Set([
+    'and', 'the', 'for', 'with', 'this', 'that', 'you', 'your', 'our', 'are',
+    'will', 'from', 'have', 'has', 'job', 'role', 'team', 'work', 'years',
+    'experience', 'skills', 'ability', 'using', 'including', 'about',
+  ]);
+  const counts = new Map();
+  for (const word of words) {
+    if (stop.has(word) || word.length < 4) continue;
+    counts.set(word, (counts.get(word) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(entry => entry[0]);
+}
+
+function skillKeywords(text) {
+  const catalog = [
+    'python', 'fastapi', 'django', 'flask', 'sql', 'postgres', 'postgresql',
+    'mysql', 'redis', 'aws', 'gcp', 'azure', 'docker', 'kubernetes', 'react',
+    'typescript', 'javascript', 'node', 'etl', 'airflow', 'spark', 'api',
+    'graphql', 'terraform', 'ci/cd', 'linux', 'machine learning',
+  ];
+  return catalog.filter(skill => text.includes(skill));
 }
 
 // ---- Helpers ----
@@ -429,10 +566,9 @@ function resumeActionsHtml(item) {
   if (!item.resume_id) {
     return '<span style="color:var(--muted);font-size:0.8rem">—</span>';
   }
-  const pdfUrl = item.pdf_url || '/api/generated-resumes/' + item.resume_id + '/pdf';
   return `<div class="flex">
     <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}')">View</button>
-    <a class="btn btn-sm btn-muted" href="${escHtml(pdfUrl)}" target="_blank" rel="noreferrer">PDF</a>
+    <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}', true)">PDF</button>
   </div>`;
 }
 
@@ -443,6 +579,7 @@ function renderTags(id, items) {
 
 function setEvalStatus(msg) { document.getElementById('eval-status').textContent = msg; }
 function setEvalError(msg) { document.getElementById('eval-error').textContent = msg; }
+function setEvalApiError(response, payload) { document.getElementById('eval-error').innerHTML = UI.apiErrorBanner(response, payload); }
 function setEvalBtnDisabled(v) { document.getElementById('eval-btn').disabled = v; }
 function hideResult() { document.getElementById('eval-result').style.display = 'none'; }
 
