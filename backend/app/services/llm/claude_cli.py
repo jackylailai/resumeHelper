@@ -28,6 +28,9 @@ def _render(template_path: Path, **kwargs: str) -> str:
 class ClaudeCLIClient:
     """Calls the local `claude` CLI — uses Claude Code subscription, no API key needed."""
 
+    def __init__(self, model: str = "claude-opus-4-7") -> None:
+        self.model = model
+
     def evaluate(
         self,
         parsed_text: str,
@@ -43,7 +46,7 @@ class ClaudeCLIClient:
         start = time.time()
         try:
             result = subprocess.run(
-                [_CLAUDE_BIN, "--print", "-p", prompt],
+                [_CLAUDE_BIN, "--print", "-p", prompt, "--model", self.model],
                 capture_output=True,
                 text=True,
                 timeout=120,

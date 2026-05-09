@@ -45,6 +45,7 @@ def claude_cli_ping() -> JSONResponse:
         "claude_json_exists": bool(claude_json and claude_json.exists()),
         "oauth_token_set": bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")),
         "anthropic_api_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "model_used": settings.llm_model,
     }
 
     if claude_bin is None:
@@ -54,7 +55,7 @@ def claude_cli_ping() -> JSONResponse:
     start = time.perf_counter()
     try:
         result = subprocess.run(
-            [claude_bin, "--print", "-p", _PING_PROMPT],
+            [claude_bin, "--print", "-p", _PING_PROMPT, "--model", settings.llm_model],
             capture_output=True,
             text=True,
             timeout=_TIMEOUT_SECONDS,

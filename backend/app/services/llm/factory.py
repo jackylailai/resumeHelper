@@ -16,8 +16,8 @@ def create_llm_client() -> LLMClient:
     backend = settings.llm_backend
 
     if backend == "claude_cli":
-        logger.info("llm_backend=claude_cli")
-        return ClaudeCLIClient()
+        logger.info("llm_backend=claude_cli model=%s", settings.llm_model)
+        return ClaudeCLIClient(model=settings.llm_model)
 
     if backend == "anthropic":
         if not settings.anthropic_api_key:
