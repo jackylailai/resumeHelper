@@ -140,6 +140,14 @@ TDD: write tests RED before implementation.
 - [x] `download_generated_resume_pdf` decorator gets `response_model=None` so FastAPI does not try to build a Pydantic response model from `FileResponse | JSONResponse` (was crashing app construction → 61 integration tests in ERROR)
 - [x] `POST /api/callback` only generates + points at a local PDF when the caller did not supply `pdf_url` — restores the contract for externally-hosted PDFs
 
+### P2.5-T12 · Playwright E2E suite ✅ (issue #84, PRs #83 + this one)
+- [x] `tools/e2e/tests/` — 5 flow tests: paste-JD evaluate, profile PDF upload, batch analyze from DB, submittable PDF download, history drilldown
+- [x] `tools/e2e/tests/conftest.py` — session uvicorn boot, autouse table truncation, `seeded_profile` / `seeded_listings`
+- [x] `backend/app/services/llm/fake.py` — `[[score=N]]` JD marker so different tests can request different scores against one shared uvicorn process
+- [x] `.github/workflows/e2e.yml` — runs `pytest tools/e2e/tests/`, uploads `tools/e2e/screenshots/` as 30-day artifact, uploads uvicorn log on failure
+- [x] `scripts/e2e.sh` — local runner; bootstraps Playwright on first call
+- [x] `pyproject.toml` — `[project.optional-dependencies] e2e` group
+
 ---
 
 ## Phase 3 — Roadmap (future)
