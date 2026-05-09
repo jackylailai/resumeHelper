@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
+import json
+import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -20,10 +24,16 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.app.db import SessionLocal
+from backend.app.models.job_listing import JobListing
 from backend.app.services.scrapers.base import BaseScraper, JobListingDraft
 from backend.app.services.scrapers.persistence import upsert_drafts
 from backend.app.services.scrapers.scraper_104 import Scraper104
 from backend.app.services.scrapers.scraper_yourator import ScraperYourator
+
+_DEFAULT_BACKUP_DIR = Path.home() / "resumeHelper_data" / "backups"
+BACKUP_DIR = Path(
+    os.environ.get("RESUMEHELPER_BACKUP_DIR") or _DEFAULT_BACKUP_DIR
+).expanduser()
 
 SCRAPERS: dict[str, type[BaseScraper]] = {
     "104": Scraper104,
@@ -58,6 +68,30 @@ async def run(keyword: str, limit: int, sites: list[str]) -> int:
             total_inserted += inserted
             print(f"  inserted {inserted} new rows ({len(drafts)} drafts seen)")
     print(f"\nTotal new rows inserted: {total_inserted}")
+
+    # Snapshot the full job_listings table to CSV so the data survives even
+    # if the DB is later dropped, truncated, or accidentally wiped by a
+    # misbehaving test. Restore via:
+    #   psql -c "\copy job_listings FROM 'path.csv' CSV HEADER"
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    backup_path = BACKUP_DIR / f"job_listings-{ts}.csv"
+    with SessionLocal() as session, backup_path.open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow([
+            "id", "source", "source_id", "title", "company", "location",
+            "url", "description", "raw_json", "scraped_at", "job_analysis_id",
+        ])
+        for row in session.query(JobListing).order_by(JobListing.scraped_at).all():
+            writer.writerow([
+                str(row.id), row.source, row.source_id, row.title, row.company,
+                row.location or "", row.url, row.description,
+                "" if row.raw_json is None else json.dumps(row.raw_json),
+                row.scraped_at.isoformat(),
+                "" if row.job_analysis_id is None else str(row.job_analysis_id),
+            ])
+    print(f"Backup written → {backup_path}")
+
     return total_inserted
 
 

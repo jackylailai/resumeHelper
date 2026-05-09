@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import re
+
 from backend.app.services.llm import EvaluationResult
+
+_E2E_SCORE_MARKER = re.compile(r"\[\[score=(\d{1,3})\]\]")
 
 
 class FakeLLMClient:
-    """Deterministic test double. Returns fixed results keyed by content hash prefix."""
+    """Deterministic test double. Returns fixed results keyed by content hash prefix.
+
+    For E2E tests running against a separate uvicorn process (where in-process
+    state can't be mutated), the JD text may embed `[[score=N]]` and the fake
+    will return that score. Production JDs never contain this marker.
+    """
 
     def __init__(self, default_score: int = 72, delay_seconds: float = 0.0) -> None:
         self._default_score = default_score
@@ -28,8 +37,10 @@ class FakeLLMClient:
             if parsed_text.startswith(prefix):
                 return result
 
+        marker = _E2E_SCORE_MARKER.search(job_description)
+        score = int(marker.group(1)) if marker else self._default_score
         return EvaluationResult(
-            score=self._default_score,
+            score=score,
             explanation=(
                 f"[fake evaluation] Resume text length: {len(parsed_text)} chars. "
                 f"JD length: {len(job_description)} chars. "

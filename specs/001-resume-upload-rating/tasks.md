@@ -140,6 +140,27 @@ TDD: write tests RED before implementation.
 - [x] `download_generated_resume_pdf` decorator gets `response_model=None` so FastAPI does not try to build a Pydantic response model from `FileResponse | JSONResponse` (was crashing app construction → 61 integration tests in ERROR)
 - [x] `POST /api/callback` only generates + points at a local PDF when the caller did not supply `pdf_url` — restores the contract for externally-hosted PDFs
 
+### P2.5-T14 · backup dir env var + host-vs-container LLM docs ✅
+- [x] `scripts/scrape_jobs.py` — backup dir resolved from `RESUMEHELPER_BACKUP_DIR`; defaults to `~/resumeHelper_data/backups` (outside repo, never committed)
+- [x] `.env.example` — documents `RESUMEHELPER_BACKUP_DIR` placeholder
+- [x] `CLAUDE.md` / `agent.md` — explain the host-vs-container app trade-off; `claude_cli` mode requires host-mode on macOS because Keychain isn't reachable from a Linux container
+
+### P2.5-T13 · E2E DB isolation + scrape backup ✅ (issue #87)
+- [x] `tools/e2e/tests/conftest.py` — testcontainers postgres per session; uvicorn always bound to that DB; `DATABASE_URL` is no longer read from the parent env
+- [x] `clean_db` is opt-in (no longer autouse); `seeded_profile` / `seeded_listings` depend on it
+- [x] `.github/workflows/e2e.yml` — postgres service container removed (testcontainers handles it)
+- [x] `scripts/e2e.sh` — no longer exports `DATABASE_URL`
+- [x] `scripts/scrape_jobs.py` — writes a CSV snapshot of `job_listings` to `backend/storage/backups/job_listings-<ts>.csv` after each successful run, so data survives accidental DB wipes
+- [x] Verified locally: dev DB row counts identical before/after `scripts/e2e.sh`
+
+### P2.5-T12 · Playwright E2E suite ✅ (issue #84, PRs #83 + this one)
+- [x] `tools/e2e/tests/` — 5 flow tests: paste-JD evaluate, profile PDF upload, batch analyze from DB, submittable PDF download, history drilldown
+- [x] `tools/e2e/tests/conftest.py` — session uvicorn boot, autouse table truncation, `seeded_profile` / `seeded_listings`
+- [x] `backend/app/services/llm/fake.py` — `[[score=N]]` JD marker so different tests can request different scores against one shared uvicorn process
+- [x] `.github/workflows/e2e.yml` — runs `pytest tools/e2e/tests/`, uploads `tools/e2e/screenshots/` as 30-day artifact, uploads uvicorn log on failure
+- [x] `scripts/e2e.sh` — local runner; bootstraps Playwright on first call
+- [x] `pyproject.toml` — `[project.optional-dependencies] e2e` group
+
 ---
 
 ## Phase 3 — Roadmap (future)

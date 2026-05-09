@@ -29,6 +29,18 @@ Evaluates job descriptions (JD) against a baseline resume profile, scores them, 
 - **PDF**: weasyprint not installed; pdf_url is null from background task, can be set via POST /api/callback
 - **v1 endpoints** (`/api/resumes`, `/api/jobs`) were removed in migration 0002 and their orphaned modules deleted in #26 follow-up — only v2 (profile + evaluate + history) remains
 
+## Running the app — host vs container
+Two ways to run the FastAPI app. Pick by which LLM credential you have:
+
+| Mode | Command | When to use |
+|---|---|---|
+| **Host (recommended for dev)** | `scripts/restart-app.sh` — uvicorn directly on host | You have `claude login` on your mac. Host's `claude` CLI is auto-picked up. No API key needed. |
+| **Container** | `docker compose -f docker-compose.app.yml up -d` | You only have `ANTHROPIC_API_KEY`. Set `LLM_BACKEND=anthropic` in `.env`. |
+
+The container can't reach the macOS Keychain where `claude` CLI stores its session, so `claude_cli` mode does NOT work inside the container. Either use host mode, or switch the container to API-key mode.
+
+`docker compose up -d` (default `docker-compose.yml`) only brings up `postgres` — the DB is shared by both modes via `~/resumeHelper_data` bind mount.
+
 ## Running tests
 ```bash
 cd /Users/laijacky/resumeHelper

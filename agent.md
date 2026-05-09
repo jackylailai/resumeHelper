@@ -54,11 +54,22 @@ Pre-push checklist (MUST pass before any push or PR):
 
 - Unit tests first (`backend/tests/unit/`) — no DB needed
 - Integration tests second (`backend/tests/integration/`) — requires postgres container
+- E2E tests third (`tools/e2e/tests/`) — drives the live UI via Playwright; only when the change touches `static/` or user-visible flows
 - New behaviour = new test (no exceptions)
 - If a test is RED for a known reason (DB not up), say so explicitly
 - Coverage gate: `pytest --cov=backend/app --cov-fail-under=85`
 
 **Trigger**: After Executor commits, before Reviewer approves.
+
+#### Running the E2E suite
+
+```bash
+scripts/test.sh                    # unit + integration (default for backend changes)
+scripts/e2e.sh                     # full Playwright suite against live uvicorn + fake LLM
+scripts/e2e.sh -k batch_analyze    # forwards args to pytest
+```
+
+`scripts/e2e.sh` bootstraps Playwright + Chromium into `.venv` on first call. CI runs the same suite via `.github/workflows/e2e.yml` and uploads `tools/e2e/screenshots/` as a 30-day artifact (download from the run summary on each PR). FakeLLMClient honours a `[[score=N]]` token in JD text so per-test score control doesn't require restarting uvicorn.
 
 ---
 
@@ -94,10 +105,10 @@ Pre-push checklist (MUST pass before any push or PR):
 
 ## LLM Backend
 
-This project defaults to the local `claude` CLI as the LLM backend. Host runs can
-reuse an interactive Claude login. Docker runs cannot see the host login unless
-credentials are mounted, so the app container must receive `ANTHROPIC_API_KEY`
-or use `LLM_BACKEND=anthropic` with the same key.
+Two backends available, selected by `LLM_BACKEND` in `.env`:
+
+- **`claude_cli`** (default) — shells out to the local `claude` CLI from a Claude Code subscription. No `ANTHROPIC_API_KEY` needed. **Requires the app to run on the host** (`scripts/restart-app.sh`), because on macOS the CLI stores its session in the system Keychain and a Linux container has no way to read it. Running `claude_cli` mode inside `docker-compose.app.yml` will return `llm_unavailable: claude CLI failed: Invalid API key`.
+- **`anthropic`** — uses the Anthropic SDK directly with `ANTHROPIC_API_KEY`. Works in any environment, including the docker container. Pick this for production / CI / API-key based deployments.
 
 Pattern (see `backend/app/services/llm/claude_cli.py`):
 ```python
