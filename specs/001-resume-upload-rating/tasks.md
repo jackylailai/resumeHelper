@@ -145,6 +145,12 @@ TDD: write tests RED before implementation.
 - [x] `.env.example` — documents `RESUMEHELPER_BACKUP_DIR` placeholder
 - [x] `CLAUDE.md` / `agent.md` — explain the host-vs-container app trade-off; `claude_cli` mode requires host-mode on macOS because Keychain isn't reachable from a Linux container
 
+### P2.5-T15 · Container becomes the default dev mode ✅
+- [x] `CLAUDE.md` — flips the host-vs-container table; container w/ `CLAUDE_CODE_OAUTH_TOKEN` is now the recommended dev setup. Host mode kept as a fallback for uvicorn reload-driven debugging.
+- [x] `.env.example` — adds `CLAUDE_CODE_OAUTH_TOKEN` slot and removes the obsolete "Docker app runs do not inherit the host login" note.
+- [x] `scripts/dev-verify.sh` — one-shot sanity check: hits `/api/health` and `/api/debug/claude-cli-ping`, exits non-zero if either fails.
+- [x] Verified locally: `./scripts/restart-docker.sh --full` brings up clean stack, `./scripts/dev-verify.sh` reports both endpoints green.
+
 ### P2.5-T14 · Claude CLI in Docker spike ✅ (issue #100)
 - [x] `backend/app/api/debug.py` — `GET /api/debug/claude-cli-ping` (non-prod only) spawns `claude --print` and returns returncode/stdout/stderr/latency plus diagnostics
 - [x] `docker-compose.app.yml` — adds `CLAUDE_CODE_OAUTH_TOKEN` env passthrough; no host bind-mounts (a `~/.claude.json` mount races the host CLI and corrupts the config — use the long-lived token instead)
