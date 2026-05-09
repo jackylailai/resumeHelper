@@ -1,12 +1,13 @@
 """E2E test fixtures.
 
-The suite drives the deployed UI through Playwright against a uvicorn
-process running with `LLM_BACKEND=fake`. Tests share that one process for
-the session and isolate themselves by truncating data tables before each
-test (alembic schema is preserved).
+Hard isolation: every session spins its OWN ephemeral postgres via
+testcontainers AND its OWN uvicorn process. The dev `resume_helper` DB
+is never touched, no matter how `DATABASE_URL` is set in the parent
+environment. There are no escape hatches — the previous `E2E_USE_RUNNING_APP`
+env knob was removed because it could (and did) destroy real data.
 
-If you already have an app listening, set `E2E_USE_RUNNING_APP=1` and the
-session fixture will skip the spawn.
+`clean_db` is no longer autouse. Tests that want a clean slate request it
+explicitly. This makes the data lifecycle visible in each test signature.
 """
 from __future__ import annotations
 
@@ -14,7 +15,6 @@ import os
 import socket
 import subprocess
 import sys
-import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -23,64 +23,74 @@ import httpx
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from testcontainers.postgres import PostgresContainer
 
-DEFAULT_DB_URL = "postgresql://postgres:postgres@localhost:5432/resume_helper"
-DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DB_URL)
-BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:8001")
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / "screenshots"
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _port_from_url(url: str) -> int:
-    return int(url.rsplit(":", 1)[-1].split("/", 1)[0])
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
 
 
 def _wait_for_health(url: str, timeout: float = 30.0) -> None:
+    import time
     deadline = time.monotonic() + timeout
-    last_err: Exception | None = None
+    last: Exception | None = None
     while time.monotonic() < deadline:
         try:
             r = httpx.get(f"{url}/api/health", timeout=2.0)
             if r.status_code == 200:
                 return
-        except Exception as exc:
-            last_err = exc
+        except Exception as exc:  # pragma: no cover - retry path
+            last = exc
         time.sleep(0.5)
-    raise RuntimeError(f"app at {url} not healthy within {timeout}s (last err: {last_err})")
-
-
-def _port_in_use(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(("127.0.0.1", port)) == 0
+    raise RuntimeError(f"app at {url} not healthy in {timeout}s (last err: {last})")
 
 
 @pytest.fixture(scope="session")
-def live_app() -> Iterator[str]:
-    """Yield BASE_URL of a running FastAPI app. Starts one if needed."""
-    if os.environ.get("E2E_USE_RUNNING_APP"):
-        _wait_for_health(BASE_URL, timeout=10)
-        yield BASE_URL
-        return
+def _e2e_postgres() -> Iterator[str]:
+    """Spin a fresh postgres just for this test session. Discarded on exit."""
+    with PostgresContainer("postgres:16-alpine") as pg:
+        yield pg.get_connection_url()
 
-    port = _port_from_url(BASE_URL)
-    if _port_in_use(port):
-        raise RuntimeError(
-            f"port {port} already in use — set E2E_USE_RUNNING_APP=1 to reuse it "
-            f"or pick a different E2E_BASE_URL"
-        )
 
+@pytest.fixture(scope="session")
+def _e2e_db(_e2e_postgres: str) -> str:
+    """Apply alembic migrations to the ephemeral DB."""
+    subprocess.run(
+        [
+            sys.executable, "-m", "alembic",
+            "-c", "backend/alembic.ini", "upgrade", "head",
+        ],
+        check=True,
+        cwd=str(PROJECT_ROOT),
+        env={**os.environ, "DATABASE_URL": _e2e_postgres},
+    )
+    return _e2e_postgres
+
+
+@pytest.fixture(scope="session")
+def live_app(_e2e_db: str) -> Iterator[str]:
+    """Yield BASE_URL of a uvicorn instance bound to the e2e DB."""
     SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = SCREENSHOTS_DIR.parent / "uvicorn.log"
-    env = os.environ.copy()
-    env.setdefault("LLM_BACKEND", "fake")
-    env.setdefault("DATABASE_URL", DATABASE_URL)
+
+    port = _free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    env = {
+        **os.environ,
+        "DATABASE_URL": _e2e_db,
+        "LLM_BACKEND": "fake",
+    }
 
     with log_path.open("w") as log:
         proc = subprocess.Popen(
             [
                 sys.executable, "-m", "uvicorn",
-                "backend.app.main:app", "--port", str(port),
+                "backend.app.main:app", "--host", "127.0.0.1", "--port", str(port),
             ],
             cwd=str(PROJECT_ROOT),
             env=env,
@@ -88,8 +98,8 @@ def live_app() -> Iterator[str]:
             stderr=subprocess.STDOUT,
         )
     try:
-        _wait_for_health(BASE_URL, timeout=30)
-        yield BASE_URL
+        _wait_for_health(base_url, timeout=30)
+        yield base_url
     finally:
         proc.terminate()
         try:
@@ -99,8 +109,14 @@ def live_app() -> Iterator[str]:
 
 
 @pytest.fixture(scope="session")
-def db_engine() -> Iterator[Engine]:
-    engine = create_engine(DATABASE_URL, future=True)
+def db_engine(_e2e_db: str) -> Iterator[Engine]:
+    """SQLAlchemy engine pointed at the ephemeral DB only.
+
+    By construction this can never connect to the dev DB — `_e2e_db` is
+    derived from a testcontainers instance with a random port, not from
+    any user-controlled env var.
+    """
+    engine = create_engine(_e2e_db, future=True)
     yield engine
     engine.dispose()
 
@@ -113,10 +129,12 @@ _DATA_TABLES = (
 )
 
 
-@pytest.fixture(autouse=True)
-def _wipe_data_tables(db_engine: Engine, live_app: str) -> None:
-    """Truncate per-test data so tests don't leak rows into each other.
-    Schema is owned by alembic and untouched."""
+@pytest.fixture
+def clean_db(db_engine: Engine) -> None:
+    """Truncate per-test data tables. NOT autouse: tests opt in explicitly
+    so the data lifecycle is visible in each test signature. Safe by
+    construction because db_engine only ever points at the e2e
+    testcontainers DB."""
     with db_engine.begin() as conn:
         conn.execute(
             text(f"TRUNCATE {', '.join(_DATA_TABLES)} RESTART IDENTITY CASCADE")
@@ -124,8 +142,7 @@ def _wipe_data_tables(db_engine: Engine, live_app: str) -> None:
 
 
 @pytest.fixture
-def seeded_profile(live_app: str) -> dict:
-    """Create a baseline profile via legacy POST /api/profile and return its row."""
+def seeded_profile(live_app: str, clean_db: None) -> dict:
     skills = (
         "Senior Backend Engineer with 7 years of Python and Java. "
         "Built FastAPI + Spring Boot services on AWS (EC2, EKS, Lambda) "
@@ -142,10 +159,10 @@ def seeded_profile(live_app: str) -> dict:
 
 
 @pytest.fixture
-def seeded_listings(db_engine: Engine) -> list[dict]:
+def seeded_listings(db_engine: Engine, clean_db: None) -> list[dict]:
     """Insert 5 JobListing rows directly. JD descriptions embed [[score=N]]
-    markers that FakeLLMClient honours, so different rows score differently
-    when batch-evaluated."""
+    markers that FakeLLMClient honours, so different rows score
+    differently when batch-evaluated."""
     rows = [
         {
             "id": uuid.uuid4(),
@@ -187,7 +204,6 @@ def seeded_listings(db_engine: Engine) -> list[dict]:
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args: dict) -> dict:
-    """Standard viewport for screenshot consistency."""
     return {
         **browser_context_args,
         "viewport": {"width": 1280, "height": 900},
@@ -196,7 +212,6 @@ def browser_context_args(browser_context_args: dict) -> dict:
 
 @pytest.fixture
 def shots_dir(request: pytest.FixtureRequest) -> Path:
-    """Per-test screenshot directory: tools/e2e/screenshots/<test-name>/"""
     name = request.node.name
     out = SCREENSHOTS_DIR / name
     out.mkdir(parents=True, exist_ok=True)

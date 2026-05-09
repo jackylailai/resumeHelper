@@ -140,6 +140,14 @@ TDD: write tests RED before implementation.
 - [x] `download_generated_resume_pdf` decorator gets `response_model=None` so FastAPI does not try to build a Pydantic response model from `FileResponse | JSONResponse` (was crashing app construction → 61 integration tests in ERROR)
 - [x] `POST /api/callback` only generates + points at a local PDF when the caller did not supply `pdf_url` — restores the contract for externally-hosted PDFs
 
+### P2.5-T13 · E2E DB isolation + scrape backup ✅ (issue #87)
+- [x] `tools/e2e/tests/conftest.py` — testcontainers postgres per session; uvicorn always bound to that DB; `DATABASE_URL` is no longer read from the parent env
+- [x] `clean_db` is opt-in (no longer autouse); `seeded_profile` / `seeded_listings` depend on it
+- [x] `.github/workflows/e2e.yml` — postgres service container removed (testcontainers handles it)
+- [x] `scripts/e2e.sh` — no longer exports `DATABASE_URL`
+- [x] `scripts/scrape_jobs.py` — writes a CSV snapshot of `job_listings` to `backend/storage/backups/job_listings-<ts>.csv` after each successful run, so data survives accidental DB wipes
+- [x] Verified locally: dev DB row counts identical before/after `scripts/e2e.sh`
+
 ### P2.5-T12 · Playwright E2E suite ✅ (issue #84, PRs #83 + this one)
 - [x] `tools/e2e/tests/` — 5 flow tests: paste-JD evaluate, profile PDF upload, batch analyze from DB, submittable PDF download, history drilldown
 - [x] `tools/e2e/tests/conftest.py` — session uvicorn boot, autouse table truncation, `seeded_profile` / `seeded_listings`

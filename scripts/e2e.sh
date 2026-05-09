@@ -5,8 +5,9 @@
 #   scripts/e2e.sh                  # full suite
 #   scripts/e2e.sh -k pasted_jd     # forwards args to pytest
 #
-# Prereqs: docker compose's postgres up (scripts/start.sh or compose up -d).
-# This script will spawn its own uvicorn; it expects port 8001 to be free.
+# The suite spins its OWN ephemeral postgres (via testcontainers) and its
+# OWN uvicorn process. The dev `resume_helper` DB is NEVER touched. The
+# only prerequisite is a working Docker daemon (testcontainers needs it).
 
 set -euo pipefail
 
@@ -25,16 +26,12 @@ if ! "$VENV/bin/python" -c "import playwright" 2>/dev/null; then
     echo "installing playwright + pytest-playwright into .venv..."
     "$VENV/bin/pip" install playwright pytest-playwright
 fi
-if [ ! -d "$HOME/Library/Caches/ms-playwright/chromium-"* ] 2>/dev/null \
-   && [ ! -d "$HOME/.cache/ms-playwright/chromium-"* ] 2>/dev/null; then
+if ! ls "$HOME/Library/Caches/ms-playwright/chromium-"* >/dev/null 2>&1 \
+   && ! ls "$HOME/.cache/ms-playwright/chromium-"* >/dev/null 2>&1; then
     echo "installing chromium..."
     "$VENV/bin/python" -m playwright install chromium
 fi
 
-export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/resume_helper}"
-export LLM_BACKEND=fake
-export E2E_BASE_URL="${E2E_BASE_URL:-http://localhost:8001}"
-
-"$VENV/bin/python" -m alembic -c backend/alembic.ini upgrade head >/dev/null
-
+# DATABASE_URL is intentionally NOT exported — testcontainers picks a
+# random port for its own postgres, and conftest forces uvicorn to use it.
 "$VENV/bin/python" -m pytest tools/e2e/tests/ "$@"

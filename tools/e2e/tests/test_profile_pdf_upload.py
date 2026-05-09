@@ -10,6 +10,7 @@ from backend.tests.unit.test_parsing import make_minimal_pdf
 
 def test_profile_pdf_upload_appears_in_list(
     live_app: str,
+    clean_db: None,
     page: Page,
     shots_dir: Path,
     tmp_path: Path,

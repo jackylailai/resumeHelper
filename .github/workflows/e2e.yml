@@ -1,8 +1,9 @@
 name: E2E (Playwright)
 
-# Drives the deployed UI via pytest-playwright. Runs the full flow suite
-# (5 tests) on every PR that touches backend / frontend / e2e code, and
-# publishes screenshots as a downloadable artifact.
+# Drives the deployed UI via pytest-playwright. The conftest spins its
+# OWN postgres (via testcontainers) and its OWN uvicorn — no shared
+# service container, no DATABASE_URL inherited from env. This is the
+# isolation that protects developer dev DBs from being truncated.
 #
 # Non-blocking by design — graduate to "required" after the suite has
 # proved stable across ~2 weeks of PRs.
@@ -21,26 +22,6 @@ jobs:
     name: Flow tests + screenshot artifacts
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-    env:
-      DATABASE_URL: postgresql://test:test@localhost:5432/test
-      LLM_BACKEND: fake
-      E2E_BASE_URL: http://localhost:8001
-
     steps:
       - uses: actions/checkout@v4
 
@@ -56,9 +37,6 @@ jobs:
         run: |
           pip install playwright pytest-playwright
           python -m playwright install --with-deps chromium
-
-      - name: Apply database migrations
-        run: python -m alembic -c backend/alembic.ini upgrade head
 
       - name: Run E2E suite
         run: python -m pytest tools/e2e/tests/ -v --tb=short
