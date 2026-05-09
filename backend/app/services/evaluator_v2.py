@@ -27,7 +27,11 @@ _SNIPPET_LEN = 200
 # ---------------------------------------------------------------------------
 
 def list_profiles(db: Session) -> list[BaselineProfile]:
-    return db.query(BaselineProfile).order_by(BaselineProfile.id.desc()).all()
+    return (
+        db.query(BaselineProfile)
+        .order_by(BaselineProfile.is_default.desc(), BaselineProfile.id.desc())
+        .all()
+    )
 
 
 def get_profile(db: Session, profile_id: int) -> BaselineProfile | None:
@@ -38,15 +42,41 @@ def get_latest_profile(db: Session) -> BaselineProfile | None:
     return db.query(BaselineProfile).order_by(BaselineProfile.id.desc()).first()
 
 
+def get_default_profile(db: Session) -> BaselineProfile | None:
+    default_profile = (
+        db.query(BaselineProfile)
+        .filter(BaselineProfile.is_default.is_(True))
+        .order_by(BaselineProfile.id.desc())
+        .first()
+    )
+    return default_profile or get_latest_profile(db)
+
+
 # Backward-compat alias used by tailor worker and old callers
 def get_baseline(db: Session) -> BaselineProfile | None:
-    return get_latest_profile(db)
+    return get_default_profile(db)
 
 
-def create_profile(db: Session, skills_text: str, name: str | None = None) -> BaselineProfile:
+def _set_only_default(db: Session, profile: BaselineProfile) -> None:
+    db.query(BaselineProfile).filter(BaselineProfile.id != profile.id).update(
+        {BaselineProfile.is_default: False},
+        synchronize_session=False,
+    )
+    profile.is_default = True
+
+
+def create_profile(
+    db: Session,
+    skills_text: str,
+    name: str | None = None,
+    is_default: bool = False,
+) -> BaselineProfile:
     skills_text = skills_text.replace("\x00", "")
-    profile = BaselineProfile(skills_text=skills_text, name=name)
+    profile = BaselineProfile(skills_text=skills_text, name=name, is_default=is_default)
     db.add(profile)
+    db.flush()
+    if is_default:
+        _set_only_default(db, profile)
     db.commit()
     db.refresh(profile)
     return profile
@@ -57,6 +87,7 @@ def update_profile(
     profile_id: int,
     skills_text: str | None = None,
     name: str | None = None,
+    is_default: bool | None = None,
 ) -> BaselineProfile:
     profile = db.get(BaselineProfile, profile_id)
     if profile is None:
@@ -65,6 +96,10 @@ def update_profile(
         profile.skills_text = skills_text.replace("\x00", "")
     if name is not None:
         profile.name = name
+    if is_default is True:
+        _set_only_default(db, profile)
+    elif is_default is False and profile.is_default:
+        profile.is_default = False
     profile.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(profile)
@@ -98,7 +133,7 @@ def evaluate_jd(
         if profile is None:
             raise LookupError(f"profile {profile_id} not found")
     else:
-        profile = get_latest_profile(db)
+        profile = get_default_profile(db)
         if profile is None:
             raise LookupError("baseline_profile not set")
         profile_id = profile.id

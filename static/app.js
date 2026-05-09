@@ -4,6 +4,7 @@ let currentResumePdfUrl = null;
 let currentJdText = null;
 let pollTimer = null;
 let profileLoaded = false;
+let loadedProfiles = [];
 const UI = window.ResumeHelper;
 
 // ---- Init ----
@@ -122,6 +123,7 @@ async function checkProfile() {
   try {
     const { response: res, payload: body } = await apiFetch('/api/profiles');
     const profiles = body.data || [];
+    loadedProfiles = profiles;
     if (res.ok && profiles.length > 0) {
       profileLoaded = true;
       setHeaderBadge(true);
@@ -138,11 +140,18 @@ async function checkProfile() {
 function populateProfileSelector(profiles) {
   const sel = document.getElementById('profile-select');
   if (!sel) return;
-  sel.innerHTML = profiles.length === 0
-    ? '<option value="">No profiles yet — add one in Profile tab</option>'
-    : profiles.map(p =>
-        `<option value="${p.id}">${escHtml(p.name || 'Untitled #' + p.id)} — ${fmtDate(p.updated_at)}</option>`
-      ).join('');
+  if (profiles.length === 0) {
+    sel.innerHTML = '<option value="">No profiles yet - add one in Profile tab</option>';
+    return;
+  }
+  const defaultProfile = profiles.find(p => p.is_default) || profiles[0];
+  sel.innerHTML = '<option value="" selected>Default: ' + profileLabel(defaultProfile) + '</option>'
+    + profiles.map(p => {
+        const suffix = p.is_default ? ' (default)' : '';
+        return '<option value="' + p.id + '">'
+          + profileLabel(p) + suffix + ' - ' + fmtDate(p.updated_at)
+          + '</option>';
+      }).join('');
 }
 
 function setHeaderBadge(hasProfile) {
@@ -162,19 +171,28 @@ async function loadProfile() {
     const { response: res, payload: body } = await apiFetch('/api/profiles');
     if (!res.ok) { el.innerHTML = UI.emptyState('Error loading profiles.'); return; }
     const profiles = body.data || [];
+    loadedProfiles = profiles;
     populateProfileSelector(profiles);
     if (profiles.length === 0) {
       el.innerHTML = UI.emptyState('No profiles yet. Click "+ Add Profile" to get started.');
       return;
     }
-    el.innerHTML = '<div class="card" style="padding:0;overflow:hidden"><table>'
-      + '<thead><tr><th>Name</th><th>Preview</th><th>Updated</th><th></th></tr></thead><tbody>'
+    el.innerHTML = '<div class="profile-table-wrap"><table>'
+      + '<thead><tr><th>Name</th><th>Default</th><th>Preview</th><th>Created</th><th>Updated</th><th>PDF</th><th></th></tr></thead><tbody>'
       + profiles.map(p => `
         <tr>
           <td style="font-weight:600">${escHtml(p.name || 'Untitled #' + p.id)}</td>
+          <td>${p.is_default ? '<span class="pill pill-ready">Default</span>' : ''}</td>
           <td><div class="jd-preview">${escHtml((p.skills_text || '').substring(0, 80))}</div></td>
-          <td style="font-size:0.8rem;color:var(--muted)">${fmtDate(p.updated_at)}</td>
-          <td><button class="btn btn-sm btn-muted" style="color:var(--red)" onclick="deleteProfile(${p.id})">Delete</button></td>
+          <td class="date-cell">${fmtDate(p.created_at)}</td>
+          <td class="date-cell">${fmtDate(p.updated_at)}</td>
+          <td>${p.pdf_path ? '<span class="status-msg">Saved</span>' : '<span class="status-msg">None</span>'}</td>
+          <td>
+            <div class="flex">
+              <button class="btn btn-sm btn-muted" onclick="startEditProfile(${p.id})">Edit</button>
+              <button class="btn btn-sm btn-muted danger-btn" onclick="deleteProfile(${p.id})">Delete</button>
+            </div>
+          </td>
         </tr>`).join('')
       + '</tbody></table></div>';
   } catch (e) {
@@ -189,6 +207,8 @@ function toggleAddForm(show) {
   if (!show) {
     document.getElementById('new-profile-name').value = '';
     document.getElementById('new-profile-pdf').value = '';
+    document.getElementById('new-profile-skills').value = '';
+    document.getElementById('new-profile-default').checked = false;
     document.getElementById('new-profile-filename').textContent = 'No file chosen';
   }
 }
@@ -197,18 +217,49 @@ function updateFilename(input) {
   document.getElementById('new-profile-filename').textContent = input.files[0]?.name || 'No file chosen';
 }
 
+async function previewNewProfilePdf() {
+  const file = document.getElementById('new-profile-pdf').files[0];
+  const errorEl = document.getElementById('add-profile-error');
+  const successEl = document.getElementById('add-profile-success');
+  errorEl.textContent = '';
+  successEl.textContent = '';
+  if (!file) { errorEl.textContent = 'Please choose a PDF file to preview.'; return; }
+
+  setAddProfileProgress(true, 'Extracting text...');
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/profiles/upload/preview', { method: 'POST', body: form });
+    if (!res.ok) { errorEl.innerHTML = UI.apiErrorBanner(res, body); return; }
+    document.getElementById('new-profile-skills').value = body.data?.skills_text || '';
+    successEl.textContent = 'Preview ready. Review the text before saving.';
+  } catch (e) {
+    errorEl.textContent = 'Network error: ' + e.message;
+  } finally {
+    setAddProfileProgress(false);
+  }
+}
+
 async function submitNewProfile() {
   const file = document.getElementById('new-profile-pdf').files[0];
   const name = document.getElementById('new-profile-name').value.trim() || null;
+  const skillsText = document.getElementById('new-profile-skills').value.trim();
+  const isDefault = document.getElementById('new-profile-default').checked;
   document.getElementById('add-profile-error').textContent = '';
   document.getElementById('add-profile-success').textContent = '';
-  if (!file) { document.getElementById('add-profile-error').textContent = 'Please choose a PDF file.'; return; }
-  document.getElementById('add-profile-progress').style.display = 'flex';
-  const form = new FormData();
-  form.append('file', file);
-  if (name) form.append('name', name);
+  if (!file && !skillsText) {
+    document.getElementById('add-profile-error').textContent = 'Preview a PDF or paste profile skills text.';
+    return;
+  }
+  setAddProfileProgress(true, file ? 'Saving profile and PDF...' : 'Saving profile...');
   try {
-    const { response: res, payload: body } = await apiFetch('/api/profiles/upload', { method: 'POST', body: form });
+    const request = file ? buildProfileUploadRequest(file, name, skillsText, isDefault) : {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, skills_text: skillsText, is_default: isDefault }),
+    };
+    const url = file ? '/api/profiles/upload' : '/api/profiles';
+    const { response: res, payload: body } = await apiFetch(url, request);
     if (!res.ok) { document.getElementById('add-profile-error').innerHTML = UI.apiErrorBanner(res, body); return; }
     document.getElementById('add-profile-success').textContent = 'Profile saved!';
     profileLoaded = true;
@@ -219,19 +270,85 @@ async function submitNewProfile() {
   } catch (e) {
     document.getElementById('add-profile-error').textContent = 'Network error: ' + e.message;
   } finally {
-    document.getElementById('add-profile-progress').style.display = 'none';
+    setAddProfileProgress(false);
   }
 }
 
 async function deleteProfile(id) {
-  if (!confirm('Delete this profile?')) return;
+  const profile = loadedProfiles.find(p => p.id === id);
   try {
+    const { response: impactRes, payload: impactBody } = await apiFetch('/api/profiles/' + id + '/delete-impact');
+    if (!impactRes.ok) { alert('Could not load delete impact.'); return; }
+    const impact = impactBody.data || {};
+    const message = 'Delete ' + profileLabel(profile || { id }) + '?\n\n'
+      + 'Linked evaluations: ' + (impact.job_analyses_count || 0) + '\n'
+      + 'Generated resumes: ' + (impact.generated_resumes_count || 0) + '\n\n'
+      + 'Deleting the profile keeps existing history rows, but they will no longer have an active profile.';
+    if (!confirm(message)) return;
     const { response: res } = await apiFetch('/api/profiles/' + id, { method: 'DELETE' });
     if (!res.ok) { alert('Delete failed.'); return; }
     loadProfile();
     checkProfile();
     loadSystemStatus();
   } catch (e) { alert('Network error: ' + e.message); }
+}
+
+function startEditProfile(id) {
+  const profile = loadedProfiles.find(p => p.id === id);
+  if (!profile) return;
+  document.getElementById('edit-profile-id').value = String(profile.id);
+  document.getElementById('edit-profile-name').value = profile.name || '';
+  document.getElementById('edit-profile-skills').value = profile.skills_text || '';
+  document.getElementById('edit-profile-default').checked = profile.is_default === true;
+  document.getElementById('edit-profile-error').textContent = '';
+  document.getElementById('edit-profile-success').textContent = '';
+  document.getElementById('edit-profile-card').style.display = 'block';
+}
+
+function cancelEditProfile() {
+  document.getElementById('edit-profile-card').style.display = 'none';
+  document.getElementById('edit-profile-error').textContent = '';
+  document.getElementById('edit-profile-success').textContent = '';
+}
+
+async function saveProfileEdit() {
+  const id = document.getElementById('edit-profile-id').value;
+  const name = document.getElementById('edit-profile-name').value.trim() || null;
+  const skillsText = document.getElementById('edit-profile-skills').value.trim();
+  const isDefault = document.getElementById('edit-profile-default').checked;
+  const errorEl = document.getElementById('edit-profile-error');
+  const successEl = document.getElementById('edit-profile-success');
+  errorEl.textContent = '';
+  successEl.textContent = '';
+  if (!skillsText) { errorEl.textContent = 'Skills text is required.'; return; }
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/profiles/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, skills_text: skillsText, is_default: isDefault }),
+    });
+    if (!res.ok) { errorEl.innerHTML = UI.apiErrorBanner(res, body); return; }
+    successEl.textContent = 'Profile updated.';
+    await loadProfile();
+    await checkProfile();
+    loadSystemStatus();
+  } catch (e) {
+    errorEl.textContent = 'Network error: ' + e.message;
+  }
+}
+
+function setAddProfileProgress(show, label) {
+  document.getElementById('add-profile-progress').style.display = show ? 'flex' : 'none';
+  if (label) document.getElementById('add-profile-progress-label').textContent = label;
+}
+
+function buildProfileUploadRequest(file, name, skillsText, isDefault) {
+  const form = new FormData();
+  form.append('file', file);
+  if (name) form.append('name', name);
+  if (skillsText) form.append('skills_text', skillsText);
+  form.append('is_default', isDefault ? 'true' : 'false');
+  return { method: 'POST', body: form };
 }
 
 // ---- Evaluate ----
@@ -593,6 +710,11 @@ function fmtStatus(s) {
   if (s === 'needs_tailoring') return 'Tailoring';
   if (s === 'skip') return 'Skipped';
   return s || '—';
+}
+
+function profileLabel(profile) {
+  if (!profile) return 'Default profile';
+  return escHtml(profile.name || 'Untitled #' + profile.id);
 }
 
 function escHtml(s) {

@@ -99,8 +99,17 @@ async function loadProfiles() {
         return;
     }
 
+    const defaultProfile = profiles.find((profile) => profile.is_default) || profiles[0];
+    appendOption(
+        profileSelect,
+        "",
+        `Default: ${defaultProfile.name || `Untitled #${defaultProfile.id}`}`,
+    );
     for (const profile of profiles) {
-        const label = profile.name || `Untitled #${profile.id}`;
+        const label = (
+            `${profile.name || `Untitled #${profile.id}`}`
+            + (profile.is_default ? " (default)" : "")
+        );
         appendOption(profileSelect, String(profile.id), label);
     }
 }
@@ -262,10 +271,6 @@ async function scoreSelectedListings() {
     batchResults.hidden = true;
     batchResults.innerHTML = "";
 
-    if (!profileId) {
-        batchStatus.textContent = "Choose a profile first.";
-        return;
-    }
     if (ids.length === 0) {
         batchStatus.textContent = "Select at least one listing.";
         return;
@@ -278,13 +283,13 @@ async function scoreSelectedListings() {
     scoreSelected.disabled = true;
     batchStatus.textContent = "Scoring selected listings...";
 
+    const requestBody = { job_listing_ids: ids };
+    if (profileId) requestBody.profile_id = Number(profileId);
+
     const { response, payload } = await safeApiFetch("/api/evaluate/by-listings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            profile_id: Number(profileId),
-            job_listing_ids: ids,
-        }),
+        body: JSON.stringify(requestBody),
     });
 
     scoreSelected.disabled = false;
@@ -356,10 +361,6 @@ async function scorePastedJd() {
     pasteResult.hidden = true;
     pasteResult.innerHTML = "";
 
-    if (!profileId) {
-        pasteStatus.textContent = "Choose a profile first.";
-        return;
-    }
     if (!jdText) {
         pasteStatus.textContent = "Paste a job description first.";
         return;
@@ -368,13 +369,13 @@ async function scorePastedJd() {
     scorePasted.disabled = true;
     pasteStatus.textContent = "Scoring pasted JD...";
 
+    const requestBody = { jd_text: jdText };
+    if (profileId) requestBody.profile_id = Number(profileId);
+
     const { response, payload } = await safeApiFetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            profile_id: Number(profileId),
-            jd_text: jdText,
-        }),
+        body: JSON.stringify(requestBody),
     });
 
     scorePasted.disabled = false;

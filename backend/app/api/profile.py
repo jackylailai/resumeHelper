@@ -14,11 +14,19 @@ from backend.app.api.envelope import error, success
 from backend.app.config import get_settings
 from backend.app.db import get_db
 from backend.app.models.baseline_profile import BaselineProfile
-from backend.app.schemas.profile import ProfileIn, ProfileOut, ProfileUpdateIn
+from backend.app.models.generated_resume import GeneratedResume
+from backend.app.models.job_analysis import JobAnalysis
+from backend.app.schemas.profile import (
+    ProfileDeleteImpactOut,
+    ProfileIn,
+    ProfileOut,
+    ProfilePdfPreviewOut,
+    ProfileUpdateIn,
+)
 from backend.app.services.evaluator_v2 import (
     create_profile,
     delete_profile,
-    get_latest_profile,
+    get_default_profile,
     get_profile,
     list_profiles,
     update_profile,
@@ -106,7 +114,7 @@ def list_profiles_endpoint(db: Session = Depends(get_db)) -> JSONResponse:
 @router.post("/profiles")
 def create_profile_endpoint(body: ProfileIn, db: Session = Depends(get_db)) -> JSONResponse:
     try:
-        profile = create_profile(db, body.skills_text, body.name)
+        profile = create_profile(db, body.skills_text, body.name, body.is_default)
     except ValueError as exc:
         return error("invalid_input", str(exc), status_code=400)
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
@@ -116,8 +124,35 @@ def create_profile_endpoint(body: ProfileIn, db: Session = Depends(get_db)) -> J
 def upload_profile_pdf(
     file: UploadFile = File(...),
     name: str | None = Form(None),
+    skills_text: str | None = Form(None),
+    is_default: bool = Form(False),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        return error("invalid_input", "Only PDF files are accepted", status_code=400)
+    try:
+        pdf_bytes = _read_pdf_upload(file)
+    except UploadTooLargeError as exc:
+        return _upload_too_large_response(exc)
+    try:
+        extracted_text = _extract_pdf_text(pdf_bytes)
+    except Exception as exc:
+        logger.error("PDF extraction failed: %s", exc, exc_info=True)
+        return error(
+            "pdf_error",
+            "Could not extract text from PDF. Please check the file format.",
+            status_code=422,
+        )
+    try:
+        profile = create_profile(db, skills_text or extracted_text, name, is_default)
+    except ValueError as exc:
+        return error("invalid_input", str(exc), status_code=400)
+    profile = _persist_pdf_for_profile(db, profile, pdf_bytes)
+    return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
+
+
+@router.post("/profiles/upload/preview")
+def preview_profile_pdf(file: UploadFile = File(...)) -> JSONResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return error("invalid_input", "Only PDF files are accepted", status_code=400)
     try:
@@ -133,12 +168,8 @@ def upload_profile_pdf(
             "Could not extract text from PDF. Please check the file format.",
             status_code=422,
         )
-    try:
-        profile = create_profile(db, skills_text, name)
-    except ValueError as exc:
-        return error("invalid_input", str(exc), status_code=400)
-    profile = _persist_pdf_for_profile(db, profile, pdf_bytes)
-    return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
+    out = ProfilePdfPreviewOut(filename=file.filename, skills_text=skills_text)
+    return success(out.model_dump(mode="json"))
 
 
 @router.get("/profiles/{profile_id}")
@@ -156,12 +187,37 @@ def update_profile_endpoint(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     try:
-        profile = update_profile(db, profile_id, body.skills_text, body.name)
+        profile = update_profile(
+            db,
+            profile_id,
+            body.skills_text,
+            body.name,
+            body.is_default,
+        )
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
     except ValueError as exc:
         return error("invalid_input", str(exc), status_code=400)
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
+
+
+@router.get("/profiles/{profile_id}/delete-impact")
+def profile_delete_impact(profile_id: int, db: Session = Depends(get_db)) -> JSONResponse:
+    if get_profile(db, profile_id) is None:
+        return error("not_found", f"profile {profile_id} not found", status_code=404)
+    job_count = db.query(JobAnalysis).filter(JobAnalysis.profile_id == profile_id).count()
+    resume_count = (
+        db.query(GeneratedResume)
+        .join(JobAnalysis, GeneratedResume.job_analysis_id == JobAnalysis.id)
+        .filter(JobAnalysis.profile_id == profile_id)
+        .count()
+    )
+    out = ProfileDeleteImpactOut(
+        profile_id=profile_id,
+        job_analyses_count=job_count,
+        generated_resumes_count=resume_count,
+    )
+    return success(out.model_dump(mode="json"))
 
 
 @router.delete("/profiles/{profile_id}")
@@ -180,7 +236,7 @@ def delete_profile_endpoint(profile_id: int, db: Session = Depends(get_db)) -> J
 @router.post("/profile")
 def set_profile_legacy(body: ProfileIn, db: Session = Depends(get_db)) -> JSONResponse:
     try:
-        profile = create_profile(db, body.skills_text, body.name)
+        profile = create_profile(db, body.skills_text, body.name, body.is_default)
     except ValueError as exc:
         logger.error("set_profile failed: %s", exc, exc_info=True)
         return error("invalid_input", str(exc), status_code=400)
@@ -213,7 +269,7 @@ def upload_profile_legacy(
 
 @router.get("/profile")
 def get_profile_legacy(db: Session = Depends(get_db)) -> JSONResponse:
-    profile = get_latest_profile(db)
+    profile = get_default_profile(db)
     if profile is None:
         return error("not_found", "No baseline profile set yet", status_code=404)
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))

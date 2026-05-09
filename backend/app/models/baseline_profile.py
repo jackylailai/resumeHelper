@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db import Base
@@ -19,6 +19,7 @@ class BaselineProfile(Base):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     skills_text: Mapped[str] = mapped_column(Text, nullable=False)
     pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=_now
     )
