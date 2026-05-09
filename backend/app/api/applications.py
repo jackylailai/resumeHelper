@@ -42,7 +42,10 @@ ApplicationSortBy = Literal[
 SortDirection = Literal["asc", "desc"]
 
 
-def _latest_resume(db: Session, job_analysis_id: uuid.UUID | None) -> GeneratedResume | None:
+def _latest_resume(
+    db: Session,
+    job_analysis_id: uuid.UUID | None,
+) -> GeneratedResume | None:
     if job_analysis_id is None:
         return None
     return (
@@ -59,16 +62,31 @@ def _load_links(
     job_listing_id: uuid.UUID | None,
     job_analysis_id: uuid.UUID | None,
     generated_resume_id: uuid.UUID | None,
-) -> tuple[JobListing | None, JobAnalysis | None, GeneratedResume | None] | JSONResponse:
+) -> (
+    tuple[JobListing | None, JobAnalysis | None, GeneratedResume | None]
+    | JSONResponse
+):
     listing = db.get(JobListing, job_listing_id) if job_listing_id else None
     if job_listing_id and listing is None:
-        return error("not_found", f"Job listing {job_listing_id} not found", status_code=404)
+        return error(
+            "not_found",
+            f"Job listing {job_listing_id} not found",
+            status_code=404,
+        )
 
     analysis = db.get(JobAnalysis, job_analysis_id) if job_analysis_id else None
     if job_analysis_id and analysis is None:
-        return error("not_found", f"Job analysis {job_analysis_id} not found", status_code=404)
+        return error(
+            "not_found",
+            f"Job analysis {job_analysis_id} not found",
+            status_code=404,
+        )
 
-    resume = db.get(GeneratedResume, generated_resume_id) if generated_resume_id else None
+    resume = (
+        db.get(GeneratedResume, generated_resume_id)
+        if generated_resume_id
+        else None
+    )
     if generated_resume_id and resume is None:
         return error(
             "not_found",
@@ -140,12 +158,22 @@ def _hydrate(db: Session, apps: list[Application]) -> list[dict]:
     resume_ids = [app.generated_resume_id for app in apps if app.generated_resume_id]
 
     listings = (
-        {row.id: row for row in db.query(JobListing).filter(JobListing.id.in_(listing_ids)).all()}
+        {
+            row.id: row
+            for row in db.query(JobListing)
+            .filter(JobListing.id.in_(listing_ids))
+            .all()
+        }
         if listing_ids
         else {}
     )
     analyses = (
-        {row.id: row for row in db.query(JobAnalysis).filter(JobAnalysis.id.in_(analysis_ids)).all()}
+        {
+            row.id: row
+            for row in db.query(JobAnalysis)
+            .filter(JobAnalysis.id.in_(analysis_ids))
+            .all()
+        }
         if analysis_ids
         else {}
     )
@@ -225,28 +253,60 @@ def list_applications(
     ascending = sort_dir == "asc"
     if sort_by in {"company", "title"}:
         if not joined_listing:
-            query = query.outerjoin(JobListing, Application.job_listing_id == JobListing.id)
+            query = query.outerjoin(
+                JobListing,
+                Application.job_listing_id == JobListing.id,
+            )
         column = Application.company if sort_by == "company" else Application.title
-        listing_column = JobListing.company if sort_by == "company" else JobListing.title
+        listing_column = (
+            JobListing.company if sort_by == "company" else JobListing.title
+        )
         order_expr = func.lower(func.coalesce(column, listing_column))
         order = order_expr.asc() if ascending else order_expr.desc()
-        order_by = [order.nullslast(), Application.updated_at.desc(), Application.id.asc()]
+        order_by = [
+            order.nullslast(),
+            Application.updated_at.desc(),
+            Application.id.asc(),
+        ]
     elif sort_by == "score":
         if not joined_analysis:
-            query = query.outerjoin(JobAnalysis, Application.job_analysis_id == JobAnalysis.id)
+            query = query.outerjoin(
+                JobAnalysis,
+                Application.job_analysis_id == JobAnalysis.id,
+            )
         order = JobAnalysis.score.asc() if ascending else JobAnalysis.score.desc()
-        order_by = [order.nullslast(), Application.updated_at.desc(), Application.id.asc()]
+        order_by = [
+            order.nullslast(),
+            Application.updated_at.desc(),
+            Application.id.asc(),
+        ]
     elif sort_by == "follow_up_date":
-        order = Application.follow_up_date.asc() if ascending else Application.follow_up_date.desc()
-        order_by = [order.nullslast(), Application.updated_at.desc(), Application.id.asc()]
+        order = (
+            Application.follow_up_date.asc()
+            if ascending
+            else Application.follow_up_date.desc()
+        )
+        order_by = [
+            order.nullslast(),
+            Application.updated_at.desc(),
+            Application.id.asc(),
+        ]
     elif sort_by == "status":
         order = Application.status.asc() if ascending else Application.status.desc()
         order_by = [order, Application.updated_at.desc(), Application.id.asc()]
     elif sort_by == "created_at":
-        order = Application.created_at.asc() if ascending else Application.created_at.desc()
+        order = (
+            Application.created_at.asc()
+            if ascending
+            else Application.created_at.desc()
+        )
         order_by = [order, Application.id.asc()]
     else:
-        order = Application.updated_at.asc() if ascending else Application.updated_at.desc()
+        order = (
+            Application.updated_at.asc()
+            if ascending
+            else Application.updated_at.desc()
+        )
         order_by = [order, Application.id.asc()]
 
     apps = query.order_by(*order_by).offset(offset).limit(limit).all()
@@ -265,8 +325,15 @@ def list_applications(
 
 
 @router.post("/applications")
-def create_application(body: ApplicationCreateIn, db: Session = Depends(get_db)) -> JSONResponse:
-    has_link = any([body.job_listing_id, body.job_analysis_id, body.generated_resume_id])
+def create_application(
+    body: ApplicationCreateIn,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    has_link = any([
+        body.job_listing_id,
+        body.job_analysis_id,
+        body.generated_resume_id,
+    ])
     has_manual_label = bool((body.company or "").strip() and (body.title or "").strip())
     if not has_link and not has_manual_label:
         return error(
@@ -319,10 +386,17 @@ def create_application(body: ApplicationCreateIn, db: Session = Depends(get_db))
 
 
 @router.get("/applications/{application_id}")
-def get_application(application_id: uuid.UUID, db: Session = Depends(get_db)) -> JSONResponse:
+def get_application(
+    application_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
     app = db.get(Application, application_id)
     if app is None:
-        return error("not_found", f"Application {application_id} not found", status_code=404)
+        return error(
+            "not_found",
+            f"Application {application_id} not found",
+            status_code=404,
+        )
     return success(_hydrate(db, [app])[0])
 
 
@@ -334,9 +408,17 @@ def update_application(
 ) -> JSONResponse:
     app = db.get(Application, application_id)
     if app is None:
-        return error("not_found", f"Application {application_id} not found", status_code=404)
+        return error(
+            "not_found",
+            f"Application {application_id} not found",
+            status_code=404,
+        )
 
-    job_listing_id = body.job_listing_id if "job_listing_id" in body.model_fields_set else app.job_listing_id
+    job_listing_id = (
+        body.job_listing_id
+        if "job_listing_id" in body.model_fields_set
+        else app.job_listing_id
+    )
     job_analysis_id = (
         body.job_analysis_id
         if "job_analysis_id" in body.model_fields_set
@@ -360,7 +442,14 @@ def update_application(
     app.job_listing_id = listing.id if listing else None
     app.job_analysis_id = analysis.id if analysis else None
     app.generated_resume_id = resume.id if resume else None
-    for field in ("company", "title", "source_url", "status", "follow_up_date", "notes"):
+    for field in (
+        "company",
+        "title",
+        "source_url",
+        "status",
+        "follow_up_date",
+        "notes",
+    ):
         if field in body.model_fields_set:
             value = getattr(body, field)
             if isinstance(value, str):
@@ -373,10 +462,17 @@ def update_application(
 
 
 @router.delete("/applications/{application_id}")
-def delete_application(application_id: uuid.UUID, db: Session = Depends(get_db)) -> JSONResponse:
+def delete_application(
+    application_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
     app = db.get(Application, application_id)
     if app is None:
-        return error("not_found", f"Application {application_id} not found", status_code=404)
+        return error(
+            "not_found",
+            f"Application {application_id} not found",
+            status_code=404,
+        )
     db.delete(app)
     db.commit()
     return success({"deleted": True, "id": str(application_id)})
