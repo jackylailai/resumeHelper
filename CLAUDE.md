@@ -44,6 +44,16 @@ FastAPI + PostgreSQL (via SQLAlchemy/Alembic) + Claude API (anthropic SDK) + Doc
 ## Python version
 **3.11+ required.** Ruff target is `py311`, mypy `python_version = "3.11"`, Dockerfile uses `python:3.11-slim`, CI runs 3.11. SQLAlchemy 2.x evaluates `Mapped[...]` annotations at runtime, so PEP 604 unions and `datetime.UTC` would crash on 3.9/3.10 — there is no fallback path.
 
+## Workflow — Plan / Execute / Test / Review (REQUIRED)
+**Hard rule for any non-trivial change.** Follow the four phases in order, no skipping, no reordering. Surface each phase in user-facing output so the user can see the rule is being followed.
+
+1. **Plan** — state what's going to change and in what order before touching code. If the user mentioned parallel work elsewhere, sync first (`git fetch`, compare with main).
+2. **Execute** — make the code changes on a feature branch.
+3. **Test** — run `./scripts/test.sh` (or targeted `-k`) and confirm green before claiming done.
+4. **Review** — re-read the diff, check for scope creep / regressions, simplify.
+
+Role definitions and detailed checklists live in `agent.md` (Planner / Executor / Testing / Reviewer).
+
 ## PR workflow (REQUIRED)
 **NEVER push directly to `main` or `develop`.** Always work on a feature branch and open a PR.
 Branch naming: `fix/<short-desc>`, `feat/<short-desc>`.
