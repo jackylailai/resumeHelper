@@ -23,6 +23,17 @@
 
 <!-- EVALUATE -->
 <div id="tab-evaluate" class="page active">
+  <section id="system-status" class="system-status" aria-live="polite">
+    <div class="flex-between system-status-header">
+      <div>
+        <span class="section-title system-status-title">System Status</span>
+        <div id="system-status-summary" class="system-status-summary">Checking readiness...</div>
+      </div>
+      <button class="btn btn-sm btn-muted" onclick="loadSystemStatus()">Refresh</button>
+    </div>
+    <div id="system-status-body" class="status-msg">Loading...</div>
+  </section>
+
   <div id="no-profile-notice" class="notice" style="display:none">
     No baseline profile set. Go to the <strong>Profile</strong> tab to add your resume/skills first.
   </div>
