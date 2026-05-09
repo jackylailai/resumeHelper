@@ -115,6 +115,31 @@ TDD: write tests RED before implementation.
 - [ ] `app/cli.py scrape --source ... --keyword ... --limit N`
 - [ ] `POST /api/scrape/run`, `GET /api/scrape/status`
 
+### P2.5-T07 · JD database browser ✅ (PR #62)
+- [x] `GET /api/job-listings` — list with `q` / `source` / `analyzed` / pagination
+- [x] `static/jobs.html` + `static/jobs.js` — browse + filter scraped JDs
+
+### P2.5-T08 · Batch JD scoring from DB ✅ (PR #64)
+- [x] `POST /api/evaluate/by-listings` — score selected listings, link `JobListing.job_analysis_id` back, surface per-row errors
+- [x] `tests/integration/v2/test_evaluate_by_listings.py`
+- [x] JD length guard (`max_jd_chars`) on `/api/evaluate`, `/api/evaluate/bulk`, `/api/evaluate/by-listings`
+
+### P2.5-T09 · LLM + upload hardening ✅ (PR #65, closes #48)
+- [x] `LLMUnavailableError` / `LLMInvalidOutputError` mapped to 503 / 502 in evaluate endpoints
+- [x] `_read_pdf_upload` enforces `max_upload_bytes` for both `/api/profile/upload` and `/api/profiles/upload`
+- [x] `services/llm/factory.py` — `LLM_BACKEND` env selects `claude_cli` vs `anthropic` vs `fake`
+- [x] `tests/integration/v2/test_migrations.py` — alembic upgrade head smoke test
+- [x] `.env.example` documents the LLM_BACKEND choice
+
+### P2.5-T10 · Generated resume PDF download ✅ (PR #80)
+- [x] `GET /api/generated-resumes/{id}/pdf` — generate-on-demand and serve via `FileResponse`
+- [x] `services/pdf.py` writes PDFs under `STORAGE_DIR/generated/`
+- [x] `tests/unit/test_pdf.py`
+
+### P2.5-T11 · Restore app startup + preserve callback pdf_url ✅ (PR #81)
+- [x] `download_generated_resume_pdf` decorator gets `response_model=None` so FastAPI does not try to build a Pydantic response model from `FileResponse | JSONResponse` (was crashing app construction → 61 integration tests in ERROR)
+- [x] `POST /api/callback` only generates + points at a local PDF when the caller did not supply `pdf_url` — restores the contract for externally-hosted PDFs
+
 ---
 
 ## Phase 3 — Roadmap (future)
