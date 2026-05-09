@@ -81,7 +81,7 @@ class Settings(BaseSettings):
         return ",".join(origins) if origins else "*"
 
     @model_validator(mode="after")
-    def validate_production_config(self) -> "Settings":
+    def validate_production_config(self) -> Settings:
         if self.environment == "production" and "*" in self.cors_origins:
             raise ValueError("CORS_ALLOWED_ORIGINS cannot include '*' in production")
         if self.management_auth_enabled:
