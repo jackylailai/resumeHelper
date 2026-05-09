@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import base64
-import io
 import json
-import logging
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from backend.app import main as app_main
 from backend.app.config import Settings, get_settings
 from backend.app.main import create_app
 
@@ -102,25 +101,24 @@ def test_health_distinguishes_liveness_and_readiness(client: TestClient):
     assert set(data["readiness"]["checks"]) == {"db", "llm"}
 
 
-def test_request_logs_are_structured(client: TestClient):
-    log_stream = io.StringIO()
-    handler = logging.StreamHandler(log_stream)
-    app_logger = logging.getLogger("backend.app.main")
-    previous_level = app_logger.level
-    app_logger.setLevel(logging.INFO)
-    app_logger.addHandler(handler)
+def test_request_logs_are_structured(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    messages: list[str] = []
 
-    try:
-        response = client.get("/api/health")
-    finally:
-        app_logger.removeHandler(handler)
-        app_logger.setLevel(previous_level)
-        handler.close()
+    def capture_info(message: object, *args: object, **_kwargs: object) -> None:
+        text = str(message)
+        messages.append(text % args if args else text)
+
+    monkeypatch.setattr(app_main.logger, "info", capture_info)
+
+    response = client.get("/api/health")
 
     records = [
-        json.loads(line)
-        for line in log_stream.getvalue().splitlines()
-        if line.startswith("{")
+        json.loads(message)
+        for message in messages
+        if message.startswith("{")
     ]
     assert records
     log = records[-1]
