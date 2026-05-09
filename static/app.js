@@ -97,7 +97,7 @@ function healthActionHtml(action) {
   const kind = action.kind || '';
   const message = escHtml(action.message || '');
   if (kind === 'profile') {
-    return '<div class="health-action"><span>' + message + '</span><button class="btn btn-sm btn-primary" onclick="switchTab(\'profile\'); toggleAddForm(true)">Add Profile</button></div>';
+    return '<div class="health-action"><span>' + message + '</span><button class="btn btn-sm btn-primary" onclick="switchTab(\'profile\'); toggleAddForm(true)">Set Up Profile</button></div>';
   }
   if (kind === 'job_listings') {
     return '<div class="health-action"><span>' + message + '</span><a class="btn btn-sm btn-muted" href="/jobs.html">JD Database</a></div>';
