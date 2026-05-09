@@ -91,7 +91,7 @@ def test_evaluate_by_listings_uses_default_profile_when_omitted(
     listing_response = client.get(f"/api/job-listings/{listing.id}")
     listing_data = listing_response.json()["data"]
     assert listing_data["analyzed"] is True
-    assert profile["is_default"] is True
+    assert profile["is_default"] is False
 
 
 @pytest.mark.integration

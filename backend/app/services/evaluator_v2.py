@@ -72,11 +72,10 @@ def create_profile(
     is_default: bool = False,
 ) -> BaselineProfile:
     skills_text = skills_text.replace("\x00", "")
-    should_default = is_default or db.query(BaselineProfile.id).first() is None
-    profile = BaselineProfile(skills_text=skills_text, name=name, is_default=should_default)
+    profile = BaselineProfile(skills_text=skills_text, name=name, is_default=is_default)
     db.add(profile)
     db.flush()
-    if should_default:
+    if is_default:
         _set_only_default(db, profile)
     db.commit()
     db.refresh(profile)
@@ -100,15 +99,7 @@ def update_profile(
     if is_default is True:
         _set_only_default(db, profile)
     elif is_default is False and profile.is_default:
-        remaining_default = (
-            db.query(BaselineProfile)
-            .filter(BaselineProfile.id != profile_id)
-            .order_by(BaselineProfile.id.desc())
-            .first()
-        )
         profile.is_default = False
-        if remaining_default is not None:
-            remaining_default.is_default = True
     profile.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(profile)
@@ -119,17 +110,7 @@ def delete_profile(db: Session, profile_id: int) -> None:
     profile = db.get(BaselineProfile, profile_id)
     if profile is None:
         raise LookupError(f"profile {profile_id} not found")
-    was_default = profile.is_default
     db.delete(profile)
-    if was_default:
-        replacement = (
-            db.query(BaselineProfile)
-            .filter(BaselineProfile.id != profile_id)
-            .order_by(BaselineProfile.id.desc())
-            .first()
-        )
-        if replacement is not None:
-            replacement.is_default = True
     db.commit()
 
 

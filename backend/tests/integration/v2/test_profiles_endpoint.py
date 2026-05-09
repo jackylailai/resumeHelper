@@ -25,7 +25,7 @@ def test_create_profile(client: TestClient):
     assert d["skills_text"] == "Python, Docker"
     assert d["name"] == "Backend"
     assert d["id"] is not None
-    assert d["is_default"] is True
+    assert d["is_default"] is False
     assert d["created_at"] is not None
     assert d["updated_at"] is not None
     assert d["pdf_path"] is None
@@ -68,7 +68,7 @@ def test_update_profile(client: TestClient):
 def test_set_default_profile(client: TestClient):
     p1 = client.post("/api/profiles", json={"skills_text": "Python", "name": "P1"}).json()["data"]
     p2 = client.post("/api/profiles", json={"skills_text": "Java", "name": "P2"}).json()["data"]
-    assert p1["is_default"] is True
+    assert p1["is_default"] is False
     assert p2["is_default"] is False
 
     r = client.put(f"/api/profiles/{p2['id']}", json={"is_default": True})
@@ -254,9 +254,19 @@ def test_legacy_post_profile_still_works(client: TestClient):
 
 
 @pytest.mark.integration
-def test_legacy_get_profile_returns_default(client: TestClient):
+def test_legacy_get_profile_returns_latest_without_explicit_default(client: TestClient):
     client.post("/api/profiles", json={"skills_text": "First"})
     client.post("/api/profiles", json={"skills_text": "Second"})
+    r = client.get("/api/profile")
+    assert r.status_code == 200
+    assert r.json()["data"]["skills_text"] == "Second"
+
+
+@pytest.mark.integration
+def test_legacy_get_profile_returns_explicit_default(client: TestClient):
+    p1 = client.post("/api/profiles", json={"skills_text": "First"}).json()["data"]
+    client.post("/api/profiles", json={"skills_text": "Second"})
+    client.put(f"/api/profiles/{p1['id']}", json={"is_default": True})
     r = client.get("/api/profile")
     assert r.status_code == 200
     assert r.json()["data"]["skills_text"] == "First"

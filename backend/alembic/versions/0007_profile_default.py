@@ -23,13 +23,6 @@ def upgrade() -> None:
             server_default=sa.false(),
         ),
     )
-    op.execute(
-        """
-        UPDATE baseline_profile
-        SET is_default = true
-        WHERE id = (SELECT id FROM baseline_profile ORDER BY id DESC LIMIT 1)
-        """
-    )
     op.alter_column("baseline_profile", "is_default", server_default=None)
 
 
