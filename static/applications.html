@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Applications - AI Career Intelligence System</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="wrap header-row">
+            <div>
+                <h1>Applications</h1>
+                <p class="sub">Track opportunities from planned through offer.</p>
+            </div>
+        </div>
+    </header>
+
+    <nav class="tabs app-tabs" aria-label="Primary">
+        <a class="tab-btn" href="/#evaluate">Evaluate</a>
+        <a class="tab-btn" href="/jobs.html">JD Database</a>
+        <a class="tab-btn active" href="/applications.html" aria-current="page">Applications</a>
+        <a class="tab-btn" href="/#history">History</a>
+        <a class="tab-btn" href="/#submittable">Submittable</a>
+        <a class="tab-btn" href="/#profile">Profile</a>
+    </nav>
+
+    <main class="wrap">
+        <section class="panel">
+            <form id="application-filters" class="tracker-filters">
+                <label>
+                    Search
+                    <input id="q" name="q" type="search" placeholder="Company, title, notes" />
+                </label>
+                <label>
+                    Status
+                    <select id="status" name="status">
+                        <option value="">All</option>
+                        <option value="planned">Planned</option>
+                        <option value="applied">Applied</option>
+                        <option value="interviewing">Interviewing</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="offer">Offer</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                </label>
+                <label>
+                    Sort by
+                    <select id="sort-by" name="sort_by">
+                        <option value="updated_at">Updated</option>
+                        <option value="follow_up_date">Follow-up</option>
+                        <option value="score">Score</option>
+                        <option value="company">Company</option>
+                        <option value="title">Title</option>
+                        <option value="status">Status</option>
+                        <option value="created_at">Created</option>
+                    </select>
+                </label>
+                <label>
+                    Direction
+                    <select id="sort-dir" name="sort_dir">
+                        <option value="desc">Descending</option>
+                        <option value="asc">Ascending</option>
+                    </select>
+                </label>
+                <button type="submit">Search</button>
+            </form>
+        </section>
+
+        <section class="panel tracker-panel">
+            <div class="list-header">
+                <h2>Applications</h2>
+                <div class="list-counts">
+                    <span id="result-count" class="muted"></span>
+                    <div class="pagination-controls" aria-label="Applications pagination">
+                        <button id="prev-page" type="button">Previous</button>
+                        <span id="page-range" class="muted"></span>
+                        <button id="next-page" type="button">Next</button>
+                    </div>
+                </div>
+            </div>
+            <div id="tracker-status" class="muted" aria-live="polite"></div>
+            <div class="tracker-table-wrap">
+                <table class="tracker-table">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Title</th>
+                            <th>Score</th>
+                            <th>PDF</th>
+                            <th>Status</th>
+                            <th>Follow-up</th>
+                        </tr>
+                    </thead>
+                    <tbody id="applications-body">
+                        <tr><td colspan="6" class="empty-row">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/shared.js" defer></script>
+    <script src="/applications.js" defer></script>
+</body>
+</html>
