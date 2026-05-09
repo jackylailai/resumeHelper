@@ -15,6 +15,8 @@ const pasteJd = document.getElementById("paste-jd");
 const scorePasted = document.getElementById("score-pasted");
 const pasteStatus = document.getElementById("paste-status");
 const pasteResult = document.getElementById("paste-result");
+const trackListing = document.getElementById("track-listing");
+const trackStatus = document.getElementById("track-status");
 const prevPage = document.getElementById("prev-page");
 const nextPage = document.getElementById("next-page");
 const pageRange = document.getElementById("page-range");
@@ -52,6 +54,10 @@ scoreSelected.addEventListener("click", async () => {
 
 scorePasted.addEventListener("click", async () => {
     await scorePastedJd();
+});
+
+trackListing.addEventListener("click", async () => {
+    await addSelectedListingToTracker();
 });
 
 prevPage.addEventListener("click", async () => {
@@ -445,6 +451,34 @@ async function loadDetail(id) {
     const link = document.getElementById("detail-url");
     link.href = listing.url;
     link.hidden = !listing.url;
+    trackStatus.textContent = "";
+    trackListing.disabled = false;
+}
+
+async function addSelectedListingToTracker() {
+    if (!selectedListingId) return;
+
+    trackListing.disabled = true;
+    trackStatus.textContent = "Adding to tracker...";
+    const { response, payload } = await safeApiFetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            job_listing_id: selectedListingId,
+            status: "planned",
+        }),
+    });
+
+    if (!response.ok) {
+        trackStatus.textContent = formatError(response, payload);
+        trackListing.disabled = false;
+        return;
+    }
+
+    trackStatus.textContent = payload.meta?.existing
+        ? "Already tracked; tracker entry updated."
+        : "Added to tracker.";
+    trackListing.disabled = false;
 }
 
 function listingStatusText(listing) {

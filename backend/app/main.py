@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.app.api.applications import router as applications_router
 from backend.app.api.envelope import error, reset_request_id, set_request_id
 from backend.app.api.evaluate import router as evaluate_router
 from backend.app.api.health import router as health_router
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(profile_router, prefix="/api")
     app.include_router(evaluate_router, prefix="/api")
     app.include_router(job_listings_router, prefix="/api")
+    app.include_router(applications_router, prefix="/api")
 
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
