@@ -35,9 +35,12 @@ Two ways to run the FastAPI app. Pick by which LLM credential you have:
 | Mode | Command | When to use |
 |---|---|---|
 | **Host (recommended for dev)** | `scripts/restart-app.sh` — uvicorn directly on host | You have `claude login` on your mac. Host's `claude` CLI is auto-picked up. No API key needed. |
-| **Container** | `docker compose -f docker-compose.app.yml up -d` | You only have `ANTHROPIC_API_KEY`. Set `LLM_BACKEND=anthropic` in `.env`. |
+| **Container w/ subscription token** | `docker compose -f docker-compose.yml -f docker-compose.app.yml up -d app` | Run `claude setup-token` on host, paste the printed token into `.env` as `CLAUDE_CODE_OAUTH_TOKEN=...`, leave `ANTHROPIC_API_KEY` empty. Verified by `GET /api/debug/claude-cli-ping` (issue #100). |
+| **Container w/ API key** | same compose command | Set `ANTHROPIC_API_KEY` in `.env` and `LLM_BACKEND=anthropic`. |
 
-The container can't reach the macOS Keychain where `claude` CLI stores its session, so `claude_cli` mode does NOT work inside the container. Either use host mode, or switch the container to API-key mode.
+The container reads `CLAUDE_CODE_OAUTH_TOKEN` instead of the macOS Keychain — so do **not** bind-mount `~/.claude` or `~/.claude.json` from the host (the container CLI will race the host's Claude Code and corrupt the host config). The token is long-lived; revoke at console.anthropic.com if leaked.
+
+Smoke test (non-prod only): `curl http://localhost:8000/api/debug/claude-cli-ping` — expects `ok=true, returncode=0, stdout="PONG\n"`. Each invocation cold-starts the CLI subprocess, so latency is ~4-10s; this is inherent to `claude_cli` mode and matches host behaviour.
 
 `docker compose up -d` (default `docker-compose.yml`) only brings up `postgres` — the DB is shared by both modes via `~/resumeHelper_data` bind mount.
 
