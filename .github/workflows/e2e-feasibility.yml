@@ -1,0 +1,93 @@
+name: E2E feasibility (Playwright)
+
+# Feasibility prototype — proves we can drive the UI in CI and surface
+# screenshots back to the PR via artifacts. Not yet a full E2E suite;
+# see the corresponding GitHub issue for the wider plan.
+
+on:
+  pull_request:
+    paths:
+      - "tools/e2e/**"
+      - ".github/workflows/e2e-feasibility.yml"
+      - "static/**"
+      - "backend/**"
+  workflow_dispatch: {}
+
+jobs:
+  e2e:
+    name: Playwright demo + screenshot artifacts
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      LLM_BACKEND: fake
+      BASE_URL: http://localhost:8001
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+
+      - name: Install Playwright + Chromium
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Apply database migrations
+        run: python -m alembic -c backend/alembic.ini upgrade head
+
+      - name: Start FastAPI in background
+        run: |
+          nohup python -m uvicorn backend.app.main:app --port 8001 \
+            > /tmp/uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf "$BASE_URL/api/health" > /dev/null; then
+              echo "app up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "app failed to start"
+          cat /tmp/uvicorn.log
+          exit 1
+
+      - name: Run Playwright demo
+        run: python tools/e2e/demo_evaluate_flow.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: tools/e2e/screenshots/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload uvicorn log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uvicorn-log
+          path: /tmp/uvicorn.log
+          if-no-files-found: ignore

@@ -26,6 +26,9 @@ credentials.json
 backend/storage/
 storage/
 
+# Local Playwright screenshots (CI uploads its own as artifacts)
+tools/e2e/screenshots/
+
 # PostgreSQL data (stored outside project)
 postgres_data/
 
