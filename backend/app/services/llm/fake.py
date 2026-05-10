@@ -58,6 +58,7 @@ class FakeLLMClient:
         jd_text: str,
         gaps: list[str],
         score: int,
+        structured_data: dict | None = None,
     ) -> dict:
         """Fake tailoring — returns deterministic output for tests."""
         return {
@@ -91,3 +92,21 @@ class FakeLLMClient:
             "</body></html>"
         )
         return {"html_content": html, "prompt_version": "beautify-fake-v1"}
+
+    def extract_structured(self, source_text: str) -> dict:
+        """Fake structured extraction — deterministic for tests."""
+        return {
+            "personal": {"name": "Fake Candidate"},
+            "summary": f"Fake summary derived from {len(source_text)} chars.",
+            "work_experience": [
+                {
+                    "employer": "FakeCorp",
+                    "title": "Software Engineer",
+                    "start_date": "2023-01",
+                    "is_current": True,
+                    "achievements": ["Did fake things", "Wrote fake tests"],
+                }
+            ],
+            "skills": {"languages": ["Python"]},
+            "_source_chars": len(source_text),
+        }

@@ -18,7 +18,14 @@ Hard rules — read carefully:
 
 7. **Output**: clean Markdown that can be copied directly. No code fences. No preamble.
 
-Candidate baseline profile (source of truth):
+Candidate structured data (canonical machine-readable facts — when present,
+this is the **authoritative** source for dates, employer names, metrics,
+education, certifications, and language scores):
+<structured_data>
+{{STRUCTURED_DATA}}
+</structured_data>
+
+Candidate baseline profile (free-form fallback / narrative source):
 <baseline_skills>
 {{BASELINE_SKILLS}}
 </baseline_skills>
@@ -27,5 +34,10 @@ Target job description:
 <job_description>
 {{JOB_DESCRIPTION}}
 </job_description>
+
+When structured_data is present (not "(none ...)"), pull every concrete fact
+from it. Use baseline_skills only for narrative tone / additional context that
+isn't captured in the structured form. When structured_data is absent, use
+baseline_skills as the single source of truth.
 
 Generate the tailored resume in Markdown:

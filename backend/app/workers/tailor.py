@@ -69,9 +69,10 @@ def run_tailoring(
             return
 
         baseline_text = baseline.skills_text
+        structured_data = baseline.structured_data
 
         try:
-            result = _call_tailor_llm(llm, job, baseline_text)
+            result = _call_tailor_llm(llm, job, baseline_text, structured_data)
         except Exception as exc:
             logger.error("tailor_llm_failed job_id=%s error=%s", job_analysis_id, exc)
             return
@@ -102,19 +103,31 @@ def run_tailoring(
         )
 
 
-def _call_tailor_llm(llm: LLMClient, job: JobAnalysis, baseline_text: str = "") -> dict:
+def _call_tailor_llm(
+    llm: LLMClient,
+    job: JobAnalysis,
+    baseline_text: str = "",
+    structured_data: dict | None = None,
+) -> dict:
     """Call the LLM to produce tailoring suggestions and a tailored resume.
 
     Uses the LLMClient's `tailor` method if available (AnthropicLLMClient),
     otherwise falls back to a synthetic result.
     """
     if hasattr(llm, "tailor"):
-        return llm.tailor(  # type: ignore[union-attr]
-            baseline_text=baseline_text,
-            jd_text=job.jd_full_text,
-            gaps=job.gaps or [],
-            score=job.score or 0,
-        )
+        kwargs = {
+            "baseline_text": baseline_text,
+            "jd_text": job.jd_full_text,
+            "gaps": job.gaps or [],
+            "score": job.score or 0,
+        }
+        # Pass structured_data only if the client signature accepts it — keeps
+        # FakeLLMClient happy when called without structured input.
+        import inspect
+        sig = inspect.signature(llm.tailor)  # type: ignore[union-attr]
+        if "structured_data" in sig.parameters:
+            kwargs["structured_data"] = structured_data
+        return llm.tailor(**kwargs)  # type: ignore[union-attr]
     # Fallback for any LLMClient without tailor method
     logger.warning("tailor_llm_no_tailor_method using fallback")
     return {

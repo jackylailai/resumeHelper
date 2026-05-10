@@ -302,9 +302,92 @@ function startEditProfile(id) {
   document.getElementById('edit-profile-name').value = profile.name || '';
   document.getElementById('edit-profile-skills').value = profile.skills_text || '';
   document.getElementById('edit-profile-default').checked = profile.is_default === true;
+  const structuredEl = document.getElementById('edit-profile-structured');
+  if (structuredEl) {
+    structuredEl.value = profile.structured_data
+      ? JSON.stringify(profile.structured_data, null, 2)
+      : '';
+  }
   document.getElementById('edit-profile-error').textContent = '';
   document.getElementById('edit-profile-success').textContent = '';
+  const statusEl = document.getElementById('structured-status');
+  if (statusEl) {
+    statusEl.textContent = profile.structured_data
+      ? 'Loaded existing structured_data — edit and Save, or click Extract to overwrite from skills_text.'
+      : 'Tailor pulls dates / metrics / sections from this when present. Use "Extract from Skills" to auto-fill via LLM (~30s).';
+    statusEl.className = 'status-msg';
+  }
   document.getElementById('edit-profile-card').style.display = 'block';
+}
+
+async function saveStructured() {
+  const id = document.getElementById('edit-profile-id').value;
+  const raw = document.getElementById('edit-profile-structured').value.trim();
+  const statusEl = document.getElementById('structured-status');
+  if (!id) return;
+  let payload;
+  if (!raw) {
+    payload = {};
+  } else {
+    try {
+      payload = JSON.parse(raw);
+    } catch (e) {
+      statusEl.textContent = 'Invalid JSON: ' + e.message;
+      statusEl.className = 'status-msg readiness-fail';
+      return;
+    }
+  }
+  statusEl.textContent = 'Saving...';
+  statusEl.className = 'status-msg';
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/profiles/' + id + '/structured', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      statusEl.textContent = 'Save failed: ' + (body?.error?.message || ('HTTP ' + res.status));
+      statusEl.className = 'status-msg readiness-fail';
+      return;
+    }
+    statusEl.textContent = 'Structured data saved.';
+    statusEl.className = 'status-msg readiness-pass';
+    await loadProfile();
+  } catch (e) {
+    statusEl.textContent = 'Network error: ' + e.message;
+    statusEl.className = 'status-msg readiness-fail';
+  }
+}
+
+async function extractStructured() {
+  const id = document.getElementById('edit-profile-id').value;
+  const btn = document.getElementById('extract-structured-btn');
+  const statusEl = document.getElementById('structured-status');
+  const taEl = document.getElementById('edit-profile-structured');
+  if (!id) return;
+  btn.disabled = true;
+  statusEl.textContent = 'Extracting (LLM, ~30s)...';
+  statusEl.className = 'status-msg readiness-warn';
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/profiles/' + id + '/structured/extract', {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      statusEl.textContent = 'Extract failed: ' + (body?.error?.message || ('HTTP ' + res.status));
+      statusEl.className = 'status-msg readiness-fail';
+      return;
+    }
+    const profile = body.data;
+    taEl.value = JSON.stringify(profile.structured_data || {}, null, 2);
+    statusEl.textContent = 'Extracted from skills_text. Review, then Save.';
+    statusEl.className = 'status-msg readiness-pass';
+    await loadProfile();
+  } catch (e) {
+    statusEl.textContent = 'Network error: ' + e.message;
+    statusEl.className = 'status-msg readiness-fail';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function cancelEditProfile() {

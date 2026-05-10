@@ -6,7 +6,7 @@ import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
@@ -178,6 +178,59 @@ def get_profile_endpoint(profile_id: int, db: Session = Depends(get_db)) -> JSON
     profile = get_profile(db, profile_id)
     if profile is None:
         return error("not_found", f"profile {profile_id} not found", status_code=404)
+    return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
+
+
+@router.put("/profiles/{profile_id}/structured")
+def put_profile_structured(
+    profile_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Replace the profile's structured_data JSON in full.
+
+    Body is the JSON object itself (not wrapped). Use null/empty {} to clear.
+    """
+    profile = get_profile(db, profile_id)
+    if profile is None:
+        return error("not_found", f"profile {profile_id} not found", status_code=404)
+    profile.structured_data = body or None
+    db.commit()
+    db.refresh(profile)
+    return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
+
+
+@router.post("/profiles/{profile_id}/structured/extract")
+def extract_profile_structured(
+    profile_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Use the active LLM to parse skills_text into a structured JSON object,
+    save the result on the profile, and return the new profile row.
+
+    Idempotent — overwrites previous structured_data on every call.
+    """
+    profile = get_profile(db, profile_id)
+    if profile is None:
+        return error("not_found", f"profile {profile_id} not found", status_code=404)
+
+    llm = request.app.state.llm_client
+    if not hasattr(llm, "extract_structured"):
+        return error(
+            "not_available",
+            "Active LLM backend does not implement extract_structured().",
+            status_code=503,
+        )
+    try:
+        extracted = llm.extract_structured(profile.skills_text)
+    except Exception as exc:
+        logger.exception("structured_extract_failed profile_id=%s", profile_id)
+        return error("llm_invalid_output", str(exc), status_code=502)
+
+    profile.structured_data = extracted
+    db.commit()
+    db.refresh(profile)
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
 
 
