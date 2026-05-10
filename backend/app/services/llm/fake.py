@@ -72,3 +72,22 @@ class FakeLLMClient:
                 f"## Experience\n\nSoftware Engineer — tailored for this role.\n"
             ),
         }
+
+    def beautify(
+        self,
+        resume_markdown: str,
+        style: str = "modern",
+    ) -> dict:
+        """Fake beautify — returns canned HTML wrapping the markdown for tests."""
+        html = (
+            "<!DOCTYPE html>"
+            "<html><head><meta charset='utf-8'>"
+            f"<title>Fake Beautified Resume — {style}</title>"
+            "<style>body{font-family:system-ui;max-width:720px;margin:2rem auto;}"
+            "pre{white-space:pre-wrap;}</style>"
+            "</head><body>"
+            f"<header><strong>Style:</strong> {style}</header>"
+            f"<pre>{resume_markdown}</pre>"
+            "</body></html>"
+        )
+        return {"html_content": html, "prompt_version": "beautify-fake-v1"}

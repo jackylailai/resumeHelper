@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from textwrap import wrap
+
+logger = logging.getLogger(__name__)
 
 _PAGE_WIDTH = 612
 _PAGE_HEIGHT = 792
@@ -27,6 +30,53 @@ def write_generated_resume_pdf(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(render_text_pdf(resume_text))
     return path
+
+
+# ---------------------------------------------------------------------------
+# Beautified resumes (HTML + matching PDF, rendered by WeasyPrint)
+# ---------------------------------------------------------------------------
+
+
+def beautified_html_path(storage_dir: Path, beautification_id: uuid.UUID) -> Path:
+    return storage_dir / "beautifications" / f"{beautification_id}.html"
+
+
+def beautified_pdf_path(storage_dir: Path, beautification_id: uuid.UUID) -> Path:
+    return storage_dir / "beautifications" / f"{beautification_id}.pdf"
+
+
+def write_beautified_artifacts(
+    storage_dir: Path,
+    beautification_id: uuid.UUID,
+    html_content: str,
+) -> tuple[Path, Path]:
+    """Persist the LLM-produced HTML alongside the WeasyPrint-rendered PDF.
+
+    Both files come from the **same HTML source**, so the browser preview and
+    the downloaded PDF stay in sync. Returns (html_path, pdf_path).
+    """
+    html_path = beautified_html_path(storage_dir, beautification_id)
+    pdf_path = beautified_pdf_path(storage_dir, beautification_id)
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(html_content, encoding="utf-8")
+
+    try:
+        from weasyprint import HTML  # local import — heavy native deps
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "weasyprint is required for beautified PDF rendering — install "
+            "system deps (libpango-1.0-0 libpangoft2-1.0-0) and the python "
+            "package."
+        ) from exc
+
+    HTML(string=html_content).write_pdf(target=str(pdf_path))
+    logger.info(
+        "beautified_pdf_rendered id=%s html_bytes=%d pdf_bytes=%d",
+        beautification_id,
+        html_path.stat().st_size,
+        pdf_path.stat().st_size,
+    )
+    return html_path, pdf_path
 
 
 def render_text_pdf(resume_text: str) -> bytes:

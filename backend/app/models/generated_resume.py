@@ -30,3 +30,9 @@ class GeneratedResume(Base):
     job_analysis: Mapped[JobAnalysis] = relationship(  # noqa: F821
         "JobAnalysis", back_populates="generated_resumes"
     )
+    beautifications: Mapped[list[ResumeBeautification]] = relationship(  # noqa: F821
+        "ResumeBeautification",
+        back_populates="generated_resume",
+        cascade="all, delete-orphan",
+        order_by="ResumeBeautification.created_at.desc()",
+    )

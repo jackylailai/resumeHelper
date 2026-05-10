@@ -437,8 +437,20 @@ def list_submittable(db: Session = Depends(get_db)) -> JSONResponse:
     for job in jobs:
         item = SubmittableResumeOut.model_validate(job).model_dump(mode="json")
         latest = resume_by_job.get(job.id)
-        item["pdf_url"] = latest.pdf_url if latest else None
-        item["resume_id"] = str(latest.id) if latest else None
+        if latest:
+            item["pdf_url"] = latest.pdf_url
+            item["resume_id"] = str(latest.id)
+            item["pdf_kind"] = "tailored"
+        elif job.profile_id:
+            # ready_to_submit cases don't run tailoring — fall back to the
+            # baseline profile PDF so the UI always has something to download.
+            item["pdf_url"] = f"/api/profiles/{job.profile_id}/pdf"
+            item["resume_id"] = None
+            item["pdf_kind"] = "baseline"
+        else:
+            item["pdf_url"] = None
+            item["resume_id"] = None
+            item["pdf_kind"] = None
         result.append(item)
 
     return success(result, count=len(result))
@@ -483,7 +495,17 @@ def get_history_item(job_id: uuid.UUID, db: Session = Depends(get_db)) -> JSONRe
         .all()
     )
     data = HistoryDetailOut.model_validate(job).model_dump(mode="json")
-    data["generated_resumes"] = [
-        GeneratedResumeOut.model_validate(r).model_dump(mode="json") for r in resumes
-    ]
+    serialized_resumes = []
+    for resume in resumes:
+        item = GeneratedResumeOut.model_validate(resume).model_dump(mode="json")
+        # Hydrate beautification URLs (the model itself only has DB fields).
+        for b_idx, beautification in enumerate(resume.beautifications):
+            item["beautifications"][b_idx]["html_url"] = (
+                f"/api/beautifications/{beautification.id}/html"
+            )
+            item["beautifications"][b_idx]["pdf_url"] = (
+                f"/api/beautifications/{beautification.id}/pdf"
+            )
+        serialized_resumes.append(item)
+    data["generated_resumes"] = serialized_resumes
     return success(data)

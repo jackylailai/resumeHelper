@@ -4,9 +4,10 @@ import io
 import logging
 import unicodedata
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
@@ -178,6 +179,26 @@ def get_profile_endpoint(profile_id: int, db: Session = Depends(get_db)) -> JSON
     if profile is None:
         return error("not_found", f"profile {profile_id} not found", status_code=404)
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
+
+
+@router.get("/profiles/{profile_id}/pdf", response_model=None)
+def get_profile_pdf(
+    profile_id: int,
+    db: Session = Depends(get_db),
+) -> FileResponse | JSONResponse:
+    profile = get_profile(db, profile_id)
+    if profile is None:
+        return error("not_found", f"profile {profile_id} not found", status_code=404)
+    if not profile.pdf_path:
+        return error("not_found", "profile has no uploaded PDF", status_code=404)
+    path = Path(profile.pdf_path)
+    if not path.exists():
+        return error("not_found", "profile PDF file is missing on disk", status_code=404)
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=f"baseline-profile-{profile.id}.pdf",
+    )
 
 
 @router.put("/profiles/{profile_id}")

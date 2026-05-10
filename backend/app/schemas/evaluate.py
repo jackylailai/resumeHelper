@@ -32,6 +32,17 @@ class CallbackIn(BaseModel):
     prompt_version: str | None = None
 
 
+class BeautificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    generated_resume_id: uuid.UUID
+    style: str
+    prompt_version: str | None
+    html_url: str | None = None
+    pdf_url: str | None = None
+    created_at: datetime
+
+
 class GeneratedResumeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -39,6 +50,11 @@ class GeneratedResumeOut(BaseModel):
     pdf_url: str | None = None
     prompt_version: str | None
     created_at: datetime
+    beautifications: list[BeautificationOut] = []
+
+
+class BeautifyIn(BaseModel):
+    style: Literal["modern", "classic", "minimal"] = "modern"
 
 
 class HistoryItemOut(BaseModel):
@@ -70,6 +86,7 @@ class HistoryDetailOut(BaseModel):
 class SubmittableResumeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    profile_id: int | None = None
     score: int | None
     jd_snippet: str | None
     status: str | None

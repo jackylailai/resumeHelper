@@ -28,6 +28,9 @@ def _render(template_path: Path, **kwargs: str) -> str:
 class ClaudeCLIClient:
     """Calls the local `claude` CLI — uses Claude Code subscription, no API key needed."""
 
+    def __init__(self, model: str = "claude-opus-4-7") -> None:
+        self.model = model
+
     def evaluate(
         self,
         parsed_text: str,
@@ -43,7 +46,7 @@ class ClaudeCLIClient:
         start = time.time()
         try:
             result = subprocess.run(
-                [_CLAUDE_BIN, "--print", "-p", prompt],
+                [_CLAUDE_BIN, "--print", "-p", prompt, "--model", self.model],
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -89,3 +92,114 @@ class ClaudeCLIClient:
             token_count_input=None,
             token_count_output=None,
         )
+
+    def tailor(
+        self,
+        baseline_text: str,
+        jd_text: str,
+        gaps: list[str],
+        score: int,
+    ) -> dict:
+        """Generate a tailored resume in Markdown via the `claude` CLI.
+
+        The fallback in workers/tailor.py used to fire whenever the active LLM
+        client lacked this method — that produced placeholder text like
+        "Score: 78 / KEY SKILLS / <jd snippet>" instead of a real resume.
+        """
+        prompt = _render(
+            _MODES_DIR / "generate.md",
+            BASELINE_SKILLS=baseline_text,
+            JOB_DESCRIPTION=jd_text,
+        )
+
+        start = time.time()
+        try:
+            result = subprocess.run(
+                [_CLAUDE_BIN, "--print", "-p", prompt, "--model", self.model],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except FileNotFoundError as exc:
+            raise LLMUnavailableError("claude CLI executable was not found") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise LLMUnavailableError("claude CLI timed out during tailoring") from exc
+        latency_ms = int((time.time() - start) * 1000)
+
+        if result.returncode != 0:
+            raise LLMUnavailableError(
+                f"claude CLI tailoring failed: {result.stderr[:200]}"
+            )
+
+        tailored = result.stdout.strip()
+        if tailored.startswith("```"):
+            tailored = "\n".join(tailored.split("\n")[1:])
+            tailored = tailored.rstrip("`").strip()
+
+        if not tailored:
+            raise LLMInvalidOutputError("claude CLI returned empty tailored resume")
+
+        logger.info(
+            "claude_cli tailor latency_ms=%d chars=%d", latency_ms, len(tailored)
+        )
+
+        return {
+            "tailoring_suggestions": [],
+            "tailored_resume": tailored,
+        }
+
+    def beautify(
+        self,
+        resume_markdown: str,
+        style: str = "modern",
+    ) -> dict:
+        """Transform a tailored markdown resume into a styled, self-contained HTML doc.
+
+        The HTML is produced by `claude --print` using `modes/beautify.md`. The
+        prompt forbids fabrication and requires verbatim preservation of every
+        number / proper noun in the input — so the output content is a strict
+        subset of the input markdown, just visually restructured.
+        """
+        prompt = _render(
+            _MODES_DIR / "beautify.md",
+            RESUME_MARKDOWN=resume_markdown,
+            STYLE=style,
+        )
+
+        start = time.time()
+        try:
+            result = subprocess.run(
+                [_CLAUDE_BIN, "--print", "-p", prompt, "--model", self.model],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except FileNotFoundError as exc:
+            raise LLMUnavailableError("claude CLI executable was not found") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise LLMUnavailableError("claude CLI timed out during beautify") from exc
+        latency_ms = int((time.time() - start) * 1000)
+
+        if result.returncode != 0:
+            raise LLMUnavailableError(
+                f"claude CLI beautify failed: {result.stderr[:200]}"
+            )
+
+        html = result.stdout.strip()
+        if html.startswith("```"):
+            html = "\n".join(html.split("\n")[1:])
+            html = html.rstrip("`").strip()
+
+        if "<html" not in html.lower() or "</html>" not in html.lower():
+            raise LLMInvalidOutputError(
+                "claude CLI beautify did not return a complete HTML document"
+            )
+
+        logger.info(
+            "claude_cli beautify style=%s latency_ms=%d chars=%d",
+            style,
+            latency_ms,
+            len(html),
+        )
+
+        return {"html_content": html, "prompt_version": "beautify-v1"}

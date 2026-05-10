@@ -194,8 +194,27 @@
           Download PDF
         </button>
         <button class="btn btn-sm btn-muted" onclick="copyResume()">Copy</button>
+        <button class="btn btn-sm btn-muted" onclick="openBeautifyPanel()" id="beautify-open-btn">Beautify</button>
         <button class="btn btn-sm btn-muted" onclick="closeModal()">Close</button>
       </div>
+    </div>
+    <div id="beautify-panel" class="readiness-panel" hidden>
+      <div class="flex-between readiness-header">
+        <div>
+          <span class="section-title readiness-title">Beautify with HTML</span>
+          <div id="beautify-status" class="readiness-summary">Pick a style and run — HTML and PDF render from the same source.</div>
+        </div>
+        <div class="flex">
+          <select id="beautify-style" class="btn btn-sm btn-muted">
+            <option value="modern">modern</option>
+            <option value="classic">classic</option>
+            <option value="minimal">minimal</option>
+          </select>
+          <button class="btn btn-sm btn-primary" onclick="runBeautify()" id="beautify-run-btn">Run</button>
+          <button class="btn btn-sm btn-muted" onclick="closeBeautifyPanel()">Hide</button>
+        </div>
+      </div>
+      <ul id="beautify-history" class="readiness-list"></ul>
     </div>
     <div id="readiness-panel" class="readiness-panel" hidden>
       <div class="flex-between readiness-header">

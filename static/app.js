@@ -2,6 +2,8 @@
 let currentResumeText = null;
 let currentResumePdfUrl = null;
 let currentJdText = null;
+let currentResumeId = null;
+let currentBeautifications = [];
 let pollTimer = null;
 let profileLoaded = false;
 let loadedProfiles = [];
@@ -516,8 +518,10 @@ async function fetchAndOpenModal(jobId, showChecklist) {
     const resumes = body.data?.generated_resumes;
     if (resumes && resumes.length > 0) {
       const resume = resumes[0];
+      currentResumeId = resume.id;
       currentResumeText = resume.resume_text;
       currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
+      currentBeautifications = resume.beautifications || [];
       currentJdText = body.data?.jd_full_text || body.data?.jd_snippet || currentJdText;
       openModal();
       if (showChecklist) showReadinessChecklist();
@@ -530,6 +534,7 @@ function openModal() {
   document.getElementById('modal-resume-text').textContent = currentResumeText || '(no text)';
   document.getElementById('download-resume-pdf').hidden = !currentResumePdfUrl;
   hideReadinessChecklist();
+  closeBeautifyPanel();
   document.getElementById('resume-modal').classList.add('open');
 }
 
@@ -550,6 +555,79 @@ function downloadCurrentResumePdf() {
 function confirmResumePdfDownload() {
   if (!currentResumePdfUrl) return;
   window.open(currentResumePdfUrl, '_blank', 'noopener');
+}
+
+// ---- Beautify ----
+function openBeautifyPanel() {
+  const panel = document.getElementById('beautify-panel');
+  if (!panel) return;
+  hideReadinessChecklist();
+  renderBeautifyHistory();
+  panel.hidden = false;
+}
+
+function closeBeautifyPanel() {
+  const panel = document.getElementById('beautify-panel');
+  if (panel) panel.hidden = true;
+}
+
+function renderBeautifyHistory() {
+  const list = document.getElementById('beautify-history');
+  if (!list) return;
+  if (!currentBeautifications || currentBeautifications.length === 0) {
+    list.innerHTML = '<li class="readiness-item readiness-warn"><span class="readiness-status">EMPTY</span><div><strong>No beautifications yet</strong><span>Click Run to generate a styled HTML + PDF from this tailored resume.</span></div></li>';
+    return;
+  }
+  list.innerHTML = currentBeautifications.map(function(b) {
+    return '<li class="readiness-item readiness-pass">'
+      + '<span class="readiness-status">' + escHtml((b.style || 'modern').toUpperCase()) + '</span>'
+      + '<div><strong>' + escHtml(b.prompt_version || 'beautify-v1') + ' · ' + fmtDate(b.created_at) + '</strong>'
+      + '<span><a href="' + escHtml(b.html_url || '') + '" target="_blank" rel="noopener">Preview HTML</a> · '
+      + '<a href="' + escHtml(b.pdf_url || '') + '" target="_blank" rel="noopener">Download PDF</a></span></div>'
+      + '</li>';
+  }).join('');
+}
+
+async function runBeautify() {
+  if (!currentResumeId) return;
+  const styleEl = document.getElementById('beautify-style');
+  const runBtn = document.getElementById('beautify-run-btn');
+  const statusEl = document.getElementById('beautify-status');
+  const style = styleEl ? styleEl.value : 'modern';
+  if (runBtn) runBtn.disabled = true;
+  if (statusEl) {
+    statusEl.textContent = 'Running beautify (~30-60s)...';
+    statusEl.className = 'readiness-summary readiness-warn';
+  }
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/generated-resumes/' + currentResumeId + '/beautify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: style }),
+    });
+    if (!res.ok) {
+      const msg = body?.error?.message || ('HTTP ' + res.status);
+      if (statusEl) {
+        statusEl.textContent = 'Beautify failed: ' + msg;
+        statusEl.className = 'readiness-summary readiness-fail';
+      }
+      return;
+    }
+    const created = body.data;
+    currentBeautifications = [created].concat(currentBeautifications);
+    if (statusEl) {
+      statusEl.textContent = 'Beautified — preview HTML or download PDF below.';
+      statusEl.className = 'readiness-summary readiness-pass';
+    }
+    renderBeautifyHistory();
+  } catch (e) {
+    if (statusEl) {
+      statusEl.textContent = 'Network error during beautify.';
+      statusEl.className = 'readiness-summary readiness-fail';
+    }
+  } finally {
+    if (runBtn) runBtn.disabled = false;
+  }
 }
 
 function showReadinessChecklist() {
@@ -680,13 +758,18 @@ function skillKeywords(text) {
 
 // ---- Helpers ----
 function resumeActionsHtml(item) {
-  if (!item.resume_id) {
-    return '<span style="color:var(--muted);font-size:0.8rem">—</span>';
+  if (item.resume_id) {
+    return `<div class="flex">
+      <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}')">View</button>
+      <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}', true)">PDF</button>
+    </div>`;
   }
-  return `<div class="flex">
-    <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}')">View</button>
-    <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}', true)">PDF</button>
-  </div>`;
+  if (item.pdf_url && item.pdf_kind === 'baseline') {
+    return `<div class="flex">
+      <a class="btn btn-sm btn-muted" href="${item.pdf_url}" target="_blank" rel="noopener" title="Score ≥85: ready to submit using your baseline profile">Baseline PDF</a>
+    </div>`;
+  }
+  return '<span style="color:var(--muted);font-size:0.8rem">—</span>';
 }
 
 function renderTags(id, items) {
