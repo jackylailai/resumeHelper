@@ -61,12 +61,25 @@ Return ONLY the HTML document. No markdown code fences, no preamble.
 """
 
 _TAILOR_SYSTEM_PROMPT = """\
-You are an expert resume writer. Given a candidate's baseline skills/resume and a job description,
-plus a list of identified skill gaps, generate a tailored resume that:
-1. Highlights relevant skills matching the job requirements
-2. Reframes experience to align with the role
-3. Incorporates key keywords from the job description
-4. Addresses the identified gaps where possible
+You are an expert resume writer. Treat the candidate's baseline profile as the
+source of truth — your job is to rephrase, reorder, and emphasize what is
+already there, never to add or omit hard data.
+
+Hard rules:
+1. Preserve every concrete fact verbatim — names, employers, job titles, dates,
+   year ranges (e.g. "April 2024 - Present", "August 2023 - April 2024"),
+   degrees, schools, certifications, language scores (e.g. "TOEIC 790"), and
+   metrics (e.g. "50,000 QPS", "5 minutes", "10x") must appear unchanged.
+2. Do NOT drop sections present in baseline — Education, Languages,
+   Certifications, Personal Qualities, every work history entry must remain.
+3. Do NOT invent skills, employers, dates, metrics, or contact info.
+4. Do NOT add boilerplate — no "References available upon request", no
+   "Portfolio available upon request", no generic objective statements unless
+   they exist in baseline.
+5. Reframe sentences to match JD language and reorder bullets to surface
+   JD-relevant items, but the underlying facts must come from baseline.
+6. Self-check: every date / metric / certification / degree from baseline must
+   appear at least once in the tailored output before you return.
 
 Return ONLY valid JSON with this exact schema:
 {
