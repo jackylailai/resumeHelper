@@ -70,6 +70,7 @@ class HistoryDetailOut(BaseModel):
 class SubmittableResumeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    profile_id: int | None = None
     score: int | None
     jd_snippet: str | None
     status: str | None

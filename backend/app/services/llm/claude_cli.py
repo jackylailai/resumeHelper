@@ -92,3 +92,58 @@ class ClaudeCLIClient:
             token_count_input=None,
             token_count_output=None,
         )
+
+    def tailor(
+        self,
+        baseline_text: str,
+        jd_text: str,
+        gaps: list[str],
+        score: int,
+    ) -> dict:
+        """Generate a tailored resume in Markdown via the `claude` CLI.
+
+        The fallback in workers/tailor.py used to fire whenever the active LLM
+        client lacked this method — that produced placeholder text like
+        "Score: 78 / KEY SKILLS / <jd snippet>" instead of a real resume.
+        """
+        prompt = _render(
+            _MODES_DIR / "generate.md",
+            BASELINE_SKILLS=baseline_text,
+            JOB_DESCRIPTION=jd_text,
+        )
+
+        start = time.time()
+        try:
+            result = subprocess.run(
+                [_CLAUDE_BIN, "--print", "-p", prompt, "--model", self.model],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except FileNotFoundError as exc:
+            raise LLMUnavailableError("claude CLI executable was not found") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise LLMUnavailableError("claude CLI timed out during tailoring") from exc
+        latency_ms = int((time.time() - start) * 1000)
+
+        if result.returncode != 0:
+            raise LLMUnavailableError(
+                f"claude CLI tailoring failed: {result.stderr[:200]}"
+            )
+
+        tailored = result.stdout.strip()
+        if tailored.startswith("```"):
+            tailored = "\n".join(tailored.split("\n")[1:])
+            tailored = tailored.rstrip("`").strip()
+
+        if not tailored:
+            raise LLMInvalidOutputError("claude CLI returned empty tailored resume")
+
+        logger.info(
+            "claude_cli tailor latency_ms=%d chars=%d", latency_ms, len(tailored)
+        )
+
+        return {
+            "tailoring_suggestions": [],
+            "tailored_resume": tailored,
+        }

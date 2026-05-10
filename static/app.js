@@ -680,13 +680,18 @@ function skillKeywords(text) {
 
 // ---- Helpers ----
 function resumeActionsHtml(item) {
-  if (!item.resume_id) {
-    return '<span style="color:var(--muted);font-size:0.8rem">—</span>';
+  if (item.resume_id) {
+    return `<div class="flex">
+      <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}')">View</button>
+      <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}', true)">PDF</button>
+    </div>`;
   }
-  return `<div class="flex">
-    <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}')">View</button>
-    <button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal('${item.id}', true)">PDF</button>
-  </div>`;
+  if (item.pdf_url && item.pdf_kind === 'baseline') {
+    return `<div class="flex">
+      <a class="btn btn-sm btn-muted" href="${item.pdf_url}" target="_blank" rel="noopener" title="Score ≥85: ready to submit using your baseline profile">Baseline PDF</a>
+    </div>`;
+  }
+  return '<span style="color:var(--muted);font-size:0.8rem">—</span>';
 }
 
 function renderTags(id, items) {
