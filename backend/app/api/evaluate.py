@@ -495,7 +495,17 @@ def get_history_item(job_id: uuid.UUID, db: Session = Depends(get_db)) -> JSONRe
         .all()
     )
     data = HistoryDetailOut.model_validate(job).model_dump(mode="json")
-    data["generated_resumes"] = [
-        GeneratedResumeOut.model_validate(r).model_dump(mode="json") for r in resumes
-    ]
+    serialized_resumes = []
+    for resume in resumes:
+        item = GeneratedResumeOut.model_validate(resume).model_dump(mode="json")
+        # Hydrate beautification URLs (the model itself only has DB fields).
+        for b_idx, beautification in enumerate(resume.beautifications):
+            item["beautifications"][b_idx]["html_url"] = (
+                f"/api/beautifications/{beautification.id}/html"
+            )
+            item["beautifications"][b_idx]["pdf_url"] = (
+                f"/api/beautifications/{beautification.id}/pdf"
+            )
+        serialized_resumes.append(item)
+    data["generated_resumes"] = serialized_resumes
     return success(data)

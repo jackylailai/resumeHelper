@@ -147,3 +147,59 @@ class ClaudeCLIClient:
             "tailoring_suggestions": [],
             "tailored_resume": tailored,
         }
+
+    def beautify(
+        self,
+        resume_markdown: str,
+        style: str = "modern",
+    ) -> dict:
+        """Transform a tailored markdown resume into a styled, self-contained HTML doc.
+
+        The HTML is produced by `claude --print` using `modes/beautify.md`. The
+        prompt forbids fabrication and requires verbatim preservation of every
+        number / proper noun in the input — so the output content is a strict
+        subset of the input markdown, just visually restructured.
+        """
+        prompt = _render(
+            _MODES_DIR / "beautify.md",
+            RESUME_MARKDOWN=resume_markdown,
+            STYLE=style,
+        )
+
+        start = time.time()
+        try:
+            result = subprocess.run(
+                [_CLAUDE_BIN, "--print", "-p", prompt, "--model", self.model],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except FileNotFoundError as exc:
+            raise LLMUnavailableError("claude CLI executable was not found") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise LLMUnavailableError("claude CLI timed out during beautify") from exc
+        latency_ms = int((time.time() - start) * 1000)
+
+        if result.returncode != 0:
+            raise LLMUnavailableError(
+                f"claude CLI beautify failed: {result.stderr[:200]}"
+            )
+
+        html = result.stdout.strip()
+        if html.startswith("```"):
+            html = "\n".join(html.split("\n")[1:])
+            html = html.rstrip("`").strip()
+
+        if "<html" not in html.lower() or "</html>" not in html.lower():
+            raise LLMInvalidOutputError(
+                "claude CLI beautify did not return a complete HTML document"
+            )
+
+        logger.info(
+            "claude_cli beautify style=%s latency_ms=%d chars=%d",
+            style,
+            latency_ms,
+            len(html),
+        )
+
+        return {"html_content": html, "prompt_version": "beautify-v1"}

@@ -36,6 +36,30 @@ Scoring guide:
 Return ONLY the JSON object, no markdown, no extra text.
 """
 
+_BEAUTIFY_SYSTEM_PROMPT = """\
+You are a resume designer. You receive a tailored resume in Markdown and must
+transform it into a single self-contained HTML document with embedded CSS,
+suitable for both browser display and PDF rendering via WeasyPrint.
+
+Hard rules:
+1. Use ONLY content from the source markdown. Do NOT invent, embellish,
+   paraphrase to add facts, or fabricate skills, experience, dates, metrics,
+   or contact details.
+2. Preserve every concrete number, percentage, duration, scale figure, and
+   proper noun verbatim.
+3. Output a single complete HTML document — `<!DOCTYPE html>` ... `</html>`.
+   Inline all CSS in a single `<style>` block in the head. No external
+   stylesheets, fonts, images, or scripts.
+4. Use only WeasyPrint-compatible CSS. Avoid JavaScript, external @font-face,
+   position: sticky.
+5. Style preset will be provided in the user message — interpret as: `modern`
+   (clean sans-serif, blue accent), `classic` (serif, traditional), or
+   `minimal` (monochrome, tight spacing).
+6. Include only sections actually present in the source markdown.
+
+Return ONLY the HTML document. No markdown code fences, no preamble.
+"""
+
 _TAILOR_SYSTEM_PROMPT = """\
 You are an expert resume writer. Given a candidate's baseline skills/resume and a job description,
 plus a list of identified skill gaps, generate a tailored resume that:
@@ -153,3 +177,46 @@ class AnthropicLLMClient:
             "tailoring_suggestions": data.get("tailoring_suggestions", []),
             "tailored_resume": data.get("tailored_resume", ""),
         }
+
+    def beautify(
+        self,
+        resume_markdown: str,
+        style: str = "modern",
+    ) -> dict:
+        """Transform a tailored markdown resume into a styled HTML document."""
+        user_content = (
+            f"<style_preset>{style}</style_preset>\n\n"
+            f"<source_markdown>\n{resume_markdown}\n</source_markdown>"
+        )
+
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=8192,
+                system=_BEAUTIFY_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_content}],
+            )
+        except anthropic.APIError as exc:
+            raise LLMUnavailableError(
+                f"Anthropic API request failed during beautify: {exc}"
+            ) from exc
+
+        html = response.content[0].text.strip()  # type: ignore[index]
+        if html.startswith("```"):
+            html = "\n".join(html.split("\n")[1:])
+            html = html.rstrip("`").strip()
+
+        if "<html" not in html.lower() or "</html>" not in html.lower():
+            raise LLMInvalidOutputError(
+                "Anthropic API beautify did not return a complete HTML document"
+            )
+
+        logger.info(
+            "beautify_llm_response model=%s style=%s tokens_in=%d tokens_out=%d",
+            self._model,
+            style,
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+        )
+
+        return {"html_content": html, "prompt_version": "beautify-v1"}
