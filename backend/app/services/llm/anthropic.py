@@ -60,13 +60,52 @@ Hard rules:
 Return ONLY the HTML document. No markdown code fences, no preamble.
 """
 
+_EXTRACT_SYSTEM_PROMPT = """\
+You receive a candidate's free-form resume / profile text. Extract every
+concrete fact you can find into a structured JSON object. Use only what is
+explicitly in the source — do not invent, paraphrase facts, or add boilerplate.
+If a field has no source, omit it.
+
+Return ONLY a JSON object (no code fences, no preamble) with these top-level
+keys (all optional, omit when source has nothing): personal, summary,
+work_experience, education, languages, certifications, skills,
+personal_qualities.
+
+Each work_experience entry: {employer, title, location, start_date, end_date,
+is_current, achievements: [...]}. Each education entry: {school, degree, field,
+start_date, end_date}. Each language: {name, level, test, score}.
+
+Rules:
+- Every value comes verbatim from source. Dates, numbers, employer names,
+  school names, certification names — copy as-is.
+- Don't invent fields the source doesn't mention.
+- Don't editorialize titles ("Backend Engineer" stays "Backend Engineer").
+- Don't summarize achievement bullets — output every concrete claim from the
+  source, one per array element.
+- Preserve original language for proper nouns and quotes. You may translate
+  connectors only if it improves clarity.
+"""
+
 _TAILOR_SYSTEM_PROMPT = """\
-You are an expert resume writer. Given a candidate's baseline skills/resume and a job description,
-plus a list of identified skill gaps, generate a tailored resume that:
-1. Highlights relevant skills matching the job requirements
-2. Reframes experience to align with the role
-3. Incorporates key keywords from the job description
-4. Addresses the identified gaps where possible
+You are an expert resume writer. Treat the candidate's baseline profile as the
+source of truth — your job is to rephrase, reorder, and emphasize what is
+already there, never to add or omit hard data.
+
+Hard rules:
+1. Preserve every concrete fact verbatim — names, employers, job titles, dates,
+   year ranges (e.g. "April 2024 - Present", "August 2023 - April 2024"),
+   degrees, schools, certifications, language scores (e.g. "TOEIC 790"), and
+   metrics (e.g. "50,000 QPS", "5 minutes", "10x") must appear unchanged.
+2. Do NOT drop sections present in baseline — Education, Languages,
+   Certifications, Personal Qualities, every work history entry must remain.
+3. Do NOT invent skills, employers, dates, metrics, or contact info.
+4. Do NOT add boilerplate — no "References available upon request", no
+   "Portfolio available upon request", no generic objective statements unless
+   they exist in baseline.
+5. Reframe sentences to match JD language and reorder bullets to surface
+   JD-relevant items, but the underlying facts must come from baseline.
+6. Self-check: every date / metric / certification / degree from baseline must
+   appear at least once in the tailored output before you return.
 
 Return ONLY valid JSON with this exact schema:
 {
@@ -141,12 +180,19 @@ class AnthropicLLMClient:
         jd_text: str,
         gaps: list[str],
         score: int,
+        structured_data: dict | None = None,
     ) -> dict:
         """Generate tailoring suggestions and a tailored resume text."""
         gaps_text = "\n".join(f"- {g}" for g in gaps) if gaps else "- No specific gaps identified"
+        structured_block = (
+            json.dumps(structured_data, ensure_ascii=False, indent=2)
+            if structured_data
+            else "(none — fall back to baseline_resume text below)"
+        )
         user_content = (
             f"<current_score>{score}</current_score>\n\n"
             f"<identified_gaps>\n{gaps_text}\n</identified_gaps>\n\n"
+            f"<structured_data>\n{structured_block}\n</structured_data>\n\n"
             f"<baseline_resume>\n{baseline_text}\n</baseline_resume>\n\n"
             f"<job_description>\n{jd_text}\n</job_description>"
         )
@@ -220,3 +266,38 @@ class AnthropicLLMClient:
         )
 
         return {"html_content": html, "prompt_version": "beautify-v1"}
+
+    def extract_structured(self, source_text: str) -> dict:
+        """Parse a free-form profile text into structured JSON via the SDK."""
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=4096,
+                system=_EXTRACT_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": source_text}],
+            )
+        except anthropic.APIError as exc:
+            raise LLMUnavailableError(
+                f"Anthropic API request failed during extract: {exc}"
+            ) from exc
+
+        raw = response.content[0].text.strip()  # type: ignore[index]
+        if raw.startswith("```"):
+            raw = "\n".join(raw.split("\n")[1:])
+            raw = raw.rstrip("`").strip()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise LLMInvalidOutputError(
+                f"Anthropic API extract returned invalid JSON: {exc}"
+            ) from exc
+        if not isinstance(data, dict):
+            raise LLMInvalidOutputError("Anthropic API extract was not a JSON object")
+        logger.info(
+            "extract_llm_response model=%s keys=%d tokens_in=%d tokens_out=%d",
+            self._model,
+            len(data),
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+        )
+        return data

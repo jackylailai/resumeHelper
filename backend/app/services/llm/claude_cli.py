@@ -99,6 +99,7 @@ class ClaudeCLIClient:
         jd_text: str,
         gaps: list[str],
         score: int,
+        structured_data: dict | None = None,
     ) -> dict:
         """Generate a tailored resume in Markdown via the `claude` CLI.
 
@@ -106,10 +107,16 @@ class ClaudeCLIClient:
         client lacked this method — that produced placeholder text like
         "Score: 78 / KEY SKILLS / <jd snippet>" instead of a real resume.
         """
+        structured_block = (
+            json.dumps(structured_data, ensure_ascii=False, indent=2)
+            if structured_data
+            else "(none — fall back to baseline_skills text below)"
+        )
         prompt = _render(
             _MODES_DIR / "generate.md",
             BASELINE_SKILLS=baseline_text,
             JOB_DESCRIPTION=jd_text,
+            STRUCTURED_DATA=structured_block,
         )
 
         start = time.time()
@@ -203,3 +210,50 @@ class ClaudeCLIClient:
         )
 
         return {"html_content": html, "prompt_version": "beautify-v1"}
+
+    def extract_structured(self, source_text: str) -> dict:
+        """Parse a free-form profile text into a structured JSON dict via the
+        `claude` CLI using `modes/extract.md`. Returns the parsed dict; raises
+        LLMInvalidOutputError if the CLI does not return valid JSON.
+        """
+        prompt = _render(_MODES_DIR / "extract.md", SOURCE_TEXT=source_text)
+
+        start = time.time()
+        try:
+            result = subprocess.run(
+                [_CLAUDE_BIN, "--print", "-p", prompt, "--model", self.model],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except FileNotFoundError as exc:
+            raise LLMUnavailableError("claude CLI executable was not found") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise LLMUnavailableError("claude CLI timed out during extract") from exc
+        latency_ms = int((time.time() - start) * 1000)
+
+        if result.returncode != 0:
+            raise LLMUnavailableError(
+                f"claude CLI extract failed: {result.stderr[:200]}"
+            )
+
+        raw = result.stdout.strip()
+        if raw.startswith("```"):
+            raw = "\n".join(raw.split("\n")[1:])
+            raw = raw.rstrip("`").strip()
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise LLMInvalidOutputError(
+                f"claude CLI extract returned invalid JSON: {exc}; raw[:200]={raw[:200]!r}"
+            ) from exc
+        if not isinstance(data, dict):
+            raise LLMInvalidOutputError(
+                "claude CLI extract did not return a JSON object"
+            )
+
+        logger.info(
+            "claude_cli extract latency_ms=%d keys=%d", latency_ms, len(data)
+        )
+        return data

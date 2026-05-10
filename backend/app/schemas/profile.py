@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,8 +25,19 @@ class ProfileOut(BaseModel):
     skills_text: str
     pdf_path: str | None = None
     is_default: bool
+    structured_data: dict[str, Any] | None = None
     created_at: datetime | None
     updated_at: datetime
+
+
+class StructuredDataIn(BaseModel):
+    """Loose container for the structured profile JSON. We accept any keys —
+    Pydantic's strict typing is unhelpful here because the schema evolves and
+    consumers (the LLM tailor prompt) are flexible about which fields exist.
+    Validation is delegated to the API layer (basic shape check).
+    """
+
+    model_config = ConfigDict(extra="allow")
 
 
 class ProfilePdfPreviewOut(BaseModel):

@@ -177,6 +177,18 @@
     </div>
     <div id="edit-profile-error" class="error-msg"></div>
     <div id="edit-profile-success" class="success-msg"></div>
+
+    <div class="mt" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <div class="flex-between" style="margin-bottom:0.5rem">
+        <strong>Structured data (JSON)</strong>
+        <div class="flex">
+          <button class="btn btn-sm btn-muted" type="button" onclick="extractStructured()" id="extract-structured-btn">Extract from Skills</button>
+          <button class="btn btn-sm btn-primary" type="button" onclick="saveStructured()">Save JSON</button>
+        </div>
+      </div>
+      <span class="status-msg" id="structured-status">Tailor pulls dates / metrics / sections from this when present. Use "Extract from Skills" to auto-fill from skills_text via LLM (~30s).</span>
+      <textarea id="edit-profile-structured" rows="14" placeholder='{"personal": {...}, "work_experience": [...], ...}' style="font-family:monospace;font-size:0.8rem;margin-top:0.5rem"></textarea>
+    </div>
   </div>
 </div>
 
