@@ -56,7 +56,9 @@ async def _scrape(args: argparse.Namespace) -> int:
     if args.evaluate:
         return _evaluate_listings(
             argparse.Namespace(
-                source=None if args.source == "all" else args.source,
+                source=None
+                if args.source in {"all", "all_with_linkedin"}
+                else args.source,
                 profile_id=args.profile_id,
                 limit=args.evaluate_limit,
                 no_tailor=args.no_tailor,
