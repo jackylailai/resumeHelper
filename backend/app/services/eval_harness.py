@@ -217,7 +217,7 @@ def _run_evaluation_case(
 ) -> EvaluationHarnessCaseResult:
     try:
         result = llm.evaluate(case.profile, case.job_description, prompt_version)
-    except Exception as exc:  # noqa: BLE001 - harness reports provider failures as data.
+    except Exception as exc:
         return EvaluationHarnessCaseResult(
             id=case.id,
             passed=False,
