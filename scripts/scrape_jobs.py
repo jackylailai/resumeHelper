@@ -4,6 +4,7 @@
 Examples:
     python scripts/scrape_jobs.py --keyword "後端工程師" --limit 25 --site 104
     python scripts/scrape_jobs.py --keyword "後端工程師" --limit 25 --site 104,yourator
+    python scripts/scrape_jobs.py --keyword "backend engineer" --limit 10 --site linkedin
 
 Run from project root with the .venv that scripts/test.sh creates:
     ./.venv/bin/python scripts/scrape_jobs.py --keyword "後端工程師" --limit 25
@@ -28,6 +29,7 @@ from backend.app.models.job_listing import JobListing
 from backend.app.services.scrapers.base import BaseScraper, JobListingDraft
 from backend.app.services.scrapers.persistence import upsert_drafts
 from backend.app.services.scrapers.scraper_104 import Scraper104
+from backend.app.services.scrapers.scraper_linkedin import RateLimitedError, ScraperLinkedIn
 from backend.app.services.scrapers.scraper_yourator import ScraperYourator
 
 _DEFAULT_BACKUP_DIR = Path.home() / "resumeHelper_data" / "backups"
@@ -38,6 +40,7 @@ BACKUP_DIR = Path(
 SCRAPERS: dict[str, type[BaseScraper]] = {
     "104": Scraper104,
     "yourator": ScraperYourator,
+    "linkedin": ScraperLinkedIn,
 }
 
 
@@ -50,6 +53,8 @@ async def _scrape_one(
     for d in drafts:
         try:
             enriched.append(await scraper.fetch_detail(d))
+        except RateLimitedError:
+            raise
         except Exception as exc:  # noqa: BLE001 — best-effort enrichment
             print(f"    detail fetch failed for {d.source_id}: {exc}", file=sys.stderr)
             enriched.append(d)
@@ -62,8 +67,15 @@ async def run(keyword: str, limit: int, sites: list[str]) -> int:
         for site in sites:
             print(f"== {site} == keyword={keyword!r} limit={limit}")
             cls = SCRAPERS[site]
-            async with cls() as scraper:  # type: ignore[attr-defined]
-                drafts = await _scrape_one(scraper, keyword, limit)
+            try:
+                async with cls() as scraper:  # type: ignore[attr-defined]
+                    drafts = await _scrape_one(scraper, keyword, limit)
+            except RateLimitedError as exc:
+                print(f"  skipped {site}: {exc}", file=sys.stderr)
+                continue
+            except Exception as exc:  # noqa: BLE001 — one source must not block others
+                print(f"  failed {site}: {exc}", file=sys.stderr)
+                continue
             inserted = upsert_drafts(session, drafts)
             total_inserted += inserted
             print(f"  inserted {inserted} new rows ({len(drafts)} drafts seen)")
@@ -96,13 +108,19 @@ async def run(keyword: str, limit: int, sites: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     ap.add_argument("--keyword", required=True, help="search keyword (e.g. '後端工程師')")
     ap.add_argument("--limit", type=int, default=25, help="per-site limit (default: 25)")
     ap.add_argument(
         "--site",
         default="104,yourator",
-        help=f"comma-separated sites; valid: {list(SCRAPERS)} (default: all)",
+        help=(
+            f"comma-separated sites; valid: {list(SCRAPERS)} "
+            "(default: 104,yourator; linkedin is opt-in)"
+        ),
     )
     args = ap.parse_args(argv)
 
