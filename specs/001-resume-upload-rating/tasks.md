@@ -140,6 +140,28 @@ TDD: write tests RED before implementation.
 - [x] `download_generated_resume_pdf` decorator gets `response_model=None` so FastAPI does not try to build a Pydantic response model from `FileResponse | JSONResponse` (was crashing app construction → 61 integration tests in ERROR)
 - [x] `POST /api/callback` only generates + points at a local PDF when the caller did not supply `pdf_url` — restores the contract for externally-hosted PDFs
 
+### P2.5-T16 · Production config + observability ✅ (PR #97)
+- [x] `config.py` — production rejects wildcard CORS; optional management auth settings validated
+- [x] `security.py` + `main.py` — bearer/basic write guard for non-GET `/api/*`
+- [x] `api/health.py` — `/api/health`, `/api/health/live`, `/api/health/ready`
+- [x] `main.py` — request IDs, structured request logging, validation/error envelopes
+- [x] `tests/integration/v2/test_production_config_observability.py`
+
+### P2.5-T17 · Application tracker ✅ (PR #98)
+- [x] `0007_applications.py` — creates the `applications` table as revision `0008`
+- [x] `models/application.py` + `schemas/application.py`
+- [x] `api/applications.py` — create/list/update, duplicate detection, hydrated listing/analysis/resume fields
+- [x] `static/jobs.html` + `jobs.js` — add scored listing to tracker
+- [x] `static/applications.html` + `applications.js` — tracker UI with filters, sorting, pagination, status/follow-up edits
+- [x] `tests/integration/v2/test_applications_tracker.py`
+
+### P2.5-T18 · Default profile management ✅ (PR #99)
+- [x] `0007_profile_default.py` — add `baseline_profile.is_default`
+- [x] `services/evaluator_v2.py` — resolve omitted profile IDs via default profile, fallback latest
+- [x] `api/profile.py` — support `is_default`, upload preview, reviewed PDF text override, and delete-impact endpoint
+- [x] `static/index.html` + `app.js` — profile edit form, default selector, PDF text preview
+- [x] `tests/integration/v2/test_profiles_endpoint.py` — default selection, delete impact, preview, upload override coverage
+
 ### P2.5-T14 · backup dir env var + host-vs-container LLM docs ✅
 - [x] `scripts/scrape_jobs.py` — backup dir resolved from `RESUMEHELPER_BACKUP_DIR`; defaults to `~/resumeHelper_data/backups` (outside repo, never committed)
 - [x] `.env.example` — documents `RESUMEHELPER_BACKUP_DIR` placeholder

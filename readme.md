@@ -175,6 +175,7 @@ Docker must be running for integration tests that use testcontainers.
 
 - [Current product spec](specs/current-product-spec.md)
 - [Roadmap](specs/roadmap.md)
+- [Historical OpenAPI contract](specs/001-resume-upload-rating/contracts/openapi.yaml)
 - [Scrape scheduling](docs/scheduling.md)
 - [Script inventory](scripts/README.md)
 - Historical Phase 1 spec: [specs/001-resume-upload-rating/spec.md](specs/001-resume-upload-rating/spec.md)

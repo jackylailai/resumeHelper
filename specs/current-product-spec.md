@@ -93,6 +93,15 @@ Statuses:
 
 Tracks user application intent and progress for recommended jobs.
 
+Important fields:
+
+- `job_listing_id`
+- `job_analysis_id`
+- `generated_resume_id`
+- `status`
+- `follow_up_date`
+- `notes`
+
 Statuses include:
 
 - `planned`
@@ -178,6 +187,12 @@ Future proof point work (#77) should become an additional authoritative source.
 
 The user can add promising listings to the application tracker and update
 status/follow-up information.
+
+The tracker is a user-owned pipeline, not an automated submission system. It
+records intent and progress after a listing has been evaluated or linked to a
+generated resume. Duplicate tracking requests for the same listing or analysis
+should return the existing application row and may update status, notes, or
+follow-up date.
 
 ## LLM Flow And Spec Requirements
 
