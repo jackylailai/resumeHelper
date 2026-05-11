@@ -72,6 +72,7 @@ class HistoryItemOut(BaseModel):
 class HistoryDetailOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    profile_id: int | None = None
     jd_snippet: str | None
     jd_full_text: str
     score: int | None
@@ -80,6 +81,7 @@ class HistoryDetailOut(BaseModel):
     can_submit: bool = False
     skip_reason: str | None = None
     created_at: datetime
+    baseline_profile_text: str | None = None
     generated_resumes: list[GeneratedResumeOut] = []
 
 
@@ -116,6 +118,12 @@ class BulkEvaluateOut(BaseModel):
 class EvaluateByListingsIn(BaseModel):
     profile_id: int | None = None
     job_listing_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=20)]
+
+
+class EvaluatePendingListingsIn(BaseModel):
+    profile_id: int | None = None
+    source: str | None = None
+    limit: Annotated[int, Field(ge=1, le=100)] = 100
 
 
 class EvaluateByListingsResult(BaseModel):

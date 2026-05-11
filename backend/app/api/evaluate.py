@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.envelope import error, success
 from backend.app.config import get_settings
 from backend.app.db import get_db
+from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import (
     STATUS_NEEDS_TAILORING,
@@ -17,7 +18,6 @@ from backend.app.models.job_analysis import (
     STATUS_SKIP,
     JobAnalysis,
 )
-from backend.app.models.job_listing import JobListing
 from backend.app.schemas.evaluate import (
     BulkEvaluateIn,
     BulkEvaluateOut,
@@ -26,6 +26,7 @@ from backend.app.schemas.evaluate import (
     EvaluateByListingsIn,
     EvaluateByListingsOut,
     EvaluateByListingsResult,
+    EvaluatePendingListingsIn,
     EvaluateIn,
     EvaluateOut,
     GeneratedResumeOut,
@@ -33,8 +34,11 @@ from backend.app.schemas.evaluate import (
     HistoryItemOut,
     SubmittableResumeOut,
 )
-from backend.app.services.evaluator_v2 import evaluate_jd, get_default_profile, get_profile
-from backend.app.services.evaluator_v2 import get_default_profile as get_baseline
+from backend.app.services.batch_evaluator import (
+    evaluate_listing_ids,
+    evaluate_pending_listings,
+)
+from backend.app.services.evaluator_v2 import evaluate_jd, get_default_profile as get_baseline
 from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
 from backend.app.services.pdf import generated_resume_pdf_path, write_generated_resume_pdf
 
@@ -72,10 +76,6 @@ def _jd_length_error(
         status_code=400,
         details=details,
     )
-
-
-def _jd_too_long_message(actual_chars: int, max_chars: int) -> str:
-    return f"Job description has {actual_chars} characters; limit is {max_chars}."
 
 
 def _queue_tailoring_if_needed(
@@ -251,96 +251,90 @@ def evaluate_by_listings(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Evaluate stored scraper JDs by listing id and link results back to the rows."""
-    profile = (
-        get_profile(db, body.profile_id)
-        if body.profile_id is not None
-        else get_default_profile(db)
-    )
-    if profile is None:
-        return error("not_found", "baseline_profile not set", status_code=404)
-    profile_id = profile.id
-
     settings = get_settings()
     llm = _get_llm(request)
-    results: list[EvaluateByListingsResult] = []
-
-    for listing_id in body.job_listing_ids:
-        listing = db.get(JobListing, listing_id)
-        if listing is None:
-            results.append(EvaluateByListingsResult(
-                listing_id=listing_id,
-                error=f"Job listing {listing_id} not found.",
-            ))
-            continue
-
-        jd_text = listing.description.strip()
-        if not jd_text:
-            results.append(EvaluateByListingsResult(
-                listing_id=listing_id,
-                error="Job listing has no job description text.",
-            ))
-            continue
-
-        actual_chars = len(jd_text)
-        if settings.max_jd_chars > 0 and actual_chars > settings.max_jd_chars:
-            results.append(EvaluateByListingsResult(
-                listing_id=listing_id,
-                error=_jd_too_long_message(actual_chars, settings.max_jd_chars),
-            ))
-            continue
-
-        try:
-            job, cached = evaluate_jd(
-                db,
-                jd_text,
+    try:
+        summary = evaluate_listing_ids(
+            db,
+            listing_ids=body.job_listing_ids,
+            llm=llm,
+            settings=settings,
+            profile_id=body.profile_id,
+            on_evaluated=lambda job, cached: _queue_tailoring_if_needed(
+                job,
+                cached,
+                background_tasks,
+                request,
                 llm,
-                prompt_version=settings.llm_prompt_version,
-                threshold=settings.resume_gen_threshold,
-                profile_id=profile_id,
-            )
-        except LookupError as exc:
-            results.append(EvaluateByListingsResult(
-                listing_id=listing_id,
-                error=str(exc),
-            ))
-            continue
-        except LLMUnavailableError as exc:
-            results.append(EvaluateByListingsResult(
-                listing_id=listing_id,
-                error=f"llm_unavailable: {exc}",
-            ))
-            continue
-        except LLMInvalidOutputError as exc:
-            results.append(EvaluateByListingsResult(
-                listing_id=listing_id,
-                error=f"llm_invalid_output: {exc}",
-            ))
-            continue
-
-        listing.job_analysis_id = job.id
-        db.commit()
-        _queue_tailoring_if_needed(
-            job,
-            cached,
-            background_tasks,
-            request,
-            llm,
-            settings.llm_prompt_version,
+                settings.llm_prompt_version,
+            ),
         )
-        results.append(EvaluateByListingsResult(
-            listing_id=listing.id,
-            job_analysis_id=job.id,
-            score=job.score or 0,
-            status=job.status or STATUS_SKIP,
-            cached=cached,
-        ))
+    except LookupError as exc:
+        return error("not_found", str(exc), status_code=404)
 
-    succeeded = sum(1 for result in results if result.error is None)
     out = EvaluateByListingsOut(
-        total=len(results),
-        succeeded=succeeded,
-        failed=len(results) - succeeded,
-        results=results,
+        total=summary.total,
+        succeeded=summary.succeeded,
+        failed=summary.failed,
+        results=[
+            EvaluateByListingsResult(
+                listing_id=result.listing_id,
+                job_analysis_id=result.job_analysis_id,
+                score=result.score,
+                status=result.status,  # type: ignore[arg-type]
+                cached=result.cached,
+                error=result.error,
+            )
+            for result in summary.results
+        ],
+    )
+    return success(out.model_dump(mode="json"))
+
+
+@router.post("/evaluate/pending-listings")
+def evaluate_pending_scraped_listings(
+    body: EvaluatePendingListingsIn,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    settings = get_settings()
+    llm = _get_llm(request)
+    try:
+        summary = evaluate_pending_listings(
+            db,
+            llm=llm,
+            settings=settings,
+            profile_id=body.profile_id,
+            source=body.source,
+            limit=body.limit,
+            on_evaluated=lambda job, cached: _queue_tailoring_if_needed(
+                job,
+                cached,
+                background_tasks,
+                request,
+                llm,
+                settings.llm_prompt_version,
+            ),
+        )
+    except LookupError as exc:
+        return error("not_found", str(exc), status_code=404)
+
+    out = EvaluateByListingsOut(
+        total=summary.total,
+        succeeded=summary.succeeded,
+        failed=summary.failed,
+        results=[
+            EvaluateByListingsResult(
+                listing_id=result.listing_id,
+                job_analysis_id=result.job_analysis_id,
+                score=result.score,
+                status=result.status,  # type: ignore[arg-type]
+                cached=result.cached,
+                error=result.error,
+            )
+            for result in summary.results
+        ],
     )
     return success(out.model_dump(mode="json"))
 
@@ -495,6 +489,9 @@ def get_history_item(job_id: uuid.UUID, db: Session = Depends(get_db)) -> JSONRe
         .all()
     )
     data = HistoryDetailOut.model_validate(job).model_dump(mode="json")
+    if job.profile_id:
+        profile = db.get(BaselineProfile, job.profile_id)
+        data["baseline_profile_text"] = profile.skills_text if profile else None
     serialized_resumes = []
     for resume in resumes:
         item = GeneratedResumeOut.model_validate(resume).model_dump(mode="json")

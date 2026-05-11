@@ -4,6 +4,8 @@ let currentResumePdfUrl = null;
 let currentJdText = null;
 let currentResumeId = null;
 let currentBeautifications = [];
+let currentResumeVersions = [];
+let currentBaselineText = null;
 let pollTimer = null;
 let profileLoaded = false;
 let loadedProfiles = [];
@@ -484,11 +486,49 @@ function renderEvalResult(data, cached) {
   document.getElementById('result-cached').textContent = cached ? '(cached)' : '';
   document.getElementById('result-explanation').textContent = data.explanation || '';
   renderTags('result-strengths', data.strengths);
-  renderTags('result-gaps', data.gaps);
+  renderActionableGaps(data.gaps);
+  renderResultActions(data);
 
   document.getElementById('tailoring-spinner').style.display = 'none';
   document.getElementById('tailoring-done').style.display = 'none';
   document.getElementById('eval-result').style.display = 'block';
+}
+
+function renderResultActions(data) {
+  const el = document.getElementById('result-actions');
+  if (!el) return;
+  if (data.status === 'ready_to_submit') {
+    el.innerHTML = '<div class="next-action next-ready">'
+      + '<strong>Ready to submit</strong>'
+      + '<span>This match is high enough to use the current resume as-is.</span>'
+      + '<a class="btn btn-sm btn-green" href="#submittable" onclick="switchTab(\'submittable\')">Open Submittable</a>'
+      + '</div>';
+    return;
+  }
+  if (data.status === 'needs_tailoring') {
+    el.innerHTML = '<div class="next-action next-tailoring">'
+      + '<strong>Tailoring queued</strong>'
+      + '<span>Review the gaps below while the tailored resume is generated.</span>'
+      + '</div>';
+    return;
+  }
+  el.innerHTML = '<div class="next-action next-skip">'
+    + '<strong>Skip recommended</strong>'
+    + '<span>The score is below the tailoring threshold. Keep it in history, or compare against a stronger profile later.</span>'
+    + '<a class="btn btn-sm btn-muted" href="/jobs.html">Browse JD Database</a>'
+    + '</div>';
+}
+
+function renderActionableGaps(items) {
+  const ul = document.getElementById('result-gaps');
+  const gaps = items || [];
+  if (gaps.length === 0) {
+    ul.innerHTML = '<li>No major gaps detected.</li>';
+    return;
+  }
+  ul.innerHTML = gaps.map(function(gap) {
+    return '<li><strong>' + escHtml(gap) + '</strong><span>Find truthful resume evidence, metrics, or project context before adding this.</span></li>';
+  }).join('');
 }
 
 function statusBadgeClass(status) {
@@ -509,8 +549,12 @@ function startPoll(jobId) {
       if (job.can_submit && job.generated_resumes && job.generated_resumes.length > 0) {
         stopPoll();
         const resume = job.generated_resumes[0];
+        currentResumeVersions = job.generated_resumes || [];
+        currentBaselineText = job.baseline_profile_text || null;
+        currentResumeId = resume.id;
         currentResumeText = resume.resume_text;
         currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
+        currentBeautifications = resume.beautifications || [];
         currentJdText = job.jd_full_text || currentJdText;
         document.getElementById('tailoring-spinner').style.display = 'none';
         document.getElementById('tailoring-done').style.display = 'flex';
@@ -548,13 +592,14 @@ async function loadHistory() {
       if (items.length === 0) {
         html += '<div class="empty" style="padding:0.75rem 0">None</div>';
       } else {
-        html += '<div class="card" style="padding:0;overflow:hidden"><table><thead><tr><th>Score</th><th>JD Preview</th><th>Created</th><th>Submittable</th></tr></thead><tbody>';
+        html += '<div class="card" style="padding:0;overflow:hidden"><table><thead><tr><th>Score</th><th>JD Preview</th><th>Created</th><th>Submittable</th><th>Resume</th></tr></thead><tbody>';
         for (const item of items) {
           html += '<tr>'
             + '<td><span class="' + statusPillClass(item.status) + '">' + (item.score != null ? item.score : '—') + '</span></td>'
             + '<td><div class="jd-preview">' + escHtml(item.jd_snippet || '') + '</div></td>'
             + '<td style="font-size:0.8rem;color:var(--muted)">' + fmtDate(item.created_at) + '</td>'
             + '<td>' + (item.can_submit ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--muted)">—</span>') + '</td>'
+            + '<td><button class="btn btn-sm btn-muted" onclick="fetchAndOpenModal(\'' + item.id + '\')">View</button></td>'
             + '</tr>';
         }
         html += '</tbody></table></div>';
@@ -598,17 +643,26 @@ async function loadSubmittable() {
 async function fetchAndOpenModal(jobId, showChecklist) {
   try {
     const { response: res, payload: body } = await apiFetch('/api/history/' + jobId);
-    const resumes = body.data?.generated_resumes;
-    if (resumes && resumes.length > 0) {
+    if (!res.ok) return;
+    const job = body.data || {};
+    const resumes = job.generated_resumes || [];
+    currentResumeVersions = resumes;
+    currentBaselineText = job.baseline_profile_text || '';
+    currentJdText = job.jd_full_text || job.jd_snippet || currentJdText;
+    if (resumes.length > 0) {
       const resume = resumes[0];
       currentResumeId = resume.id;
       currentResumeText = resume.resume_text;
       currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
       currentBeautifications = resume.beautifications || [];
-      currentJdText = body.data?.jd_full_text || body.data?.jd_snippet || currentJdText;
-      openModal();
-      if (showChecklist) showReadinessChecklist();
+    } else {
+      currentResumeId = null;
+      currentResumeText = currentBaselineText || '(no generated resume version yet)';
+      currentResumePdfUrl = job.profile_id ? '/api/profiles/' + job.profile_id + '/pdf' : null;
+      currentBeautifications = [];
     }
+    openModal();
+    if (showChecklist) showReadinessChecklist();
   } catch (_) {}
 }
 
@@ -616,6 +670,10 @@ async function fetchAndOpenModal(jobId, showChecklist) {
 function openModal() {
   document.getElementById('modal-resume-text').textContent = currentResumeText || '(no text)';
   document.getElementById('download-resume-pdf').hidden = !currentResumePdfUrl;
+  document.getElementById('beautify-open-btn').hidden = !currentResumeId;
+  document.getElementById('copy-status').textContent = '';
+  renderResumeVersions();
+  renderResumeCompare(false);
   hideReadinessChecklist();
   closeBeautifyPanel();
   document.getElementById('resume-modal').classList.add('open');
@@ -627,7 +685,61 @@ function closeModal() {
 
 async function copyResume() {
   if (!currentResumeText) return;
-  try { await navigator.clipboard.writeText(currentResumeText); } catch (_) {}
+  const status = document.getElementById('copy-status');
+  try {
+    await navigator.clipboard.writeText(currentResumeText);
+    status.textContent = 'Copied tailored resume.';
+    status.className = 'status-msg modal-status readiness-pass';
+  } catch (e) {
+    status.textContent = 'Copy failed: ' + e.message;
+    status.className = 'status-msg modal-status readiness-fail';
+  }
+}
+
+function renderResumeVersions() {
+  const el = document.getElementById('resume-versions');
+  if (!el) return;
+  if (!currentResumeVersions || currentResumeVersions.length === 0) {
+    el.innerHTML = '<span class="status-msg">No tailored resume versions yet.</span>';
+    return;
+  }
+  el.innerHTML = currentResumeVersions.map(function(resume, index) {
+    const label = index === 0 ? 'Latest' : 'Version ' + (currentResumeVersions.length - index);
+    const active = resume.id === currentResumeId ? ' active' : '';
+    return '<button class="btn btn-sm btn-muted version-btn' + active + '" type="button" onclick="selectResumeVersion(\'' + resume.id + '\')">'
+      + escHtml(label) + ' · ' + fmtDate(resume.created_at)
+      + '</button>';
+  }).join('');
+}
+
+function selectResumeVersion(resumeId) {
+  const resume = currentResumeVersions.find(item => item.id === resumeId);
+  if (!resume) return;
+  currentResumeId = resume.id;
+  currentResumeText = resume.resume_text;
+  currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
+  currentBeautifications = resume.beautifications || [];
+  document.getElementById('modal-resume-text').textContent = currentResumeText || '(no text)';
+  document.getElementById('download-resume-pdf').hidden = !currentResumePdfUrl;
+  document.getElementById('beautify-open-btn').hidden = !currentResumeId;
+  renderResumeVersions();
+  renderResumeCompare(!document.getElementById('resume-compare').hidden);
+  renderBeautifyHistory();
+}
+
+function toggleResumeCompare() {
+  const panel = document.getElementById('resume-compare');
+  renderResumeCompare(panel.hidden);
+}
+
+function renderResumeCompare(show) {
+  const panel = document.getElementById('resume-compare');
+  if (!panel) return;
+  panel.hidden = !show;
+  document.getElementById('compare-resume-btn').classList.toggle('active', show);
+  if (!show) return;
+  document.getElementById('baseline-resume-text').textContent = currentBaselineText || '(baseline profile text not available)';
+  document.getElementById('tailored-resume-text').textContent = currentResumeText || '(no tailored resume selected)';
 }
 
 function downloadCurrentResumePdf() {

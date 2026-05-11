@@ -22,6 +22,7 @@ class JobListingSummaryOut(BaseModel):
     last_score: int | None = None
     last_status: str | None = None
     scraped_at: datetime
+    changed_at: datetime | None = None
 
 
 class JobListingDetailOut(JobListingSummaryOut):

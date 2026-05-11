@@ -94,8 +94,9 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
     from sqlalchemy import text
     with db_engine.connect() as conn:
         conn.execute(text(
-            "TRUNCATE TABLE applications, generated_resumes, job_listings, "
-            "job_analyses, baseline_profile RESTART IDENTITY CASCADE"
+            "TRUNCATE TABLE scrape_runs, applications, generated_resumes, "
+            "job_listings, job_analyses, baseline_profile "
+            "RESTART IDENTITY CASCADE"
         ))
         conn.commit()
 

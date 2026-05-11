@@ -58,6 +58,7 @@ def _summary(
         last_score=analysis.score if analysis else None,
         last_status=analysis.status if analysis else None,
         scraped_at=listing.scraped_at,
+        changed_at=listing.changed_at,
     )
 
 
