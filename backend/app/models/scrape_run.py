@@ -14,14 +14,28 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-SCRAPE_RUN_STATUSES = ("queued", "running", "succeeded", "partial", "failed")
+SCRAPE_RUN_STATUSES = (
+    "queued",
+    "running",
+    "cancel_requested",
+    "cancelled",
+    "succeeded",
+    "partial",
+    "failed",
+)
+ACTIVE_SCRAPE_RUN_STATUSES = ("queued", "running", "cancel_requested")
 
 
 class ScrapeRun(Base):
     __tablename__ = "scrape_runs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'succeeded', 'partial', 'failed')",
+            (
+                "status IN ("
+                "'queued', 'running', 'cancel_requested', 'cancelled', "
+                "'succeeded', 'partial', 'failed'"
+                ")"
+            ),
             name="ck_scrape_runs_status",
         ),
     )

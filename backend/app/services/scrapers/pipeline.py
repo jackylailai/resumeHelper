@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from backend.app.models.scrape_run import ScrapeRun
+from backend.app.models.scrape_run import ACTIVE_SCRAPE_RUN_STATUSES, ScrapeRun
 from backend.app.services.scrapers.base import BaseScraper, JobListingDraft
 from backend.app.services.scrapers.persistence import UpsertStats, upsert_drafts_with_stats
 from backend.app.services.scrapers.registry import SCRAPERS, resolve_sources
@@ -19,12 +19,21 @@ async def scrape_with_runner(
     scraper: BaseScraper,
     keyword: str,
     limit: int,
-) -> tuple[list[JobListingDraft], int, list[str]]:
+    should_cancel: Callable[[], bool] | None = None,
+) -> tuple[list[JobListingDraft], int, list[str], bool]:
+    if callable(should_cancel) and should_cancel():
+        return [], 0, [], True
+
     drafts = await scraper.search(keyword, limit)
+    if callable(should_cancel) and should_cancel():
+        return [], 0, [], True
+
     enriched: list[JobListingDraft] = []
     failed = 0
     errors: list[str] = []
     for draft in drafts:
+        if callable(should_cancel) and should_cancel():
+            return enriched, failed, errors, True
         try:
             enriched.append(await scraper.fetch_detail(draft))
         except Exception as exc:
@@ -33,7 +42,7 @@ async def scrape_with_runner(
             errors.append(message)
             logger.warning("scrape_detail_failed source=%s %s", scraper.source, message)
             enriched.append(draft)
-    return enriched, failed, errors
+    return enriched, failed, errors, False
 
 
 def create_scrape_runs(
@@ -54,10 +63,46 @@ def create_scrape_runs(
     return runs
 
 
+def request_cancel_active_runs(db: Session) -> list[ScrapeRun]:
+    runs = (
+        db.query(ScrapeRun)
+        .filter(ScrapeRun.status.in_(ACTIVE_SCRAPE_RUN_STATUSES))
+        .order_by(ScrapeRun.started_at.desc(), ScrapeRun.id.desc())
+        .all()
+    )
+    now = datetime.now(UTC)
+    for run in runs:
+        if run.status == "queued":
+            run.status = "cancelled"
+            run.finished_at = now
+            continue
+        if run.status == "running":
+            run.status = "cancel_requested"
+    db.commit()
+    for run in runs:
+        db.refresh(run)
+    return runs
+
+
+def active_scrape_runs(db: Session) -> list[ScrapeRun]:
+    return (
+        db.query(ScrapeRun)
+        .filter(ScrapeRun.status.in_(ACTIVE_SCRAPE_RUN_STATUSES))
+        .order_by(ScrapeRun.started_at.desc(), ScrapeRun.id.desc())
+        .all()
+    )
+
+
 async def execute_scrape_run(db: Session, run_id: uuid.UUID) -> ScrapeRun:
     run = db.get(ScrapeRun, run_id)
     if run is None:
         raise LookupError(f"scrape run {run_id} not found")
+
+    if run.status in {"cancel_requested", "cancelled"}:
+        _mark_cancelled(run)
+        db.commit()
+        db.refresh(run)
+        return run
 
     run.status = "running"
     run.started_at = datetime.now(UTC)
@@ -67,11 +112,20 @@ async def execute_scrape_run(db: Session, run_id: uuid.UUID) -> ScrapeRun:
     try:
         scraper_cls = SCRAPERS[run.source]
         async with scraper_cls() as scraper:  # type: ignore[attr-defined]
-            drafts, detail_failures, errors = await scrape_with_runner(
+            drafts, detail_failures, errors, cancelled = await scrape_with_runner(
                 scraper,
                 run.keyword,
                 run.limit,
+                should_cancel=lambda: _is_cancel_requested(db, run_id),
             )
+        if cancelled or _is_cancel_requested(db, run_id):
+            run = db.get(ScrapeRun, run_id)
+            if run is None:
+                raise LookupError(f"scrape run {run_id} not found")
+            _mark_cancelled(run)
+            db.commit()
+            db.refresh(run)
+            return run
         stats = upsert_drafts_with_stats(db, drafts)
         _apply_stats(run, stats, detail_failures, errors)
     except Exception as exc:
@@ -105,6 +159,21 @@ def _apply_stats(
     run.status = "partial" if detail_failures else "succeeded"
     run.error_summary = "\n".join(errors[:10]) or None
     run.finished_at = datetime.now(UTC)
+
+
+def _is_cancel_requested(db: Session, run_id: uuid.UUID) -> bool:
+    run = db.get(ScrapeRun, run_id)
+    if run is None:
+        return True
+    db.refresh(run)
+    return run.status in {"cancel_requested", "cancelled"}
+
+
+def _mark_cancelled(run: ScrapeRun) -> None:
+    run.status = "cancelled"
+    run.finished_at = datetime.now(UTC)
+    if run.error_summary is None:
+        run.error_summary = "Cancelled by user."
 
 
 async def execute_scrape_runs(db: Session, run_ids: list[uuid.UUID]) -> list[ScrapeRun]:

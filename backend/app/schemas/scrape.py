@@ -6,14 +6,29 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ScrapeSource = Literal["104", "yourator", "linkedin", "all"]
-ScrapeRunStatus = Literal["queued", "running", "succeeded", "partial", "failed"]
+ScrapeSource = Literal["104", "yourator", "linkedin", "all", "all_with_linkedin"]
+ScrapeRunStatus = Literal[
+    "queued",
+    "running",
+    "cancel_requested",
+    "cancelled",
+    "succeeded",
+    "partial",
+    "failed",
+]
 
 
 class ScrapeRunCreateIn(BaseModel):
     source: ScrapeSource = "all"
     keyword: Annotated[str, Field(min_length=1, max_length=120)]
     limit: Annotated[int, Field(ge=1, le=100)] = 25
+
+
+class ScrapeControlStartIn(ScrapeRunCreateIn):
+    evaluate_after_scrape: bool = True
+    evaluate_limit: Annotated[int, Field(ge=1, le=500)] = 100
+    profile_id: int | None = None
+    stop_existing: bool = False
 
 
 class ScrapeRunOut(BaseModel):
@@ -39,3 +54,8 @@ class ScrapeRunCreatedOut(BaseModel):
 
 class ScrapeStatusOut(BaseModel):
     recent_runs: list[ScrapeRunOut]
+
+
+class ScrapeControlStatusOut(ScrapeStatusOut):
+    active: bool
+    active_runs: list[ScrapeRunOut]
