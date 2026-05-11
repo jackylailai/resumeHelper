@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
+import backend.app.schemas.evaluate as schemas
 from backend.app.api.envelope import error, success
 from backend.app.config import get_settings
 from backend.app.db import get_db
@@ -19,7 +20,6 @@ from backend.app.models.job_analysis import (
     STATUS_READY_TO_SUBMIT,
     STATUS_SKIP,
 )
-from backend.app.schemas import evaluate as schemas
 from backend.app.services.batch_evaluator import (
     evaluate_listing_ids,
     evaluate_pending_listings,
