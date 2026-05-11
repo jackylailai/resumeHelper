@@ -20,6 +20,15 @@ const trackStatus = document.getElementById("track-status");
 const prevPage = document.getElementById("prev-page");
 const nextPage = document.getElementById("next-page");
 const pageRange = document.getElementById("page-range");
+const scrapeForm = document.getElementById("scrape-form");
+const scrapeSource = document.getElementById("scrape-source");
+const scrapeKeyword = document.getElementById("scrape-keyword");
+const scrapeLimit = document.getElementById("scrape-limit");
+const runScrapeButton = document.getElementById("run-scrape");
+const evaluatePendingButton = document.getElementById("evaluate-pending");
+const refreshScrapeRuns = document.getElementById("refresh-scrape-runs");
+const scrapeStatus = document.getElementById("scrape-status");
+const scrapeRuns = document.getElementById("scrape-runs");
 const UI = window.ResumeHelper;
 
 const PAGE_SIZE = 20;
@@ -27,6 +36,7 @@ let selectedListingId = null;
 let currentListings = [];
 let selectedListingIds = new Set();
 let failedBatchListingIds = new Set();
+let scrapeRefreshTimer = null;
 const listingLabelsById = new Map();
 const pagination = {
     limit: PAGE_SIZE,
@@ -73,12 +83,164 @@ nextPage.addEventListener("click", async () => {
     }
 });
 
+scrapeForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await runScrape();
+});
+
+evaluatePendingButton.addEventListener("click", async () => {
+    await evaluatePendingListings();
+});
+
+refreshScrapeRuns.addEventListener("click", async () => {
+    await loadScrapeRuns();
+});
+
 window.addEventListener("DOMContentLoaded", () => {
     loadProfiles();
     loadListings();
+    loadScrapeRuns();
     updateSelectionControls();
     updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });
 });
+
+async function runScrape() {
+    const keyword = scrapeKeyword.value.trim();
+    const limit = Number(scrapeLimit.value || 25);
+    if (!keyword) {
+        scrapeStatus.textContent = "Enter a keyword before scraping.";
+        return;
+    }
+
+    runScrapeButton.disabled = true;
+    scrapeStatus.textContent = "Queueing scrape run...";
+
+    const { response, payload } = await safeApiFetch("/api/scrape/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            source: scrapeSource.value,
+            keyword,
+            limit,
+        }),
+    });
+
+    runScrapeButton.disabled = false;
+    if (!response.ok) {
+        setApiError(scrapeStatus, response, payload);
+        return;
+    }
+
+    const runs = payload.data?.runs ?? [];
+    scrapeStatus.textContent = `Queued ${runs.length} scrape run(s).`;
+    renderScrapeRuns(runs);
+    scheduleScrapeStatusRefresh();
+}
+
+async function evaluatePendingListings() {
+    evaluatePendingButton.disabled = true;
+    scrapeStatus.textContent = "Evaluating pending listings...";
+    batchResults.hidden = true;
+    batchResults.innerHTML = "";
+
+    const requestBody = { limit: 100 };
+    const profileId = profileSelect.value;
+    if (profileId) requestBody.profile_id = Number(profileId);
+    if (scrapeSource.value !== "all") requestBody.source = scrapeSource.value;
+
+    const { response, payload } = await safeApiFetch("/api/evaluate/pending-listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+    });
+
+    evaluatePendingButton.disabled = false;
+    if (!response.ok) {
+        setApiError(scrapeStatus, response, payload);
+        return;
+    }
+
+    const data = payload.data;
+    scrapeStatus.textContent = (
+        `Evaluated ${data.succeeded}/${data.total}; ${data.failed} failed.`
+    );
+    renderBatchResults(data.results ?? []);
+    await loadListings();
+    if (selectedListingId) {
+        await loadDetail(selectedListingId);
+    }
+}
+
+async function loadScrapeRuns() {
+    const { response, payload } = await safeApiFetch("/api/scrape/status");
+    if (!response.ok) {
+        setApiError(scrapeStatus, response, payload);
+        return;
+    }
+    renderScrapeRuns(payload.data?.recent_runs ?? []);
+}
+
+function renderScrapeRuns(runs) {
+    if (!runs || runs.length === 0) {
+        scrapeRuns.innerHTML = '<div class="empty-row">No scrape runs yet.</div>';
+        return;
+    }
+
+    scrapeRuns.innerHTML = `
+        <table class="scrape-run-table">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Keyword</th>
+                    <th>Stats</th>
+                    <th>Started</th>
+                    <th>Finished</th>
+                    <th>Errors</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${runs.map((run) => `
+                    <tr>
+                        <td>${esc(run.source)}</td>
+                        <td><span class="run-status run-${esc(run.status)}">${formatRunStatus(run.status)}</span></td>
+                        <td>${esc(run.keyword)}</td>
+                        <td>${run.inserted}/${run.updated}/${run.skipped}/${run.failed}</td>
+                        <td>${formatDate(run.started_at)}</td>
+                        <td>${run.finished_at ? formatDate(run.finished_at) : "-"}</td>
+                        <td>${run.error_summary ? esc(run.error_summary) : ""}</td>
+                    </tr>
+                `).join("")}
+            </tbody>
+        </table>
+        <div class="muted scrape-run-help">Stats are inserted / updated / skipped / failed.</div>
+    `;
+}
+
+function scheduleScrapeStatusRefresh() {
+    if (scrapeRefreshTimer) clearTimeout(scrapeRefreshTimer);
+    let attempts = 0;
+    const refresh = async () => {
+        attempts += 1;
+        await loadScrapeRuns();
+        if (attempts < 4) {
+            scrapeRefreshTimer = setTimeout(refresh, attempts * 1500);
+        }
+    };
+    scrapeRefreshTimer = setTimeout(refresh, 1000);
+}
+
+function formatRunStatus(status) {
+    if (status === "succeeded") return "Succeeded";
+    if (status === "partial") return "Partial";
+    if (status === "failed") return "Failed";
+    if (status === "running") return "Running";
+    return "Queued";
+}
+
+function formatDate(value) {
+    return value ? new Date(value).toLocaleString() : "-";
+}
 
 async function loadProfiles() {
     profileSelect.innerHTML = "";
@@ -444,6 +606,9 @@ async function loadDetail(id) {
     document.getElementById("detail-scraped").textContent = (
         new Date(listing.scraped_at).toLocaleString()
     );
+    document.getElementById("detail-changed").textContent = listing.changed_at
+        ? new Date(listing.changed_at).toLocaleString()
+        : "No content changes";
     document.getElementById("detail-status").textContent = listingStatusText(listing);
     document.getElementById("detail-description").textContent = (
         listing.description || "No JD text"
@@ -507,4 +672,8 @@ function formatError(response, payload) {
 
 function setApiError(element, response, payload) {
     element.innerHTML = UI.apiErrorBanner(response, payload, { includeStatus: true });
+}
+
+function esc(value) {
+    return UI.escHtml(value);
 }

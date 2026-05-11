@@ -1,13 +1,19 @@
 """scrapers/persistence.upsert_drafts — integration test against real Postgres."""
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.models.job_analysis import JobAnalysis
 from backend.app.models.job_listing import JobListing
 from backend.app.services.scrapers.base import JobListingDraft
-from backend.app.services.scrapers.persistence import upsert_drafts
+from backend.app.services.scrapers.persistence import (
+    upsert_drafts,
+    upsert_drafts_with_stats,
+)
 
 
 def _draft(source_id: str, title: str = "t") -> JobListingDraft:
@@ -32,16 +38,42 @@ def test_upsert_drafts_inserts_new(db_session: Session):
 
 
 @pytest.mark.integration
-def test_upsert_drafts_skips_duplicates(db_session: Session):
+def test_upsert_drafts_updates_existing_rows(db_session: Session):
     upsert_drafts(db_session, [_draft("dup", title="first")])
-    inserted = upsert_drafts(db_session, [_draft("dup", title="second"), _draft("new")])
-    assert inserted == 1  # only "new" is added; "dup" skipped
     row = db_session.execute(
         select(JobListing).where(JobListing.source_id == "dup")
     ).scalar_one()
-    assert row.title == "first"  # original row was not overwritten
+    analysis = JobAnalysis(
+        jd_hash=uuid4_hex("dup"),
+        jd_full_text="old description",
+        score=70,
+        threshold_met=True,
+        status="needs_tailoring",
+    )
+    db_session.add(analysis)
+    db_session.flush()
+    row.job_analysis_id = analysis.id
+    db_session.commit()
+
+    stats = upsert_drafts_with_stats(
+        db_session,
+        [_draft("dup", title="second"), _draft("new")],
+    )
+    assert stats.inserted == 1
+    assert stats.updated == 1
+    assert stats.skipped == 0
+    row = db_session.execute(
+        select(JobListing).where(JobListing.source_id == "dup")
+    ).scalar_one()
+    assert row.title == "second"
+    assert row.changed_at is not None
+    assert row.job_analysis_id is None
 
 
 @pytest.mark.integration
 def test_upsert_drafts_empty_list(db_session: Session):
     assert upsert_drafts(db_session, []) == 0
+
+
+def uuid4_hex(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex}"

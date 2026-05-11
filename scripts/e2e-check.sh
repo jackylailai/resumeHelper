@@ -90,7 +90,9 @@ echo "Results: ${PASS} passed, ${FAIL} failed"
 
 # ── post to PR if requested ────────────────────────────────────────────────
 
-if [[ -n "$PR_NUMBER" && -n "${GITHUB_TOKEN:-}" ]]; then
+GITHUB_API_TOKEN="${GITHUB_PAT:-${GITHUB_TOKEN:-}}"
+
+if [[ -n "$PR_NUMBER" && -n "$GITHUB_API_TOKEN" ]]; then
   REPO="jackylailai/resumeHelper"
   TIMESTAMP=$(date -u "+%Y-%m-%d %H:%M UTC")
   SUMMARY="${PASS} passed · ${FAIL} failed"
@@ -107,7 +109,7 @@ ${RESULTS}"
   PAYLOAD=$(python3 -c "import sys,json; print(json.dumps({'body': sys.argv[1]}))" "$COMMENT_BODY")
 
   RESPONSE=$(curl -s -X POST \
-    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    -H "Authorization: Bearer ${GITHUB_API_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/${REPO}/issues/${PR_NUMBER}/comments" \
     -d "$PAYLOAD")

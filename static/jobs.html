@@ -26,6 +26,44 @@
     </nav>
 
     <main class="wrap">
+        <section class="panel scrape-panel">
+            <div class="scrape-header">
+                <div>
+                    <h2>Scrape Pipeline</h2>
+                    <p class="muted">Run scrapers, inspect ingestion status, then score new listings.</p>
+                </div>
+                <button id="refresh-scrape-runs" type="button">Refresh</button>
+            </div>
+            <form id="scrape-form" class="scrape-controls">
+                <label>
+                    Source
+                    <select id="scrape-source" name="scrape_source">
+                        <option value="all">All sources</option>
+                        <option value="104">104</option>
+                        <option value="yourator">Yourator</option>
+                        <option value="linkedin">LinkedIn</option>
+                    </select>
+                </label>
+                <label>
+                    Keyword
+                    <input
+                        id="scrape-keyword"
+                        name="scrape_keyword"
+                        type="search"
+                        placeholder="backend engineer"
+                    />
+                </label>
+                <label>
+                    Limit
+                    <input id="scrape-limit" name="scrape_limit" type="number" min="1" max="100" value="25" />
+                </label>
+                <button id="run-scrape" type="submit">Run scrape</button>
+                <button id="evaluate-pending" type="button">Evaluate pending</button>
+            </form>
+            <div id="scrape-status" class="muted"></div>
+            <div id="scrape-runs" class="scrape-runs"></div>
+        </section>
+
         <section class="panel">
             <form id="filters" class="filters">
                 <label>
@@ -158,6 +196,10 @@
                         <div>
                             <dt>Scraped</dt>
                             <dd id="detail-scraped"></dd>
+                        </div>
+                        <div>
+                            <dt>Changed</dt>
+                            <dd id="detail-changed"></dd>
                         </div>
                         <div>
                             <dt>Status</dt>
