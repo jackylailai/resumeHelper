@@ -671,9 +671,11 @@ function openModal() {
   document.getElementById('modal-resume-text').textContent = currentResumeText || '(no text)';
   document.getElementById('download-resume-pdf').hidden = !currentResumePdfUrl;
   document.getElementById('beautify-open-btn').hidden = !currentResumeId;
+  document.getElementById('edit-resume-btn').hidden = !currentResumeId;
   document.getElementById('copy-status').textContent = '';
   renderResumeVersions();
   renderResumeCompare(false);
+  closeResumeEditor();
   hideReadinessChecklist();
   closeBeautifyPanel();
   document.getElementById('resume-modal').classList.add('open');
@@ -705,9 +707,11 @@ function renderResumeVersions() {
   }
   el.innerHTML = currentResumeVersions.map(function(resume, index) {
     const label = index === 0 ? 'Latest' : 'Version ' + (currentResumeVersions.length - index);
+    const source = resume.revision_source === 'user_edited' ? 'User edit' : 'AI draft';
+    const exported = resume.exported_at ? ' · exported' : '';
     const active = resume.id === currentResumeId ? ' active' : '';
     return '<button class="btn btn-sm btn-muted version-btn' + active + '" type="button" onclick="selectResumeVersion(\'' + resume.id + '\')">'
-      + escHtml(label) + ' · ' + fmtDate(resume.created_at)
+      + escHtml(label) + ' · ' + escHtml(source) + exported + ' · ' + fmtDate(resume.created_at)
       + '</button>';
   }).join('');
 }
@@ -722,6 +726,8 @@ function selectResumeVersion(resumeId) {
   document.getElementById('modal-resume-text').textContent = currentResumeText || '(no text)';
   document.getElementById('download-resume-pdf').hidden = !currentResumePdfUrl;
   document.getElementById('beautify-open-btn').hidden = !currentResumeId;
+  document.getElementById('edit-resume-btn').hidden = !currentResumeId;
+  closeResumeEditor();
   renderResumeVersions();
   renderResumeCompare(!document.getElementById('resume-compare').hidden);
   renderBeautifyHistory();
@@ -740,6 +746,71 @@ function renderResumeCompare(show) {
   if (!show) return;
   document.getElementById('baseline-resume-text').textContent = currentBaselineText || '(baseline profile text not available)';
   document.getElementById('tailored-resume-text').textContent = currentResumeText || '(no tailored resume selected)';
+}
+
+function toggleResumeEditor(force) {
+  const panel = document.getElementById('resume-editor-panel');
+  if (!panel || !currentResumeId) return;
+  const show = typeof force === 'boolean' ? force : panel.hidden;
+  panel.hidden = !show;
+  document.getElementById('edit-resume-btn').classList.toggle('active', show);
+  if (show) {
+    document.getElementById('resume-editor-text').value = currentResumeText || '';
+    document.getElementById('resume-editor-status').textContent = '';
+  }
+}
+
+function closeResumeEditor() {
+  const panel = document.getElementById('resume-editor-panel');
+  if (panel) panel.hidden = true;
+  const button = document.getElementById('edit-resume-btn');
+  if (button) button.classList.remove('active');
+}
+
+async function saveResumeRevision() {
+  if (!currentResumeId) return;
+  const text = document.getElementById('resume-editor-text').value.trim();
+  const status = document.getElementById('resume-editor-status');
+  const button = document.getElementById('save-resume-revision');
+  if (!text) {
+    status.textContent = 'Draft text cannot be blank.';
+    status.className = 'status-msg readiness-fail';
+    return;
+  }
+
+  button.disabled = true;
+  status.textContent = 'Saving revision...';
+  status.className = 'status-msg';
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/generated-resumes/' + currentResumeId + '/revisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_text: text }),
+    });
+    if (!res.ok) {
+      status.textContent = 'Save failed: ' + (body?.error?.message || ('HTTP ' + res.status));
+      status.className = 'status-msg readiness-fail';
+      return;
+    }
+    const revision = body.data;
+    currentResumeVersions = [revision].concat(currentResumeVersions || []);
+    currentResumeId = revision.id;
+    currentResumeText = revision.resume_text;
+    currentResumePdfUrl = revision.pdf_url || '/api/generated-resumes/' + revision.id + '/pdf';
+    currentBeautifications = revision.beautifications || [];
+    document.getElementById('modal-resume-text').textContent = currentResumeText;
+    document.getElementById('download-resume-pdf').hidden = false;
+    status.textContent = 'Revision saved. PDF export will use this draft.';
+    status.className = 'status-msg readiness-pass';
+    renderResumeVersions();
+    renderResumeCompare(!document.getElementById('resume-compare').hidden);
+    closeResumeEditor();
+  } catch (e) {
+    status.textContent = 'Network error: ' + e.message;
+    status.className = 'status-msg readiness-fail';
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function downloadCurrentResumePdf() {

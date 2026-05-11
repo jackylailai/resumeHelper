@@ -49,8 +49,14 @@ class GeneratedResumeOut(BaseModel):
     resume_text: str
     pdf_url: str | None = None
     prompt_version: str | None
+    revision_source: str = "ai_draft"
+    exported_at: datetime | None = None
     created_at: datetime
     beautifications: list[BeautificationOut] = []
+
+
+class ResumeRevisionIn(BaseModel):
+    resume_text: Annotated[str, Field(min_length=1)]
 
 
 class BeautifyIn(BaseModel):

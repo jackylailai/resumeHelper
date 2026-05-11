@@ -10,15 +10,12 @@ from backend.app.api.envelope import error, success
 from backend.app.db import SessionLocal, get_db
 from backend.app.models.scrape_run import ScrapeRun
 from backend.app.schemas.scrape import (
-    ScrapeRunCreateIn,
     ScrapeRunCreatedOut,
+    ScrapeRunCreateIn,
     ScrapeRunOut,
     ScrapeStatusOut,
 )
-from backend.app.services.scrapers.pipeline import (
-    create_scrape_runs,
-    run_scrape_background,
-)
+from backend.app.services.scrapers.pipeline import create_scrape_runs, run_scrape_background
 from backend.app.services.scrapers.registry import resolve_sources
 
 router = APIRouter()
