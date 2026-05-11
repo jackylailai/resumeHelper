@@ -4,9 +4,11 @@
 > The current product has grown to include JD scraping, a JD database, scrape
 > scheduling, generated resume/PDF review, job opportunities, and application
 > tracking. Use `specs/current-product-spec.md` as the current product spec.
+> The sibling `data-model.md` and `contracts/openapi.yaml` files include current
+> implementation deltas where useful for API/model traceability.
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-07 (rev 4)
+**Updated**: 2026-05-11 (rev 5)
 **Status**: Phase 1 (implemented)
 **Authoritative direction**: multi-profile CRUD + profile-scoped evaluation; uploaded PDFs persisted on disk; v1 dead code removed; Python 3.11 floor
 
