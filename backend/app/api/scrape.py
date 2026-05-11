@@ -15,10 +15,7 @@ from backend.app.schemas.scrape import (
     ScrapeRunOut,
     ScrapeStatusOut,
 )
-from backend.app.services.scrapers.pipeline import (
-    create_scrape_runs,
-    run_scrape_background,
-)
+from backend.app.services.scrapers.pipeline import create_scrape_runs, run_scrape_background
 from backend.app.services.scrapers.registry import resolve_sources
 
 router = APIRouter()

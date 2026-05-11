@@ -27,7 +27,7 @@ async def scrape_with_runner(
     for draft in drafts:
         try:
             enriched.append(await scraper.fetch_detail(draft))
-        except Exception as exc:  # noqa: BLE001 - per-listing enrichment is best effort
+        except Exception as exc:
             failed += 1
             message = f"{draft.source_id}: {exc}"
             errors.append(message)
@@ -74,7 +74,7 @@ async def execute_scrape_run(db: Session, run_id: uuid.UUID) -> ScrapeRun:
             )
         stats = upsert_drafts_with_stats(db, drafts)
         _apply_stats(run, stats, detail_failures, errors)
-    except Exception as exc:  # noqa: BLE001 - persist status rather than bubbling
+    except Exception as exc:
         db.rollback()
         run = db.get(ScrapeRun, run_id)
         if run is None:

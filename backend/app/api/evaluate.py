@@ -36,10 +36,7 @@ from backend.app.schemas.evaluate import (
     ResumeRevisionIn,
     SubmittableResumeOut,
 )
-from backend.app.services.batch_evaluator import (
-    evaluate_listing_ids,
-    evaluate_pending_listings,
-)
+from backend.app.services.batch_evaluator import evaluate_listing_ids, evaluate_pending_listings
 from backend.app.services.evaluator_v2 import evaluate_jd, get_default_profile as get_baseline
 from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
 from backend.app.services.pdf import generated_resume_pdf_path, write_generated_resume_pdf
