@@ -1,98 +1,180 @@
-# Resume Fit Evaluator
+# Resume Helper
 
-A single-user tool that scores job descriptions against your baseline resume
-profile and automatically tailors your resume for strong-but-not-perfect matches.
+Resume Helper is a single-user AI workflow tool for job search execution. It
+helps you collect job descriptions, score them against baseline profiles,
+generate reviewable tailored resumes, and track application decisions.
 
----
+The product is intentionally workflow-first rather than chatbot-first. LLMs are
+used inside bounded steps with explicit inputs, expected outputs, and
+application-owned state transitions.
 
-## How it works
+## Current Workflow
 
-1. **Save your baseline profile** — paste your skills/experience text once.
-2. **Evaluate a JD** — paste any job description. The system scores it 0–100
-   against your baseline and classifies it into one of three tiers:
+1. Save one or more baseline profiles.
+2. Paste a JD, bulk-evaluate JDs, or scrape listings into the JD database.
+3. Score each JD against a selected baseline profile.
+4. Route the result by score:
 
-| Score | Status | What happens |
-|-------|--------|-------------|
-| 85+ | `ready_to_submit` | Strong match — submit as-is |
-| 60–84 | `needs_tailoring` | Good match — resume tailored in background |
-| <60 | `skip` | Weak match — skip with a reason |
+| Score | Status | Behavior |
+|-------|--------|----------|
+| 85-100 | `ready_to_submit` | Strong match; ready for review and application tracking. |
+| 60-84 | `needs_tailoring` | Generate a tailored resume draft/PDF for review. |
+| 0-59 | `skip` | Keep the analysis, but do not recommend applying. |
 
-3. **View history** — all evaluated JDs with scores and statuses.
-4. **Check submittable** — jobs with a generated resume ready to submit.
+5. Review suggested opportunities and source URLs.
+6. Add selected jobs to the application tracker.
+7. Review generated resumes/PDFs before submitting.
 
----
+## Implemented Product Areas
 
-## Phase 1 (current)
+- Baseline profile CRUD and PDF upload.
+- Single JD evaluation.
+- Bulk JD evaluation.
+- Three-tier scoring and status routing.
+- Generated resume drafts and beautified PDF/HTML output.
+- JD database with source listings.
+- Scrapers for 104, Yourator, and LinkedIn guest listings.
+- Scrape run history and controllable scrape scheduling UI.
+- Cron wrapper for scheduled scrape + evaluate jobs.
+- Job opportunities / recommended application surface.
+- Application tracker with status and follow-up fields.
+- Production-style JSON error envelopes with request IDs.
 
-- FastAPI backend + PostgreSQL
-- Three-tier scoring via Claude API
-- Background tailoring (FastAPI BackgroundTasks)
-- Single-page UI (Evaluate / History / Profile tabs)
-- JD deduplication by content hash
-- Bulk JD evaluation endpoint
+## Main Pages
+
+| Page | Purpose |
+|------|---------|
+| `/` | Evaluate JDs, review history, profiles, and submittable results. |
+| `/jobs.html` | JD database, scraper controls, batch scoring, and source links. |
+| `/applications.html` | Recommended opportunities and application tracking. |
+
+## LLM Backends
+
+The app supports a configurable LLM backend:
+
+- `fake` for deterministic tests and local development.
+- `claude_cli` for local Claude CLI usage.
+- `anthropic` for Anthropic API usage.
+
+The current LLM flow is:
+
+```text
+baseline profile + JD
+  -> evaluate LLM call
+  -> application-owned score routing
+  -> optional tailoring LLM call
+  -> optional beautify/PDF generation
+  -> human review
+```
+
+The LLM can suggest and generate content, but the application owns state
+transitions. Human review is required before any real submission.
+
+## AI Engineering Direction
+
+High-priority hardening work is tracked in:
+
+- [#113: LLM eval harness and stricter output constraints](https://github.com/jackylailai/resumeHelper/issues/113)
+- [#114: AI engineering production maturity checklist](https://github.com/jackylailai/resumeHelper/issues/114)
+- [#115: README and current product specs refresh](https://github.com/jackylailai/resumeHelper/issues/115)
+
+Target practices:
+
+- Explicit input and output specs for every LLM call.
+- Schema validation for LLM outputs.
+- Deterministic state machine in application code.
+- Prompt/model versioning and audit trail.
+- Eval harness with golden fixtures and regression reports.
+- Factuality checks for tailored resumes.
+- Durable background jobs for long-running work.
+- Cost, latency, quota, and privacy controls.
+
+See [specs/current-product-spec.md](specs/current-product-spec.md) for the
+current product spec.
 
 ## Stack
 
 | Layer | Tech |
 |-------|------|
 | API | FastAPI |
-| DB | PostgreSQL (SQLAlchemy + Alembic) |
-| LLM | Claude (local `claude` CLI or Anthropic API) |
-| UI | Vanilla JS single-page app |
-| Tests | pytest + testcontainers |
-
----
+| DB | PostgreSQL, SQLAlchemy, Alembic |
+| LLM | Claude CLI, Anthropic API, deterministic fake backend |
+| UI | Vanilla HTML/CSS/JS |
+| PDF | WeasyPrint |
+| Tests | pytest, testcontainers, Playwright flow tests |
 
 ## Quickstart
 
-> **Python 3.11+ required.** The codebase uses `datetime.UTC`, PEP 604
-> unions inside SQLAlchemy `Mapped[...]` annotations (which are evaluated
-> at runtime), and other typing-modernise constructs. There is no 3.9/3.10
-> fallback — `pyenv install 3.11 && pyenv local 3.11` if you're on Anaconda
-> 3.9 or similar.
-
-See [specs/001-resume-upload-rating/quickstart.md](specs/001-resume-upload-rating/quickstart.md).
+Python 3.11+ is required.
 
 ```bash
-# Start DB
+# Start Postgres
 docker compose up -d postgres
+
+# Install backend dependencies
+python -m pip install -r backend/requirements.txt
 
 # Run migrations
 alembic -c backend/alembic.ini upgrade head
 
-# Start API
+# Start API and static UI
 uvicorn backend.app.main:app --reload --port 8000
-
-# Open UI
-open http://localhost:8000
 ```
 
----
+Open:
 
-## Running tests
+- http://localhost:8000/
+- http://localhost:8000/jobs.html
+- http://localhost:8000/applications.html
+
+## Scrape Scheduling
+
+The JD Database page includes controls to:
+
+- choose a keyword and source
+- start a scrape schedule
+- inspect active runs
+- stop current runs
+- stop and immediately run a new keyword
+- optionally evaluate pending listings after scraping
+
+For cron or launchd usage, see [docs/scheduling.md](docs/scheduling.md).
+
+## Useful CLI Commands
 
 ```bash
-# Recommended: bootstraps a Python 3.11+ venv at .venv/ if missing,
-# installs requirements, runs pytest. Use this if your default `python`
-# is < 3.11 (e.g. Anaconda 3.9).
+# Scrape default safe sources: 104 + Yourator
+python -m backend.app.cli scrape --source all --keyword "backend engineer" --limit 25
+
+# Include LinkedIn explicitly
+python -m backend.app.cli scrape --source all_with_linkedin --keyword "backend engineer" --limit 10
+
+# Scrape and then evaluate pending listings
+python -m backend.app.cli scrape --source all --keyword "java backend" --evaluate
+
+# Evaluate pending stored listings
+python -m backend.app.cli evaluate-listings --limit 100
+```
+
+## Running Tests
+
+```bash
+# Recommended wrapper
 ./scripts/test.sh
 
-# Forward args:
-./scripts/test.sh -k some_test_name
-./scripts/test.sh --recreate    # blow away .venv and rebuild
+# Forward pytest args
+./scripts/test.sh -k scrape
 
-# Or directly, if you already have the right interpreter activated:
+# Direct pytest when dependencies are already installed
 python -m pytest backend/tests/unit/ backend/tests/integration/v2/ -q
 ```
 
-Docker must be running — testcontainers spawns a Postgres container for the integration suite.
+Docker must be running for integration tests that use testcontainers.
 
----
+## Documentation
 
-## Roadmap (future phases)
-
-- Job crawler / n8n ingestion pipeline
-- PDF resume generation (weasyprint)
-- Multi-user support
-- Kubernetes deployment
-- Discord agent interface
+- [Current product spec](specs/current-product-spec.md)
+- [Roadmap](specs/roadmap.md)
+- [Scrape scheduling](docs/scheduling.md)
+- [Script inventory](scripts/README.md)
+- Historical Phase 1 spec: [specs/001-resume-upload-rating/spec.md](specs/001-resume-upload-rating/spec.md)
