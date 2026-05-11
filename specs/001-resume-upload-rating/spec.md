@@ -1,5 +1,10 @@
 # Feature Specification: Resume Fit Evaluator
 
+> Historical note: this document describes the original Phase 1 evaluator scope.
+> The current product has grown to include JD scraping, a JD database, scrape
+> scheduling, generated resume/PDF review, job opportunities, and application
+> tracking. Use `specs/current-product-spec.md` as the current product spec.
+
 **Feature Branch**: `001-resume-upload-rating`
 **Updated**: 2026-05-07 (rev 4)
 **Status**: Phase 1 (implemented)
