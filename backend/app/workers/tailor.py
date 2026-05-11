@@ -63,7 +63,12 @@ def run_tailoring(
         if job.profile_id:
             baseline = db.get(BaselineProfile, job.profile_id)
         else:
-            baseline = db.query(BaselineProfile).order_by(BaselineProfile.id.desc()).first()
+            # Older JobAnalysis rows can have profile_id=None. Prefer the
+            # explicitly-defaulted profile over "latest by id" so a user who
+            # marked one profile as default doesn't suddenly get tailored
+            # against whatever they uploaded most recently.
+            from backend.app.services.evaluator_v2 import get_default_profile
+            baseline = get_default_profile(db)
         if baseline is None:
             logger.error("tailor_no_baseline job_id=%s", job_analysis_id)
             return

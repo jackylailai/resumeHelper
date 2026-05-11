@@ -45,17 +45,27 @@ Hard rules:
 1. Use ONLY content from the source markdown. Do NOT invent, embellish,
    paraphrase to add facts, or fabricate skills, experience, dates, metrics,
    or contact details.
-2. Preserve every concrete number, percentage, duration, scale figure, and
-   proper noun verbatim.
+2. Preserve every concrete number, percentage, duration, employment date
+   range, and proper noun verbatim (e.g. "April 2024 - Present", "50,000 QPS",
+   "TOEIC 790", "富邦媒體科技", "騰茲電通"). Do not translate or omit them.
 3. Output a single complete HTML document — `<!DOCTYPE html>` ... `</html>`.
-   Inline all CSS in a single `<style>` block in the head. No external
-   stylesheets, fonts, images, or scripts.
-4. Use only WeasyPrint-compatible CSS. Avoid JavaScript, external @font-face,
-   position: sticky.
-5. Style preset will be provided in the user message — interpret as: `modern`
-   (clean sans-serif, blue accent), `classic` (serif, traditional), or
-   `minimal` (monochrome, tight spacing).
-6. Include only sections actually present in the source markdown.
+   Inline all CSS in a single `<style>` block. No external stylesheets, fonts,
+   images, or scripts.
+4. CJK support is mandatory. The `font-family` stack on body and text elements
+   MUST include CJK fallbacks like "Noto Sans CJK SC", "Noto Sans CJK TC",
+   "PingFang SC", "Microsoft YaHei" so Chinese characters render correctly.
+5. Use only WeasyPrint-compatible CSS. Avoid JavaScript, external @font-face,
+   `position: sticky`, fixed pixel widths on top-level containers.
+6. Layout safety: do NOT use label-value grids with fixed-width labels that
+   can overflow when values are long. Prefer `<dl>` blocks, inline labels with
+   `<strong>`, or grid with `minmax(7rem, max-content) 1fr` + label
+   `white-space: nowrap`. Default to single-column body; two-column only for
+   short skill / language lists.
+7. Include each work-experience entry's date range prominently alongside the
+   employer name. Never silently drop dates.
+8. Style preset will be in the user message — `modern` (clean sans-serif,
+   blue accent), `classic` (serif, traditional), or `minimal` (monochrome).
+9. Include only sections actually present in source markdown.
 
 Return ONLY the HTML document. No markdown code fences, no preamble.
 """
