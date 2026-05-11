@@ -39,6 +39,7 @@
                     Source
                     <select id="scrape-source" name="scrape_source">
                         <option value="all">All sources</option>
+                        <option value="all_with_linkedin">All + LinkedIn</option>
                         <option value="104">104</option>
                         <option value="yourator">Yourator</option>
                         <option value="linkedin">LinkedIn</option>
@@ -57,9 +58,18 @@
                     Limit
                     <input id="scrape-limit" name="scrape_limit" type="number" min="1" max="100" value="25" />
                 </label>
-                <button id="run-scrape" type="submit">Run scrape</button>
+                <label class="checkbox-label">
+                    <input id="scrape-evaluate-after" type="checkbox" checked />
+                    Evaluate after scrape
+                </label>
+                <div class="scrape-actions">
+                    <button id="run-scrape" type="submit">Run schedule</button>
+                    <button id="replace-scrape" type="button">Stop + run new</button>
+                    <button id="stop-scrape" type="button">Stop current</button>
+                </div>
                 <button id="evaluate-pending" type="button">Evaluate pending</button>
             </form>
+            <div id="scrape-active-summary" class="scrape-active-summary muted"></div>
             <div id="scrape-status" class="muted"></div>
             <div id="scrape-runs" class="scrape-runs"></div>
         </section>

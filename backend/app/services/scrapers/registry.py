@@ -17,6 +17,11 @@ SCRAPERS: dict[str, type[BaseScraper]] = {
 def resolve_sources(source: str) -> list[str]:
     if source == "all":
         return list(DEFAULT_SOURCES)
+    if source == "all_with_linkedin":
+        return list(SCRAPERS)
     if source not in SCRAPERS:
-        raise ValueError(f"unknown source {source!r}; valid: {list(SCRAPERS)} or 'all'")
+        raise ValueError(
+            f"unknown source {source!r}; valid: {list(SCRAPERS)}, "
+            "'all', or 'all_with_linkedin'"
+        )
     return [source]

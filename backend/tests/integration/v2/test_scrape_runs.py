@@ -96,3 +96,94 @@ def test_scrape_api_creates_runs_and_reports_status(
     runs = status_response.json()["data"]["recent_runs"]
     assert len(runs) >= 2
     assert {run["status"] for run in runs[:2]} == {"queued"}
+
+
+@pytest.mark.integration
+def test_scrape_control_blocks_or_replaces_active_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+):
+    monkeypatch.setattr(
+        "backend.app.api.scrape.run_scrape_control_background",
+        lambda *_args, **_kwargs: None,
+    )
+
+    first = client.post(
+        "/api/scrape/control/start",
+        json={
+            "source": "all",
+            "keyword": "backend",
+            "limit": 2,
+            "evaluate_after_scrape": False,
+        },
+    )
+    assert first.status_code == 202
+    first_runs = first.json()["data"]["runs"]
+    assert {run["source"] for run in first_runs} == {"104", "yourator"}
+
+    blocked = client.post(
+        "/api/scrape/control/start",
+        json={
+            "source": "all",
+            "keyword": "java",
+            "limit": 2,
+            "evaluate_after_scrape": False,
+        },
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "scrape_already_running"
+
+    replaced = client.post(
+        "/api/scrape/control/start",
+        json={
+            "source": "all_with_linkedin",
+            "keyword": "java",
+            "limit": 1,
+            "evaluate_after_scrape": False,
+            "stop_existing": True,
+        },
+    )
+    assert replaced.status_code == 202
+    replacement_runs = replaced.json()["data"]["runs"]
+    assert {run["source"] for run in replacement_runs} == {
+        "104",
+        "yourator",
+        "linkedin",
+    }
+
+    status = client.get("/api/scrape/control")
+    assert status.status_code == 200
+    recent_runs = status.json()["data"]["recent_runs"]
+    cancelled_backend = [
+        run
+        for run in recent_runs
+        if run["keyword"] == "backend" and run["status"] == "cancelled"
+    ]
+    assert len(cancelled_backend) == 2
+
+
+@pytest.mark.integration
+def test_scrape_control_stop_cancels_queued_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+):
+    monkeypatch.setattr(
+        "backend.app.api.scrape.run_scrape_control_background",
+        lambda *_args, **_kwargs: None,
+    )
+
+    response = client.post(
+        "/api/scrape/control/start",
+        json={
+            "source": "104",
+            "keyword": "backend",
+            "limit": 2,
+            "evaluate_after_scrape": False,
+        },
+    )
+    assert response.status_code == 202
+
+    stopped = client.post("/api/scrape/control/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["data"]["active"] is False
+    assert stopped.json()["meta"]["cancelled_runs"][0]["status"] == "cancelled"

@@ -19,7 +19,7 @@ from backend.app.workers.tailor import run_tailoring
 
 
 def _source_help() -> str:
-    return f"source to scrape; valid: {', '.join(SCRAPERS)} or all"
+    return f"source to scrape; valid: {', '.join(SCRAPERS)}, all, or all_with_linkedin"
 
 
 async def _scrape(args: argparse.Namespace) -> int:
@@ -43,22 +43,26 @@ async def _scrape(args: argparse.Namespace) -> int:
         )
         completed = await execute_scrape_runs(db, [run.id for run in runs])
 
-    for run in completed:
-        print(
-            f"{run.source}: {run.status} "
-            f"inserted={run.inserted} updated={run.updated} "
-            f"skipped={run.skipped} failed={run.failed}"
-        )
-        if run.error_summary:
-            print(f"  errors: {run.error_summary}")
+    if not args.quiet:
+        for run in completed:
+            print(
+                f"{run.source}: {run.status} "
+                f"inserted={run.inserted} updated={run.updated} "
+                f"skipped={run.skipped} failed={run.failed}"
+            )
+            if run.error_summary:
+                print(f"  errors: {run.error_summary}")
 
     if args.evaluate:
         return _evaluate_listings(
             argparse.Namespace(
-                source=None if args.source == "all" else args.source,
+                source=None
+                if args.source in {"all", "all_with_linkedin"}
+                else args.source,
                 profile_id=args.profile_id,
                 limit=args.evaluate_limit,
                 no_tailor=args.no_tailor,
+                quiet=args.quiet,
             )
         )
 
@@ -87,7 +91,8 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
             print(str(exc), file=sys.stderr)
             return 1
 
-    _print_eval_summary(args.source, summary)
+    if not args.quiet:
+        _print_eval_summary(args.source, summary)
     if not args.no_tailor and summary.tailoring_job_ids:
         for job_id in summary.tailoring_job_ids:
             run_tailoring(
@@ -96,7 +101,8 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
                 prompt_version=settings.llm_prompt_version,
                 session_factory=SessionLocal,
             )
-        print(f"tailored={len(summary.tailoring_job_ids)}")
+        if not args.quiet:
+            print(f"tailored={len(summary.tailoring_job_ids)}")
     return 0 if summary.failed == 0 else 1
 
 
@@ -144,6 +150,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="do not synchronously tailor needs_tailoring results",
     )
+    scrape.add_argument("--quiet", action="store_true", help="reduce cron output")
     scrape.set_defaults(func=lambda args: asyncio.run(_scrape(args)))
 
     evaluate = subparsers.add_parser(
@@ -158,6 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="do not synchronously tailor needs_tailoring results",
     )
+    evaluate.add_argument("--quiet", action="store_true", help="reduce cron output")
     evaluate.set_defaults(func=_evaluate_listings)
 
     args = parser.parse_args(argv)

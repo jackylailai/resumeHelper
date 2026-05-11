@@ -36,6 +36,7 @@ Helper scripts for local dev. Daily flow is just two:
 | Script | What it does |
 |---|---|
 | `scrape_jobs.py` | Scrapes job listings from configured sources and persists drafts. Writes a CSV snapshot to `RESUMEHELPER_BACKUP_DIR` (default `~/resumeHelper_data/backups`) after each successful run. |
+| `cron/daily_scrape.sh` | Cron/launchd-friendly wrapper for `python -m backend.app.cli scrape --evaluate`; configurable via `RESUMEHELPER_*` environment variables. |
 
 ### Development utilities
 

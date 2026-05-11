@@ -24,9 +24,13 @@ const scrapeForm = document.getElementById("scrape-form");
 const scrapeSource = document.getElementById("scrape-source");
 const scrapeKeyword = document.getElementById("scrape-keyword");
 const scrapeLimit = document.getElementById("scrape-limit");
+const scrapeEvaluateAfter = document.getElementById("scrape-evaluate-after");
 const runScrapeButton = document.getElementById("run-scrape");
+const replaceScrapeButton = document.getElementById("replace-scrape");
+const stopScrapeButton = document.getElementById("stop-scrape");
 const evaluatePendingButton = document.getElementById("evaluate-pending");
 const refreshScrapeRuns = document.getElementById("refresh-scrape-runs");
+const scrapeActiveSummary = document.getElementById("scrape-active-summary");
 const scrapeStatus = document.getElementById("scrape-status");
 const scrapeRuns = document.getElementById("scrape-runs");
 const UI = window.ResumeHelper;
@@ -85,7 +89,15 @@ nextPage.addEventListener("click", async () => {
 
 scrapeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await runScrape();
+    await runScrape(false);
+});
+
+replaceScrapeButton.addEventListener("click", async () => {
+    await runScrape(true);
+});
+
+stopScrapeButton.addEventListener("click", async () => {
+    await stopCurrentScrape();
 });
 
 evaluatePendingButton.addEventListener("click", async () => {
@@ -108,7 +120,7 @@ window.addEventListener("DOMContentLoaded", () => {
     updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });
 });
 
-async function runScrape() {
+async function runScrape(stopExisting) {
     const keyword = scrapeKeyword.value.trim();
     const limit = Number(scrapeLimit.value || 25);
     if (!keyword) {
@@ -116,28 +128,66 @@ async function runScrape() {
         return;
     }
 
-    runScrapeButton.disabled = true;
-    scrapeStatus.textContent = "Queueing scrape run...";
+    setScrapeButtonsBusy(true);
+    scrapeStatus.textContent = stopExisting
+        ? "Stopping current scrape and queueing new keyword..."
+        : "Queueing scrape schedule...";
 
-    const { response, payload } = await safeApiFetch("/api/scrape/run", {
+    const requestBody = {
+        source: scrapeSource.value,
+        keyword,
+        limit,
+        evaluate_after_scrape: scrapeEvaluateAfter.checked,
+        evaluate_limit: 100,
+        stop_existing: stopExisting,
+    };
+    const profileId = profileSelect.value;
+    if (profileId) requestBody.profile_id = Number(profileId);
+
+    const { response, payload } = await safeApiFetch("/api/scrape/control/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            source: scrapeSource.value,
-            keyword,
-            limit,
-        }),
+        body: JSON.stringify(requestBody),
     });
 
-    runScrapeButton.disabled = false;
+    setScrapeButtonsBusy(false);
     if (!response.ok) {
         setApiError(scrapeStatus, response, payload);
+        if (payload?.error?.details) {
+            renderScrapeControlStatus(payload.error.details);
+        }
         return;
     }
 
     const runs = payload.data?.runs ?? [];
     scrapeStatus.textContent = `Queued ${runs.length} scrape run(s).`;
-    renderScrapeRuns(runs);
+    if (payload.meta?.active_status) {
+        renderScrapeControlStatus(payload.meta.active_status);
+    } else {
+        renderScrapeRuns(runs);
+    }
+    scheduleScrapeStatusRefresh();
+}
+
+async function stopCurrentScrape() {
+    setScrapeButtonsBusy(true);
+    scrapeStatus.textContent = "Requesting scrape stop...";
+
+    const { response, payload } = await safeApiFetch("/api/scrape/control/stop", {
+        method: "POST",
+    });
+
+    setScrapeButtonsBusy(false);
+    if (!response.ok) {
+        setApiError(scrapeStatus, response, payload);
+        return;
+    }
+
+    const cancelled = payload.meta?.cancelled_runs ?? [];
+    scrapeStatus.textContent = cancelled.length
+        ? `Stop requested for ${cancelled.length} scrape run(s).`
+        : "No active scrape runs.";
+    renderScrapeControlStatus(payload.data);
     scheduleScrapeStatusRefresh();
 }
 
@@ -150,7 +200,9 @@ async function evaluatePendingListings() {
     const requestBody = { limit: 100 };
     const profileId = profileSelect.value;
     if (profileId) requestBody.profile_id = Number(profileId);
-    if (scrapeSource.value !== "all") requestBody.source = scrapeSource.value;
+    if (!["all", "all_with_linkedin"].includes(scrapeSource.value)) {
+        requestBody.source = scrapeSource.value;
+    }
 
     const { response, payload } = await safeApiFetch("/api/evaluate/pending-listings", {
         method: "POST",
@@ -176,12 +228,31 @@ async function evaluatePendingListings() {
 }
 
 async function loadScrapeRuns() {
-    const { response, payload } = await safeApiFetch("/api/scrape/status");
+    const { response, payload } = await safeApiFetch("/api/scrape/control");
     if (!response.ok) {
         setApiError(scrapeStatus, response, payload);
-        return;
+        return false;
     }
-    renderScrapeRuns(payload.data?.recent_runs ?? []);
+    renderScrapeControlStatus(payload.data);
+    return Boolean(payload.data?.active);
+}
+
+function renderScrapeControlStatus(status) {
+    const activeRuns = status?.active_runs ?? [];
+    const recentRuns = status?.recent_runs ?? [];
+    if (activeRuns.length > 0) {
+        const keywords = [...new Set(activeRuns.map((run) => run.keyword))].join(", ");
+        const sources = [...new Set(activeRuns.map((run) => run.source))].join(", ");
+        scrapeActiveSummary.innerHTML = (
+            `<strong>Running:</strong> ${esc(keywords)} `
+            + `<span class="muted">(${esc(sources)})</span>`
+        );
+        stopScrapeButton.disabled = false;
+    } else {
+        scrapeActiveSummary.textContent = "No active scrape schedule.";
+        stopScrapeButton.disabled = true;
+    }
+    renderScrapeRuns(recentRuns);
 }
 
 function renderScrapeRuns(runs) {
@@ -207,7 +278,11 @@ function renderScrapeRuns(runs) {
                 ${runs.map((run) => `
                     <tr>
                         <td>${esc(run.source)}</td>
-                        <td><span class="run-status run-${esc(run.status)}">${formatRunStatus(run.status)}</span></td>
+                        <td>
+                            <span class="run-status run-${esc(run.status)}">
+                                ${formatRunStatus(run.status)}
+                            </span>
+                        </td>
                         <td>${esc(run.keyword)}</td>
                         <td>${run.inserted}/${run.updated}/${run.skipped}/${run.failed}</td>
                         <td>${formatDate(run.started_at)}</td>
@@ -226,9 +301,9 @@ function scheduleScrapeStatusRefresh() {
     let attempts = 0;
     const refresh = async () => {
         attempts += 1;
-        await loadScrapeRuns();
-        if (attempts < 4) {
-            scrapeRefreshTimer = setTimeout(refresh, attempts * 1500);
+        const active = await loadScrapeRuns();
+        if (active && attempts < 90) {
+            scrapeRefreshTimer = setTimeout(refresh, 2000);
         }
     };
     scrapeRefreshTimer = setTimeout(refresh, 1000);
@@ -238,8 +313,16 @@ function formatRunStatus(status) {
     if (status === "succeeded") return "Succeeded";
     if (status === "partial") return "Partial";
     if (status === "failed") return "Failed";
+    if (status === "cancel_requested") return "Stopping";
+    if (status === "cancelled") return "Cancelled";
     if (status === "running") return "Running";
     return "Queued";
+}
+
+function setScrapeButtonsBusy(isBusy) {
+    runScrapeButton.disabled = isBusy;
+    replaceScrapeButton.disabled = isBusy;
+    stopScrapeButton.disabled = isBusy;
 }
 
 function formatDate(value) {
