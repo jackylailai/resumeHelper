@@ -19,23 +19,7 @@ from backend.app.models.job_analysis import (
     STATUS_READY_TO_SUBMIT,
     STATUS_SKIP,
 )
-from backend.app.schemas.evaluate import (
-    BulkEvaluateIn,
-    BulkEvaluateOut,
-    BulkEvaluateResult,
-    CallbackIn,
-    EvaluateByListingsIn,
-    EvaluateByListingsOut,
-    EvaluateByListingsResult,
-    EvaluateIn,
-    EvaluateOut,
-    EvaluatePendingListingsIn,
-    GeneratedResumeOut,
-    HistoryDetailOut,
-    HistoryItemOut,
-    ResumeRevisionIn,
-    SubmittableResumeOut,
-)
+from backend.app.schemas import evaluate as schemas
 from backend.app.services.batch_evaluator import (
     evaluate_listing_ids,
     evaluate_pending_listings,
@@ -114,7 +98,7 @@ def _queue_tailoring_if_needed(
 
 @router.post("/evaluate")
 def evaluate(
-    body: EvaluateIn,
+    body: schemas.EvaluateIn,
     background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
@@ -166,7 +150,7 @@ def evaluate(
         )
         logger.info("tailor_task_queued job_id=%s score=%s", job.id, job.score)
 
-    out = EvaluateOut(
+    out = schemas.EvaluateOut(
         job_analysis_id=job.id,
         score=job.score or 0,
         explanation=job.explanation or "",
@@ -186,7 +170,7 @@ def evaluate(
 
 @router.post("/evaluate/bulk")
 def bulk_evaluate(
-    body: BulkEvaluateIn,
+    body: schemas.BulkEvaluateIn,
     background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
@@ -198,7 +182,7 @@ def bulk_evaluate(
 
     settings = get_settings()
     llm = _get_llm(request)
-    results: list[BulkEvaluateResult] = []
+    results: list[schemas.BulkEvaluateResult] = []
     new_count = 0
     cached_count = 0
 
@@ -235,7 +219,7 @@ def bulk_evaluate(
                     session_factory=session_factory,
                 )
 
-        results.append(BulkEvaluateResult(
+        results.append(schemas.BulkEvaluateResult(
             job_analysis_id=job.id,
             jd_snippet=job.jd_snippet,
             score=job.score or 0,
@@ -243,7 +227,7 @@ def bulk_evaluate(
             cached=cached,
         ))
 
-    out = BulkEvaluateOut(
+    out = schemas.BulkEvaluateOut(
         total=len(results),
         new=new_count,
         cached=cached_count,
@@ -254,7 +238,7 @@ def bulk_evaluate(
 
 @router.post("/evaluate/by-listings")
 def evaluate_by_listings(
-    body: EvaluateByListingsIn,
+    body: schemas.EvaluateByListingsIn,
     background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
@@ -281,12 +265,12 @@ def evaluate_by_listings(
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
 
-    out = EvaluateByListingsOut(
+    out = schemas.EvaluateByListingsOut(
         total=summary.total,
         succeeded=summary.succeeded,
         failed=summary.failed,
         results=[
-            EvaluateByListingsResult(
+            schemas.EvaluateByListingsResult(
                 listing_id=result.listing_id,
                 job_analysis_id=result.job_analysis_id,
                 score=result.score,
@@ -302,7 +286,7 @@ def evaluate_by_listings(
 
 @router.post("/evaluate/pending-listings")
 def evaluate_pending_scraped_listings(
-    body: EvaluatePendingListingsIn,
+    body: schemas.EvaluatePendingListingsIn,
     background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
@@ -329,12 +313,12 @@ def evaluate_pending_scraped_listings(
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
 
-    out = EvaluateByListingsOut(
+    out = schemas.EvaluateByListingsOut(
         total=summary.total,
         succeeded=summary.succeeded,
         failed=summary.failed,
         results=[
-            EvaluateByListingsResult(
+            schemas.EvaluateByListingsResult(
                 listing_id=result.listing_id,
                 job_analysis_id=result.job_analysis_id,
                 score=result.score,
@@ -349,7 +333,7 @@ def evaluate_pending_scraped_listings(
 
 
 @router.post("/callback")
-def n8n_callback(body: CallbackIn, db: Session = Depends(get_db)) -> JSONResponse:
+def n8n_callback(body: schemas.CallbackIn, db: Session = Depends(get_db)) -> JSONResponse:
     """Callback endpoint — accepts external tailoring results (e.g. from n8n or other pipeline)."""
     job = db.get(JobAnalysis, body.job_analysis_id)
     if job is None:
@@ -385,7 +369,7 @@ def list_history(
 ) -> JSONResponse:
     """Return job analyses in reverse-chronological order, grouped by status."""
     jobs = db.query(JobAnalysis).order_by(JobAnalysis.created_at.desc()).limit(limit).all()
-    items = [HistoryItemOut.model_validate(j).model_dump(mode="json") for j in jobs]
+    items = [schemas.HistoryItemOut.model_validate(j).model_dump(mode="json") for j in jobs]
 
     grouped: dict[str, list] = {
         STATUS_READY_TO_SUBMIT: [],
@@ -438,7 +422,7 @@ def list_submittable(db: Session = Depends(get_db)) -> JSONResponse:
 
     result = []
     for job in jobs:
-        item = SubmittableResumeOut.model_validate(job).model_dump(mode="json")
+        item = schemas.SubmittableResumeOut.model_validate(job).model_dump(mode="json")
         latest = resume_by_job.get(job.id)
         if latest:
             item["pdf_url"] = latest.pdf_url
@@ -489,7 +473,7 @@ def download_generated_resume_pdf(
 @router.post("/generated-resumes/{resume_id}/revisions")
 def create_generated_resume_revision(
     resume_id: uuid.UUID,
-    body: ResumeRevisionIn,
+    body: schemas.ResumeRevisionIn,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     source = db.get(GeneratedResume, resume_id)
@@ -522,7 +506,7 @@ def create_generated_resume_revision(
 
     db.commit()
     db.refresh(revision)
-    return success(GeneratedResumeOut.model_validate(revision).model_dump(mode="json"))
+    return success(schemas.GeneratedResumeOut.model_validate(revision).model_dump(mode="json"))
 
 
 @router.get("/history/{job_id}")
@@ -537,13 +521,13 @@ def get_history_item(job_id: uuid.UUID, db: Session = Depends(get_db)) -> JSONRe
         .order_by(GeneratedResume.created_at.desc())
         .all()
     )
-    data = HistoryDetailOut.model_validate(job).model_dump(mode="json")
+    data = schemas.HistoryDetailOut.model_validate(job).model_dump(mode="json")
     if job.profile_id:
         profile = db.get(BaselineProfile, job.profile_id)
         data["baseline_profile_text"] = profile.skills_text if profile else None
     serialized_resumes = []
     for resume in resumes:
-        item = GeneratedResumeOut.model_validate(resume).model_dump(mode="json")
+        item = schemas.GeneratedResumeOut.model_validate(resume).model_dump(mode="json")
         # Hydrate beautification URLs (the model itself only has DB fields).
         for b_idx, beautification in enumerate(resume.beautifications):
             item["beautifications"][b_idx]["html_url"] = (
