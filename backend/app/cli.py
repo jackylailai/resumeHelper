@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from backend.app.config import get_settings
 from backend.app.db import SessionLocal
@@ -11,8 +12,15 @@ from backend.app.services.batch_evaluator import (
     ListingEvaluationSummary,
     evaluate_pending_listings,
 )
-from backend.app.services.llm import LLMUnavailableError
+from backend.app.services.eval_harness import (
+    load_evaluation_fixture_set,
+    run_evaluation_harness,
+    write_report_json,
+    write_report_markdown,
+)
+from backend.app.services.llm import LLMClient, LLMUnavailableError
 from backend.app.services.llm.factory import create_llm_client
+from backend.app.services.llm.fake import FakeLLMClient
 from backend.app.services.scrapers.pipeline import create_scrape_runs, execute_scrape_runs
 from backend.app.services.scrapers.registry import SCRAPERS, resolve_sources
 from backend.app.workers.tailor import run_tailoring
@@ -125,6 +133,71 @@ def _print_eval_summary(
         )
 
 
+def _eval_harness(args: argparse.Namespace) -> int:
+    prompt_version = _eval_harness_prompt_version(args.backend, args.prompt_version)
+    try:
+        llm = _create_eval_harness_llm(args.backend, args.model)
+        fixture_set, fixture_path = load_evaluation_fixture_set(
+            Path(args.fixtures) if args.fixtures else None
+        )
+    except (LLMUnavailableError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    report = run_evaluation_harness(
+        llm=llm,
+        fixture_set=fixture_set,
+        fixture_path=fixture_path,
+        backend=args.backend,
+        prompt_version=prompt_version,
+    )
+
+    if args.report_json:
+        write_report_json(report, Path(args.report_json))
+    if args.report_md:
+        write_report_markdown(report, Path(args.report_md))
+
+    if not args.quiet:
+        print(
+            f"eval-harness backend={args.backend} "
+            f"fixtures={fixture_path} passed={report.passed}/{report.total}"
+        )
+        for result in report.results:
+            outcome = "PASS" if result.passed else "FAIL"
+            print(
+                f"  {result.id}: {outcome} "
+                f"score={result.score} status={result.status}"
+            )
+            for failure in result.failures:
+                print(f"    - {failure}")
+
+    return 0 if report.failed == 0 else 1
+
+
+def _create_eval_harness_llm(backend: str, model: str | None) -> LLMClient:
+    if backend == "fake":
+        return FakeLLMClient()
+    if backend == "configured":
+        return create_llm_client()
+    if backend == "anthropic":
+        from backend.app.services.llm.anthropic import AnthropicLLMClient
+
+        return AnthropicLLMClient()
+    if backend == "claude-cli":
+        from backend.app.services.llm.claude_cli import ClaudeCLIClient
+
+        return ClaudeCLIClient(model=model or get_settings().llm_model)
+    raise LLMUnavailableError(f"unsupported eval harness backend: {backend}")
+
+
+def _eval_harness_prompt_version(backend: str, override: str | None) -> str:
+    if override:
+        return override
+    if backend == "fake":
+        return "resume-fit-v1"
+    return get_settings().llm_prompt_version
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m backend.app.cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -167,6 +240,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     evaluate.add_argument("--quiet", action="store_true", help="reduce cron output")
     evaluate.set_defaults(func=_evaluate_listings)
+
+    eval_harness = subparsers.add_parser(
+        "eval-harness",
+        help="run deterministic LLM output contract and routing fixtures",
+    )
+    eval_harness.add_argument(
+        "--backend",
+        choices=["fake", "configured", "anthropic", "claude-cli"],
+        default="fake",
+        help="LLM backend used by the harness",
+    )
+    eval_harness.add_argument("--model", default=None, help="model override for claude-cli")
+    eval_harness.add_argument(
+        "--prompt-version",
+        default=None,
+        help="prompt version passed into the LLM client",
+    )
+    eval_harness.add_argument(
+        "--fixtures",
+        default=None,
+        help="fixture JSON path; defaults to backend/evals/fixtures/evaluate_cases.json",
+    )
+    eval_harness.add_argument("--report-json", default=None, help="write JSON report")
+    eval_harness.add_argument("--report-md", default=None, help="write Markdown report")
+    eval_harness.add_argument("--quiet", action="store_true", help="only return exit code")
+    eval_harness.set_defaults(func=_eval_harness)
 
     args = parser.parse_args(argv)
     return args.func(args)

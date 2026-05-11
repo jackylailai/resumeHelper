@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "name": "evaluate-routing-smoke",
+  "description": "Deterministic fake-backend fixtures for LLM evaluate output contract and score routing.",
+  "cases": [
+    {
+      "id": "high_backend_fit",
+      "profile": "Backend engineer with Python, FastAPI, PostgreSQL, Docker, AWS, API ownership, and production incident response experience.",
+      "job_description": "We need a backend engineer for Python APIs, FastAPI services, PostgreSQL data modeling, Docker deployments, and production ownership. [[score=92]]",
+      "expected_status": "ready_to_submit",
+      "expected_score_min": 85,
+      "expected_score_max": 100,
+      "required_terms": ["fake evaluation", "Demonstrated experience"],
+      "forbidden_terms": ["principal COBOL architect"]
+    },
+    {
+      "id": "mid_tailoring_candidate",
+      "profile": "Backend engineer with Python, SQL, REST APIs, monitoring, and some cloud deployment experience.",
+      "job_description": "We need a platform engineer with Python APIs, distributed systems, Terraform, Kubernetes, and deep observability experience. [[score=72]]",
+      "expected_status": "needs_tailoring",
+      "expected_score_min": 60,
+      "expected_score_max": 84,
+      "required_terms": ["Missing quantified achievements"],
+      "forbidden_terms": ["ready without review"]
+    },
+    {
+      "id": "low_mismatch_skip",
+      "profile": "Backend engineer with Python, FastAPI, PostgreSQL, and internal tooling experience.",
+      "job_description": "Senior visual brand designer role focused on print campaigns, art direction, typography systems, and Adobe Creative Suite. [[score=35]]",
+      "expected_status": "skip",
+      "expected_score_min": 0,
+      "expected_score_max": 59,
+      "required_terms": ["Prompt version"],
+      "forbidden_terms": ["automatic application submitted"]
+    }
+  ]
+}

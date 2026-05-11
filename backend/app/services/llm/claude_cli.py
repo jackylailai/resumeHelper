@@ -11,6 +11,7 @@ from backend.app.services.llm import (
     LLMInvalidOutputError,
     LLMUnavailableError,
 )
+from backend.app.services.llm.contracts import parse_evaluation_output
 
 logger = logging.getLogger(__name__)
 
@@ -60,38 +61,16 @@ class ClaudeCLIClient:
         if result.returncode != 0:
             raise LLMUnavailableError(f"claude CLI failed: {result.stderr[:200]}")
 
-        raw = result.stdout.strip()
-        # Strip markdown code fences if present
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:])
-            raw = raw.rstrip("`").strip()
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise LLMInvalidOutputError(
-                f"claude CLI returned invalid JSON: {exc}"
-            ) from exc
-
-        try:
-            score = int(data["score"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise LLMInvalidOutputError(
-                "claude CLI response did not include a valid score"
-            ) from exc
-        if score < 0 or score > 100:
-            raise LLMInvalidOutputError(f"claude CLI score out of range: {score}")
-
-        logger.info("claude_cli score=%d latency_ms=%d", score, latency_ms)
-
-        return EvaluationResult(
-            score=score,
-            explanation=data.get("explanation", ""),
-            strengths=data.get("strengths", []),
-            gaps=data.get("gaps", []),
+        result_data = parse_evaluation_output(
+            result.stdout,
+            source="claude CLI",
             token_count_input=None,
             token_count_output=None,
         )
+
+        logger.info("claude_cli score=%d latency_ms=%d", result_data.score, latency_ms)
+
+        return result_data
 
     def tailor(
         self,

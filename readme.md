@@ -89,6 +89,9 @@ Target practices:
 - Durable background jobs for long-running work.
 - Cost, latency, quota, and privacy controls.
 
+The first eval harness implementation covers deterministic evaluate-output
+contracts and score routing. See [docs/eval-harness.md](docs/eval-harness.md).
+
 See [specs/current-product-spec.md](specs/current-product-spec.md) for the
 current product spec.
 
@@ -154,6 +157,9 @@ python -m backend.app.cli scrape --source all --keyword "java backend" --evaluat
 
 # Evaluate pending stored listings
 python -m backend.app.cli evaluate-listings --limit 100
+
+# Run deterministic LLM evaluate contract/routing fixtures
+python -m backend.app.cli eval-harness --backend fake
 ```
 
 ## Running Tests
@@ -176,6 +182,7 @@ Docker must be running for integration tests that use testcontainers.
 - [Current product spec](specs/current-product-spec.md)
 - [Roadmap](specs/roadmap.md)
 - [Historical OpenAPI contract](specs/001-resume-upload-rating/contracts/openapi.yaml)
+- [Eval harness](docs/eval-harness.md)
 - [Scrape scheduling](docs/scheduling.md)
 - [Script inventory](scripts/README.md)
 - Historical Phase 1 spec: [specs/001-resume-upload-rating/spec.md](specs/001-resume-upload-rating/spec.md)
