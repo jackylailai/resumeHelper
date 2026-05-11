@@ -11,6 +11,7 @@ from backend.app.services.llm import (
     LLMInvalidOutputError,
     LLMUnavailableError,
 )
+from backend.app.services.llm.contracts import parse_evaluation_output
 
 logger = logging.getLogger(__name__)
 
@@ -163,23 +164,9 @@ class AnthropicLLMClient:
             response.usage.output_tokens,
         )
 
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise LLMInvalidOutputError(f"LLM returned invalid JSON: {exc}") from exc
-
-        try:
-            score = int(data["score"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise LLMInvalidOutputError("LLM response did not include a valid score") from exc
-        if score < 0 or score > 100:
-            raise LLMInvalidOutputError(f"LLM score out of range: {score}")
-
-        return EvaluationResult(
-            score=score,
-            explanation=data.get("explanation", ""),
-            strengths=data.get("strengths", []),
-            gaps=data.get("gaps", []),
+        return parse_evaluation_output(
+            raw,
+            source="Anthropic API",
             token_count_input=response.usage.input_tokens,
             token_count_output=response.usage.output_tokens,
         )
