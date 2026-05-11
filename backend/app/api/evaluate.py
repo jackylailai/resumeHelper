@@ -14,10 +14,10 @@ from backend.app.db import get_db
 from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import (
+    JobAnalysis,
     STATUS_NEEDS_TAILORING,
     STATUS_READY_TO_SUBMIT,
     STATUS_SKIP,
-    JobAnalysis,
 )
 from backend.app.schemas.evaluate import (
     BulkEvaluateIn,
