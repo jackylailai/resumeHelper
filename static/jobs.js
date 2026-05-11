@@ -98,7 +98,11 @@ refreshScrapeRuns.addEventListener("click", async () => {
 
 window.addEventListener("DOMContentLoaded", () => {
     loadProfiles();
-    loadListings();
+    loadListings().then(() => {
+        const params = new URLSearchParams(window.location.search);
+        const listingId = params.get("listing_id");
+        if (listingId) loadDetail(listingId);
+    });
     loadScrapeRuns();
     updateSelectionControls();
     updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });

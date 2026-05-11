@@ -207,6 +207,7 @@
           Download PDF
         </button>
         <button class="btn btn-sm btn-muted" onclick="toggleResumeCompare()" id="compare-resume-btn">Compare</button>
+        <button class="btn btn-sm btn-muted" onclick="toggleResumeEditor()" id="edit-resume-btn">Edit Draft</button>
         <button class="btn btn-sm btn-muted" onclick="copyResume()">Copy</button>
         <button class="btn btn-sm btn-muted" onclick="openBeautifyPanel()" id="beautify-open-btn">Beautify</button>
         <button class="btn btn-sm btn-muted" onclick="closeModal()">Close</button>
@@ -214,6 +215,17 @@
     </div>
     <div id="copy-status" class="status-msg modal-status"></div>
     <div id="resume-versions" class="resume-versions"></div>
+    <div id="resume-editor-panel" class="resume-editor-panel" hidden>
+      <div class="section-title">Editable Draft</div>
+      <textarea id="resume-editor-text" rows="14" class="resume-editor-text"></textarea>
+      <div class="flex-between editor-actions">
+        <span id="resume-editor-status" class="status-msg"></span>
+        <div class="flex">
+          <button class="btn btn-sm btn-muted" type="button" onclick="toggleResumeEditor(false)">Cancel</button>
+          <button class="btn btn-sm btn-primary" type="button" onclick="saveResumeRevision()" id="save-resume-revision">Save Revision</button>
+        </div>
+      </div>
+    </div>
     <div id="resume-compare" class="resume-compare" hidden>
       <div>
         <div class="section-title">Baseline</div>

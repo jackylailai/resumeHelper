@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -32,6 +33,7 @@ from backend.app.schemas.evaluate import (
     GeneratedResumeOut,
     HistoryDetailOut,
     HistoryItemOut,
+    ResumeRevisionIn,
     SubmittableResumeOut,
 )
 from backend.app.services.batch_evaluator import (
@@ -467,13 +469,53 @@ def download_generated_resume_pdf(
     expected_url = f"/api/generated-resumes/{resume.id}/pdf"
     if resume.pdf_url != expected_url:
         resume.pdf_url = expected_url
-        db.commit()
+    resume.exported_at = datetime.now(UTC)
+    db.commit()
 
     return FileResponse(
         path,
         media_type="application/pdf",
         filename=f"resume-{resume.id}.pdf",
     )
+
+
+@router.post("/generated-resumes/{resume_id}/revisions")
+def create_generated_resume_revision(
+    resume_id: uuid.UUID,
+    body: ResumeRevisionIn,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    source = db.get(GeneratedResume, resume_id)
+    if source is None:
+        return error("not_found", f"generated_resume {resume_id} not found", status_code=404)
+
+    resume_text = body.resume_text.strip()
+    if not resume_text:
+        return error("invalid_resume_text", "resume_text must not be blank", status_code=422)
+
+    revision = GeneratedResume(
+        job_analysis_id=source.job_analysis_id,
+        resume_text=resume_text,
+        pdf_url=None,
+        prompt_version="user-edited",
+        revision_source="user_edited",
+    )
+    db.add(revision)
+    db.flush()
+    write_generated_resume_pdf(
+        get_settings().storage_dir,
+        revision.id,
+        revision.resume_text,
+    )
+    revision.pdf_url = f"/api/generated-resumes/{revision.id}/pdf"
+
+    job = db.get(JobAnalysis, source.job_analysis_id)
+    if job is not None:
+        job.can_submit = True
+
+    db.commit()
+    db.refresh(revision)
+    return success(GeneratedResumeOut.model_validate(revision).model_dump(mode="json"))
 
 
 @router.get("/history/{job_id}")
