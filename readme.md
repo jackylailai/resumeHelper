@@ -45,8 +45,9 @@ application-owned state transitions.
 | Page | Purpose |
 |------|---------|
 | `/` | Evaluate JDs, review history, profiles, and submittable results. |
-| `/jobs.html` | JD database, scraper controls, batch scoring, and source links. |
-| `/applications.html` | Recommended opportunities and application tracking. |
+| `/jobs.html` | Browse stored JDs, filter listings, inspect source links, and score selected rows. |
+| `/scrapes.html` | Run and monitor source ingestion for 104, Yourator, and LinkedIn. |
+| `/applications.html` | Track jobs you intend to act on after reviewing Opportunities or Submittable. |
 
 ## LLM Backends
 
@@ -128,11 +129,12 @@ Open:
 
 - http://localhost:8000/
 - http://localhost:8000/jobs.html
+- http://localhost:8000/scrapes.html
 - http://localhost:8000/applications.html
 
 ## Scrape Scheduling
 
-The JD Database page includes controls to:
+The Scrapes page includes controls to:
 
 - choose a keyword and source
 - start a scrape schedule

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scrapes - AI Career Intelligence System</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="wrap header-row">
+            <div>
+                <h1>Scrapes</h1>
+                <p class="sub">Control job source ingestion before listings reach the JD Database.</p>
+            </div>
+        </div>
+    </header>
+
+    <nav class="tabs app-tabs" aria-label="Primary">
+        <a class="tab-btn" href="/#evaluate">Evaluate</a>
+        <a class="tab-btn" href="/jobs.html">JD Database</a>
+        <a class="tab-btn active" href="/scrapes.html" aria-current="page">Scrapes</a>
+        <a class="tab-btn" href="/applications.html">Applications</a>
+        <a class="tab-btn" href="/#history">History</a>
+        <a class="tab-btn" href="/#submittable">Submittable</a>
+        <a class="tab-btn" href="/#profile">Profile</a>
+    </nav>
+
+    <main class="wrap">
+        <section class="panel scrape-panel">
+            <div class="scrape-header">
+                <div>
+                    <h2>Scrape Pipeline</h2>
+                    <p class="muted">Run scrapers, inspect ingestion status, then score newly imported listings.</p>
+                </div>
+                <button id="refresh-scrape-runs" type="button">Refresh</button>
+            </div>
+            <form id="scrape-form" class="scrape-controls">
+                <label>
+                    Source
+                    <select id="scrape-source" name="scrape_source">
+                        <option value="all">All sources</option>
+                        <option value="all_with_linkedin">All + LinkedIn</option>
+                        <option value="104">104</option>
+                        <option value="yourator">Yourator</option>
+                        <option value="linkedin">LinkedIn</option>
+                    </select>
+                </label>
+                <label>
+                    Keyword
+                    <input
+                        id="scrape-keyword"
+                        name="scrape_keyword"
+                        type="search"
+                        placeholder="backend engineer"
+                    />
+                </label>
+                <label>
+                    Limit
+                    <input id="scrape-limit" name="scrape_limit" type="number" min="1" max="100" value="25" />
+                </label>
+                <label>
+                    Profile
+                    <select id="profile-select">
+                        <option value="">Loading profiles...</option>
+                    </select>
+                </label>
+                <label class="checkbox-label">
+                    <input id="scrape-evaluate-after" type="checkbox" checked />
+                    Evaluate after scrape
+                </label>
+                <div class="scrape-actions">
+                    <button id="run-scrape" type="submit">Run schedule</button>
+                    <button id="replace-scrape" type="button">Stop + run new</button>
+                    <button id="stop-scrape" type="button">Stop current</button>
+                </div>
+                <div class="scrape-followup">
+                    <span class="muted">After scrape</span>
+                    <button id="evaluate-pending" type="button">Evaluate pending</button>
+                </div>
+            </form>
+            <div id="scrape-active-summary" class="scrape-active-summary muted"></div>
+            <div id="scrape-status" class="muted" aria-live="polite"></div>
+            <div id="scrape-runs" class="scrape-runs"></div>
+            <div id="batch-results" class="batch-results" hidden></div>
+        </section>
+    </main>
+
+    <script src="/shared.js" defer></script>
+    <script src="/scrapes.js" defer></script>
+</body>
+</html>
