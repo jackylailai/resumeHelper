@@ -84,6 +84,27 @@ Use fake backend results as CI gates. Real-provider runs are useful for manual
 drift inspection, but should not be treated as stable pass/fail unless the
 fixtures are designed for provider variance.
 
+## CI Gate
+
+Pull request CI runs the deterministic fake-backend harness before the broader
+pytest suite:
+
+```bash
+python -m backend.app.cli eval-harness \
+  --backend fake \
+  --report-json artifacts/evals/evaluate.json \
+  --report-md artifacts/evals/evaluate.md
+```
+
+The CI job uploads the JSON report, Markdown report, and raw command output as
+the `eval-harness-report` artifact. On pull requests, the Markdown report is
+also included in the automated CI comment before the standard SIT summary.
+
+The fake backend is the required gate because it validates output contracts and
+score routing without network calls or provider credentials. Manual real-backend
+runs are still useful for drift review, but they are not deterministic enough to
+block every PR.
+
 ## Not Yet Covered
 
 The next harness layer should cover resume generation and factuality:
