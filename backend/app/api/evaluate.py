@@ -96,6 +96,7 @@ def _queue_tailoring_if_needed(
         llm=llm,
         prompt_version=prompt_version,
         session_factory=session_factory,
+        request_id=getattr(request.state, "request_id", None),
     )
     logger.info("tailor_task_queued job_id=%s score=%s", job.id, job.score)
 
@@ -151,6 +152,7 @@ def evaluate(
             llm=llm,
             prompt_version=settings.llm_prompt_version,
             session_factory=session_factory,
+            request_id=getattr(request.state, "request_id", None),
         )
         logger.info("tailor_task_queued job_id=%s score=%s", job.id, job.score)
 
@@ -221,6 +223,7 @@ def bulk_evaluate(
                     llm=llm,
                     prompt_version=settings.llm_prompt_version,
                     session_factory=session_factory,
+                    request_id=getattr(request.state, "request_id", None),
                 )
 
         results.append(schemas.BulkEvaluateResult(

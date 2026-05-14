@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+import time
 import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,16 @@ from backend.app.services.evaluator_v2 import (
     get_profile,
     list_profiles,
     update_profile,
+)
+from backend.app.services.llm.audit import (
+    STATUS_FAILED,
+    STATUS_SUCCEEDED,
+    STEP_EXTRACT,
+    error_code_for_exception,
+    error_message_for_exception,
+    llm_metadata,
+    record_llm_audit_log,
+    stable_payload_hash,
 )
 
 logger = logging.getLogger(__name__)
@@ -222,15 +233,55 @@ def extract_profile_structured(
             "Active LLM backend does not implement extract_structured().",
             status_code=503,
         )
+    prompt_version = "extract-v1"
+    backend, model = llm_metadata(llm)
+    input_hash = stable_payload_hash(
+        {
+            "step": STEP_EXTRACT,
+            "profile_id": profile.id,
+            "skills_text": profile.skills_text,
+            "prompt_version": prompt_version,
+        }
+    )
+    started = time.perf_counter()
     try:
         extracted = llm.extract_structured(profile.skills_text)
     except Exception as exc:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        record_llm_audit_log(
+            db,
+            workflow_step=STEP_EXTRACT,
+            backend=backend,
+            model=model,
+            prompt_version=prompt_version,
+            input_hash=input_hash,
+            latency_ms=latency_ms,
+            status=STATUS_FAILED,
+            error_code=error_code_for_exception(exc),
+            error_message=error_message_for_exception(exc),
+            request_id=getattr(request.state, "request_id", None),
+            baseline_profile_id=profile.id,
+        )
         logger.exception("structured_extract_failed profile_id=%s", profile_id)
         return error("llm_invalid_output", str(exc), status_code=502)
+    latency_ms = int((time.perf_counter() - started) * 1000)
 
     profile.structured_data = extracted
     db.commit()
     db.refresh(profile)
+    record_llm_audit_log(
+        db,
+        workflow_step=STEP_EXTRACT,
+        backend=backend,
+        model=model,
+        prompt_version=prompt_version,
+        input_hash=input_hash,
+        output_hash=stable_payload_hash(extracted),
+        latency_ms=latency_ms,
+        status=STATUS_SUCCEEDED,
+        request_id=getattr(request.state, "request_id", None),
+        baseline_profile_id=profile.id,
+    )
     return success(ProfileOut.model_validate(profile).model_dump(mode="json"))
 
 

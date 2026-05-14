@@ -3,6 +3,7 @@ from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import JobAnalysis
 from backend.app.models.job_listing import JobListing
+from backend.app.models.llm_audit_log import LLMAuditLog
 from backend.app.models.resume_beautification import ResumeBeautification
 from backend.app.models.scrape_run import ScrapeRun
 
@@ -12,6 +13,7 @@ __all__ = [
     "GeneratedResume",
     "JobAnalysis",
     "JobListing",
+    "LLMAuditLog",
     "ResumeBeautification",
     "ScrapeRun",
 ]

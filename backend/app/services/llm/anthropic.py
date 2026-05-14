@@ -219,6 +219,8 @@ class AnthropicLLMClient:
         return {
             "tailoring_suggestions": data.get("tailoring_suggestions", []),
             "tailored_resume": data.get("tailored_resume", ""),
+            "token_count_input": response.usage.input_tokens,
+            "token_count_output": response.usage.output_tokens,
         }
 
     def beautify(
@@ -262,7 +264,12 @@ class AnthropicLLMClient:
             response.usage.output_tokens,
         )
 
-        return {"html_content": html, "prompt_version": "beautify-v1"}
+        return {
+            "html_content": html,
+            "prompt_version": "beautify-v1",
+            "token_count_input": response.usage.input_tokens,
+            "token_count_output": response.usage.output_tokens,
+        }
 
     def extract_structured(self, source_text: str) -> dict:
         """Parse a free-form profile text into structured JSON via the SDK."""

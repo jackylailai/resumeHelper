@@ -8,6 +8,7 @@ For jobs with status='needs_tailoring' (score 60-84), this task:
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -17,6 +18,16 @@ from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import STATUS_NEEDS_TAILORING, JobAnalysis
 from backend.app.services.llm import LLMClient
+from backend.app.services.llm.audit import (
+    STATUS_FAILED,
+    STATUS_SUCCEEDED,
+    STEP_TAILOR,
+    error_code_for_exception,
+    error_message_for_exception,
+    llm_metadata,
+    record_llm_audit_log,
+    stable_payload_hash,
+)
 from backend.app.services.pdf import write_generated_resume_pdf
 
 logger = logging.getLogger(__name__)
@@ -33,6 +44,7 @@ def run_tailoring(
     llm: LLMClient,
     prompt_version: str = "tailor-v1",
     session_factory: Callable | None = None,
+    request_id: str | None = None,
 ) -> None:
     """BackgroundTasks entrypoint — runs in-process after /api/evaluate response is sent.
 
@@ -76,11 +88,42 @@ def run_tailoring(
         baseline_text = baseline.skills_text
         structured_data = baseline.structured_data
 
+        backend, model = llm_metadata(llm)
+        input_hash = stable_payload_hash(
+            {
+                "step": STEP_TAILOR,
+                "job_analysis_id": job_analysis_id,
+                "baseline_text": baseline_text,
+                "structured_data": structured_data,
+                "jd_text": job.jd_full_text,
+                "gaps": job.gaps or [],
+                "score": job.score or 0,
+                "prompt_version": prompt_version,
+            }
+        )
+        started = time.perf_counter()
         try:
             result = _call_tailor_llm(llm, job, baseline_text, structured_data)
         except Exception as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            record_llm_audit_log(
+                db,
+                workflow_step=STEP_TAILOR,
+                backend=backend,
+                model=model,
+                prompt_version=prompt_version,
+                input_hash=input_hash,
+                latency_ms=latency_ms,
+                status=STATUS_FAILED,
+                error_code=error_code_for_exception(exc),
+                error_message=error_message_for_exception(exc),
+                request_id=request_id,
+                baseline_profile_id=baseline.id,
+                job_analysis_id=job_analysis_id,
+            )
             logger.error("tailor_llm_failed job_id=%s error=%s", job_analysis_id, exc)
             return
+        latency_ms = int((time.perf_counter() - started) * 1000)
 
         resume = GeneratedResume(
             job_analysis_id=job_analysis_id,
@@ -101,6 +144,28 @@ def run_tailoring(
         job.can_submit = True
         db.commit()
         db.refresh(resume)
+        record_llm_audit_log(
+            db,
+            workflow_step=STEP_TAILOR,
+            backend=backend,
+            model=model,
+            prompt_version=prompt_version,
+            input_hash=input_hash,
+            output_hash=stable_payload_hash(
+                {
+                    "tailoring_suggestions": result.get("tailoring_suggestions", []),
+                    "tailored_resume": result.get("tailored_resume", ""),
+                }
+            ),
+            latency_ms=latency_ms,
+            token_count_input=result.get("token_count_input"),
+            token_count_output=result.get("token_count_output"),
+            status=STATUS_SUCCEEDED,
+            request_id=request_id,
+            baseline_profile_id=baseline.id,
+            job_analysis_id=job_analysis_id,
+            generated_resume_id=resume.id,
+        )
 
         logger.info(
             "tailor_complete job_id=%s resume_id=%s",

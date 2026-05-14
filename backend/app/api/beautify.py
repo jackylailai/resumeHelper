@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, Request
@@ -14,6 +15,16 @@ from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.resume_beautification import ResumeBeautification
 from backend.app.schemas.evaluate import BeautificationOut, BeautifyIn
 from backend.app.services.llm import LLMUnavailableError
+from backend.app.services.llm.audit import (
+    STATUS_FAILED,
+    STATUS_SUCCEEDED,
+    STEP_BEAUTIFY,
+    error_code_for_exception,
+    error_message_for_exception,
+    llm_metadata,
+    record_llm_audit_log,
+    stable_payload_hash,
+)
 from backend.app.services.pdf import (
     beautified_html_path,
     beautified_pdf_path,
@@ -58,20 +69,64 @@ def beautify_resume(
             status_code=503,
         )
 
+    backend, model = llm_metadata(llm)
+    prompt_version = "beautify-v1"
+    input_hash = stable_payload_hash(
+        {
+            "step": STEP_BEAUTIFY,
+            "generated_resume_id": resume_id,
+            "resume_text": resume.resume_text,
+            "style": body.style,
+            "prompt_version": prompt_version,
+        }
+    )
+    started = time.perf_counter()
     try:
         result = llm.beautify(resume.resume_text, style=body.style)
     except LLMUnavailableError as exc:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        record_llm_audit_log(
+            db,
+            workflow_step=STEP_BEAUTIFY,
+            backend=backend,
+            model=model,
+            prompt_version=prompt_version,
+            input_hash=input_hash,
+            latency_ms=latency_ms,
+            status=STATUS_FAILED,
+            error_code=error_code_for_exception(exc),
+            error_message=error_message_for_exception(exc),
+            request_id=getattr(request.state, "request_id", None),
+            generated_resume_id=resume_id,
+        )
         return error("llm_unavailable", str(exc), status_code=503)
     except Exception as exc:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        record_llm_audit_log(
+            db,
+            workflow_step=STEP_BEAUTIFY,
+            backend=backend,
+            model=model,
+            prompt_version=prompt_version,
+            input_hash=input_hash,
+            latency_ms=latency_ms,
+            status=STATUS_FAILED,
+            error_code=error_code_for_exception(exc),
+            error_message=error_message_for_exception(exc),
+            request_id=getattr(request.state, "request_id", None),
+            generated_resume_id=resume_id,
+        )
         logger.exception("beautify_llm_failed resume_id=%s", resume_id)
         return error("llm_invalid_output", str(exc), status_code=502)
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    prompt_version = result.get("prompt_version", prompt_version)
 
     settings = get_settings()
     beautification = ResumeBeautification(
         generated_resume_id=resume_id,
         style=body.style,
         html_content=result["html_content"],
-        prompt_version=result.get("prompt_version", "beautify-v1"),
+        prompt_version=prompt_version,
     )
     db.add(beautification)
     db.flush()
@@ -86,6 +141,22 @@ def beautify_resume(
         # weasyprint missing — keep HTML, surface the error to the user
         logger.error("beautify_pdf_failed id=%s error=%s", beautification.id, exc)
         db.commit()
+        record_llm_audit_log(
+            db,
+            workflow_step=STEP_BEAUTIFY,
+            backend=backend,
+            model=model,
+            prompt_version=prompt_version,
+            input_hash=input_hash,
+            output_hash=stable_payload_hash(result["html_content"]),
+            latency_ms=latency_ms,
+            token_count_input=result.get("token_count_input"),
+            token_count_output=result.get("token_count_output"),
+            status=STATUS_SUCCEEDED,
+            request_id=getattr(request.state, "request_id", None),
+            generated_resume_id=resume_id,
+            resume_beautification_id=beautification.id,
+        )
         return error(
             "pdf_render_failed",
             "HTML was saved but PDF rendering failed (weasyprint not installed?).",
@@ -96,6 +167,22 @@ def beautify_resume(
     beautification.pdf_path = str(pdf_path)
     db.commit()
     db.refresh(beautification)
+    record_llm_audit_log(
+        db,
+        workflow_step=STEP_BEAUTIFY,
+        backend=backend,
+        model=model,
+        prompt_version=prompt_version,
+        input_hash=input_hash,
+        output_hash=stable_payload_hash(result["html_content"]),
+        latency_ms=latency_ms,
+        token_count_input=result.get("token_count_input"),
+        token_count_output=result.get("token_count_output"),
+        status=STATUS_SUCCEEDED,
+        request_id=getattr(request.state, "request_id", None),
+        generated_resume_id=resume_id,
+        resume_beautification_id=beautification.id,
+    )
 
     return success(_beautification_payload(beautification))
 

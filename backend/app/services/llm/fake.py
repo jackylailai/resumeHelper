@@ -72,6 +72,8 @@ class FakeLLMClient:
                 f"## Skills\n\nPython, FastAPI, PostgreSQL\n\n"
                 f"## Experience\n\nSoftware Engineer — tailored for this role.\n"
             ),
+            "token_count_input": 120,
+            "token_count_output": 80,
         }
 
     def beautify(
@@ -91,7 +93,12 @@ class FakeLLMClient:
             f"<pre>{resume_markdown}</pre>"
             "</body></html>"
         )
-        return {"html_content": html, "prompt_version": "beautify-fake-v1"}
+        return {
+            "html_content": html,
+            "prompt_version": "beautify-fake-v1",
+            "token_count_input": 90,
+            "token_count_output": 60,
+        }
 
     def extract_structured(self, source_text: str) -> dict:
         """Fake structured extraction — deterministic for tests."""

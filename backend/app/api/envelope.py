@@ -16,8 +16,12 @@ def reset_request_id(token: Token[str | None]) -> None:
     _REQUEST_ID.reset(token)
 
 
+def current_request_id() -> str | None:
+    return _REQUEST_ID.get()
+
+
 def _meta_with_request_id(meta: dict[str, Any]) -> dict[str, Any]:
-    request_id = _REQUEST_ID.get()
+    request_id = current_request_id()
     if request_id and "request_id" not in meta:
         meta["request_id"] = request_id
     return meta

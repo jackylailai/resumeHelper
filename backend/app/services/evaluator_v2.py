@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
@@ -16,6 +17,16 @@ from backend.app.models.job_analysis import (
 )
 from backend.app.services import hashing
 from backend.app.services.llm import LLMClient
+from backend.app.services.llm.audit import (
+    STATUS_FAILED,
+    STATUS_SUCCEEDED,
+    STEP_EVALUATE,
+    error_code_for_exception,
+    error_message_for_exception,
+    llm_metadata,
+    record_llm_audit_log,
+    stable_payload_hash,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +161,36 @@ def evaluate_jd(
         logger.info("cache_hit jd_hash=%s profile_id=%s score=%s", jd_h, profile_id, existing.score)
         return existing, True
 
-    result = llm.evaluate(profile.skills_text, jd_text, prompt_version)
+    backend, model = llm_metadata(llm)
+    input_hash = stable_payload_hash(
+        {
+            "step": STEP_EVALUATE,
+            "profile_id": profile_id,
+            "profile_text": profile.skills_text,
+            "jd_text": jd_text,
+            "prompt_version": prompt_version,
+        }
+    )
+    started = time.perf_counter()
+    try:
+        result = llm.evaluate(profile.skills_text, jd_text, prompt_version)
+    except Exception as exc:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        record_llm_audit_log(
+            db,
+            workflow_step=STEP_EVALUATE,
+            backend=backend,
+            model=model,
+            prompt_version=prompt_version,
+            input_hash=input_hash,
+            latency_ms=latency_ms,
+            status=STATUS_FAILED,
+            error_code=error_code_for_exception(exc),
+            error_message=error_message_for_exception(exc),
+            baseline_profile_id=profile_id,
+        )
+        raise
+    latency_ms = int((time.perf_counter() - started) * 1000)
 
     score = result.score
     if score >= THRESHOLD_HIGH:
@@ -186,6 +226,28 @@ def evaluate_jd(
     db.add(job)
     db.commit()
     db.refresh(job)
+    record_llm_audit_log(
+        db,
+        workflow_step=STEP_EVALUATE,
+        backend=backend,
+        model=model,
+        prompt_version=prompt_version,
+        input_hash=input_hash,
+        output_hash=stable_payload_hash(
+            {
+                "score": result.score,
+                "explanation": result.explanation,
+                "strengths": result.strengths,
+                "gaps": result.gaps,
+            }
+        ),
+        latency_ms=latency_ms,
+        token_count_input=result.token_count_input,
+        token_count_output=result.token_count_output,
+        status=STATUS_SUCCEEDED,
+        baseline_profile_id=profile_id,
+        job_analysis_id=job.id,
+    )
     logger.info(
         "evaluated jd_hash=%s profile_id=%s score=%d status=%s",
         jd_h, profile_id, score, status,
