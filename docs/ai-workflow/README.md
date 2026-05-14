@@ -57,13 +57,15 @@ malformed lists should fail closed instead of silently affecting product state.
 An **eval harness** is a repeatable test runner for AI behavior. It uses fixture
 cases with known inputs and expected behavior, then produces a pass/fail report.
 
-In this project, the first harness focuses on:
+In this project, the harness currently focuses on:
 
 - baseline profile + JD input
 - LLM evaluate output
 - output contract validation
 - score range checks
 - deterministic score routing
+- tailored resume output validation
+- required and forbidden fact checks for generated Markdown
 - JSON/Markdown report artifacts
 
 The deterministic `fake` backend is the CI gate because it is stable and does
@@ -113,19 +115,21 @@ Implemented AI workflow foundations:
 - configurable LLM backend: fake, Claude CLI, Anthropic API
 - deterministic fake backend for tests
 - evaluate output contract for score, explanation, strengths, and gaps
+- tailor output contract for suggestions and generated Markdown
 - application-owned score routing
 - profile-scoped JD evaluation cache
 - generated resume review before submission
 - structured JSON API error envelopes with request IDs
 - eval harness CLI for deterministic evaluate cases
-- CI gate for deterministic evaluate fixtures
+- tailor harness CLI for deterministic factuality smoke cases
+- CI gate for deterministic evaluate and tailor fixtures
 - persisted LLM audit logs for evaluate, tailor, structured extraction, and
   beautify calls
 
 Known gaps:
 
-- tailor, structured extraction, and beautify need stricter contracts
-- factuality checks for tailored resumes are not automated yet
+- structured extraction and beautify need stricter contracts
+- tailoring factuality coverage is still smoke-level and needs broader fixtures
 - long-running AI work still needs durable job state
 - cost, quota, and privacy guardrails need product-level enforcement
 
@@ -162,6 +166,7 @@ Recommended implementation order:
 
 3. **Tailoring factuality harness**
    Validate generated resume Markdown against required and forbidden facts.
+   Current status: implemented as a deterministic smoke harness.
 
 4. **Extraction and beautify contracts**
    Add typed schemas for structured extraction and safety checks for HTML/PDF

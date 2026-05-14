@@ -11,7 +11,7 @@ from backend.app.services.llm import (
     LLMInvalidOutputError,
     LLMUnavailableError,
 )
-from backend.app.services.llm.contracts import parse_evaluation_output
+from backend.app.services.llm.contracts import parse_evaluation_output, parse_tailor_output
 
 logger = logging.getLogger(__name__)
 
@@ -117,22 +117,18 @@ class ClaudeCLIClient:
                 f"claude CLI tailoring failed: {result.stderr[:200]}"
             )
 
-        tailored = result.stdout.strip()
-        if tailored.startswith("```"):
-            tailored = "\n".join(tailored.split("\n")[1:])
-            tailored = tailored.rstrip("`").strip()
-
-        if not tailored:
-            raise LLMInvalidOutputError("claude CLI returned empty tailored resume")
-
-        logger.info(
-            "claude_cli tailor latency_ms=%d chars=%d", latency_ms, len(tailored)
+        tailored = parse_tailor_output(
+            result.stdout,
+            source="claude CLI",
         )
 
-        return {
-            "tailoring_suggestions": [],
-            "tailored_resume": tailored,
-        }
+        logger.info(
+            "claude_cli tailor latency_ms=%d chars=%d",
+            latency_ms,
+            len(tailored["tailored_resume"]),
+        )
+
+        return tailored
 
     def beautify(
         self,

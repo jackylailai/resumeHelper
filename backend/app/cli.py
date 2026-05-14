@@ -23,6 +23,12 @@ from backend.app.services.llm.factory import create_llm_client
 from backend.app.services.llm.fake import FakeLLMClient
 from backend.app.services.scrapers.pipeline import create_scrape_runs, execute_scrape_runs
 from backend.app.services.scrapers.registry import SCRAPERS, resolve_sources
+from backend.app.services.tailor_harness import (
+    load_tailor_fixture_set,
+    run_tailor_harness,
+    write_tailor_report_json,
+    write_tailor_report_markdown,
+)
 from backend.app.workers.tailor import run_tailoring
 
 
@@ -174,6 +180,48 @@ def _eval_harness(args: argparse.Namespace) -> int:
     return 0 if report.failed == 0 else 1
 
 
+def _tailor_harness(args: argparse.Namespace) -> int:
+    prompt_version = _tailor_harness_prompt_version(args.backend, args.prompt_version)
+    try:
+        llm = _create_eval_harness_llm(args.backend, args.model)
+        fixture_set, fixture_path = load_tailor_fixture_set(
+            Path(args.fixtures) if args.fixtures else None
+        )
+    except (LLMUnavailableError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    report = run_tailor_harness(
+        llm=llm,
+        fixture_set=fixture_set,
+        fixture_path=fixture_path,
+        backend=args.backend,
+        prompt_version=prompt_version,
+    )
+
+    if args.report_json:
+        write_tailor_report_json(report, Path(args.report_json))
+    if args.report_md:
+        write_tailor_report_markdown(report, Path(args.report_md))
+
+    if not args.quiet:
+        print(
+            f"tailor-harness backend={args.backend} "
+            f"fixtures={fixture_path} passed={report.passed}/{report.total}"
+        )
+        for result in report.results:
+            outcome = "PASS" if result.passed else "FAIL"
+            print(
+                f"  {result.id}: {outcome} "
+                f"chars={result.tailored_resume_chars} "
+                f"suggestions={result.suggestions_count}"
+            )
+            for failure in result.failures:
+                print(f"    - {failure}")
+
+    return 0 if report.failed == 0 else 1
+
+
 def _create_eval_harness_llm(backend: str, model: str | None) -> LLMClient:
     if backend == "fake":
         return FakeLLMClient()
@@ -196,6 +244,12 @@ def _eval_harness_prompt_version(backend: str, override: str | None) -> str:
     if backend == "fake":
         return "resume-fit-v1"
     return get_settings().llm_prompt_version
+
+
+def _tailor_harness_prompt_version(_backend: str, override: str | None) -> str:
+    if override:
+        return override
+    return "tailor-v1"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -266,6 +320,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     eval_harness.add_argument("--report-md", default=None, help="write Markdown report")
     eval_harness.add_argument("--quiet", action="store_true", help="only return exit code")
     eval_harness.set_defaults(func=_eval_harness)
+
+    tailor_harness = subparsers.add_parser(
+        "tailor-harness",
+        help="run deterministic tailoring output contract and factuality fixtures",
+    )
+    tailor_harness.add_argument(
+        "--backend",
+        choices=["fake", "configured", "anthropic", "claude-cli"],
+        default="fake",
+        help="LLM backend used by the harness",
+    )
+    tailor_harness.add_argument(
+        "--model",
+        default=None,
+        help="model override for claude-cli",
+    )
+    tailor_harness.add_argument(
+        "--prompt-version",
+        default=None,
+        help="prompt version recorded in the harness report",
+    )
+    tailor_harness.add_argument(
+        "--fixtures",
+        default=None,
+        help="fixture JSON path; defaults to backend/evals/fixtures/tailor_cases.json",
+    )
+    tailor_harness.add_argument("--report-json", default=None, help="write JSON report")
+    tailor_harness.add_argument("--report-md", default=None, help="write Markdown report")
+    tailor_harness.add_argument(
+        "--quiet",
+        action="store_true",
+        help="only return exit code",
+    )
+    tailor_harness.set_defaults(func=_tailor_harness)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -17,7 +17,7 @@ from backend.app.config import get_settings
 from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import STATUS_NEEDS_TAILORING, JobAnalysis
-from backend.app.services.llm import LLMClient
+from backend.app.services.llm import LLMClient, LLMInvalidOutputError
 from backend.app.services.llm.audit import (
     STATUS_FAILED,
     STATUS_SUCCEEDED,
@@ -28,6 +28,7 @@ from backend.app.services.llm.audit import (
     record_llm_audit_log,
     stable_payload_hash,
 )
+from backend.app.services.llm.contracts import validate_tailor_output
 from backend.app.services.pdf import write_generated_resume_pdf
 
 logger = logging.getLogger(__name__)
@@ -181,29 +182,23 @@ def _call_tailor_llm(
 ) -> dict:
     """Call the LLM to produce tailoring suggestions and a tailored resume.
 
-    Uses the LLMClient's `tailor` method if available (AnthropicLLMClient),
-    otherwise falls back to a synthetic result.
+    Uses the LLM client's `tailor` method and rejects invalid output before
+    GeneratedResume state is persisted.
     """
-    if hasattr(llm, "tailor"):
+    tailor = getattr(llm, "tailor", None)
+    if tailor is not None:
         kwargs = {
             "baseline_text": baseline_text,
             "jd_text": job.jd_full_text,
             "gaps": job.gaps or [],
             "score": job.score or 0,
         }
-        # Pass structured_data only if the client signature accepts it — keeps
-        # FakeLLMClient happy when called without structured input.
+        # Pass structured_data only when the client signature accepts it.
         import inspect
-        sig = inspect.signature(llm.tailor)  # type: ignore[union-attr]
+
+        sig = inspect.signature(tailor)
         if "structured_data" in sig.parameters:
             kwargs["structured_data"] = structured_data
-        return llm.tailor(**kwargs)  # type: ignore[union-attr]
-    # Fallback for any LLMClient without tailor method
-    logger.warning("tailor_llm_no_tailor_method using fallback")
-    return {
-        "tailoring_suggestions": job.gaps or ["No specific gaps found"],
-        "tailored_resume": (
-            f"# Tailored Resume\n\n**Score:** {job.score}\n\n"
-            f"## Key Skills\n\n{job.jd_snippet or ''}\n"
-        ),
-    }
+        result = tailor(**kwargs)
+        return validate_tailor_output(result, source=llm.__class__.__name__)
+    raise LLMInvalidOutputError("active LLM client does not implement tailor")

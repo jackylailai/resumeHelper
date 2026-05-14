@@ -56,7 +56,7 @@ jobs:
         continue-on-error: true
         run: python -m mypy
 
-      - name: Run deterministic eval harness
+      - name: Run deterministic AI harnesses
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           ANTHROPIC_API_KEY: fake-key-for-tests
@@ -69,6 +69,11 @@ jobs:
             --report-json artifacts/evals/evaluate.json \
             --report-md artifacts/evals/evaluate.md \
             2>&1 | tee eval-harness.txt
+          python -m backend.app.cli tailor-harness \
+            --backend fake \
+            --report-json artifacts/evals/tailor.json \
+            --report-md artifacts/evals/tailor.md \
+            2>&1 | tee tailor-harness.txt
 
       - name: Run tests
         env:
@@ -82,15 +87,15 @@ jobs:
           echo "exit_code=${exit_code}" >> "$GITHUB_ENV"
           exit "${exit_code}"
 
-      - name: Upload eval harness reports
+      - name: Upload AI harness reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-harness-report
+          name: ai-harness-reports
           path: |
-            artifacts/evals/evaluate.json
-            artifacts/evals/evaluate.md
-            eval-harness.txt
+            artifacts/evals/*.json
+            artifacts/evals/*.md
+            *-harness.txt
           if-no-files-found: warn
           retention-days: 30
 
@@ -102,33 +107,47 @@ jobs:
             const fs = require('fs');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
-            if (!fs.existsSync('test-results.txt')) {
-              const evalSummary = fs.existsSync('artifacts/evals/evaluate.md')
-                ? fs.readFileSync('artifacts/evals/evaluate.md', 'utf8')
-                : fs.existsSync('eval-harness.txt')
-                  ? `## AI Eval Harness\n\n\`\`\`text\n${fs.readFileSync('eval-harness.txt', 'utf8').slice(-4000)}\n\`\`\``
-                  : '## AI Eval Harness\n\nEval harness did not produce a report.';
+            function readEvalSummary() {
+              const reportDir = 'artifacts/evals';
+              if (fs.existsSync(reportDir)) {
+                const reports = fs.readdirSync(reportDir)
+                  .filter(name => name.endsWith('.md'))
+                  .sort()
+                  .map(name => fs.readFileSync(`${reportDir}/${name}`, 'utf8'));
+                if (reports.length > 0) {
+                  return reports.join('\n\n');
+                }
+              }
 
+              const logs = ['eval-harness.txt', 'tailor-harness.txt']
+                .filter(name => fs.existsSync(name))
+                .map(name => `### ${name}\n\n\`\`\`text\n${fs.readFileSync(name, 'utf8').slice(-4000)}\n\`\`\``);
+              if (logs.length > 0) {
+                return `## AI Harness Logs\n\n${logs.join('\n\n')}`;
+              }
+              return '## AI Harness Reports\n\nAI harnesses did not produce a report.';
+            }
+
+            const evalSummary = readEvalSummary();
+
+            if (!fs.existsSync('test-results.txt')) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `${evalSummary}\n\n## ❌ SIT Results: failed\n\nTests did not run, or an earlier CI gate failed before pytest could start.\n\n[Full logs](${runUrl})`,
+                body: `${evalSummary}\n\n## SIT Results: failed\n\nTests did not run, or an earlier CI gate failed before pytest could start.\n\n[Full logs](${runUrl})`,
               });
               return;
             }
 
             const results = fs.readFileSync('test-results.txt', 'utf8');
             const lines = results.split('\n');
-
-            // Parse summary line (last line matching "X passed" or "X failed")
             const summaryLine = [...lines].reverse().find(l => /\d+ (passed|failed)/.test(l)) || '';
             const passedMatch = summaryLine.match(/(\d+) passed/);
             const failedMatch = summaryLine.match(/(\d+) failed/);
             const passedCount = passedMatch ? parseInt(passedMatch[1]) : 0;
             const failedCount = failedMatch ? parseInt(failedMatch[1]) : 0;
 
-            // Extract FAILED lines (test name + short reason)
             const failedLines = lines.filter(l => l.startsWith('FAILED '));
             const failedTests = failedLines.map(l => {
               const body = l.replace(/^FAILED /, '');
@@ -138,10 +157,8 @@ jobs:
                 : { name: body.slice(0, dashIdx).trim(), reason: body.slice(dashIdx + 3).trim() };
             });
 
-            const icon = failedCount > 0 ? '❌' : '✅';
             const statusText = failedCount > 0 ? 'failed' : 'passed';
-
-            let body = `## ${icon} SIT Results: ${statusText}\n\n- Passed: ${passedCount}\n- Failed: ${failedCount}\n`;
+            let body = `${evalSummary}\n\n## SIT Results: ${statusText}\n\n- Passed: ${passedCount}\n- Failed: ${failedCount}\n`;
             if (failedTests.length > 0) {
               body += `\nFailed tests:\n`;
               for (const t of failedTests) {
@@ -149,11 +166,6 @@ jobs:
                 if (t.reason) body += `\n  \`${t.reason}\``;
                 body += '\n';
               }
-            }
-            if (fs.existsSync('artifacts/evals/evaluate.md')) {
-              body = `${fs.readFileSync('artifacts/evals/evaluate.md', 'utf8')}\n\n${body}`;
-            } else if (fs.existsSync('eval-harness.txt')) {
-              body = `## AI Eval Harness\n\n\`\`\`text\n${fs.readFileSync('eval-harness.txt', 'utf8').slice(-4000)}\n\`\`\`\n\n${body}`;
             }
             body += `\n[Full logs](${runUrl})`;
 

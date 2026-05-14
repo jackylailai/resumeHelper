@@ -11,7 +11,7 @@ from backend.app.services.llm import (
     LLMInvalidOutputError,
     LLMUnavailableError,
 )
-from backend.app.services.llm.contracts import parse_evaluation_output
+from backend.app.services.llm.contracts import parse_evaluation_output, parse_tailor_output
 
 logger = logging.getLogger(__name__)
 
@@ -209,19 +209,12 @@ class AnthropicLLMClient:
             response.usage.output_tokens,
         )
 
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"LLM returned invalid JSON for tailor: {exc}\nRaw: {raw[:200]}"
-            ) from exc
-
-        return {
-            "tailoring_suggestions": data.get("tailoring_suggestions", []),
-            "tailored_resume": data.get("tailored_resume", ""),
-            "token_count_input": response.usage.input_tokens,
-            "token_count_output": response.usage.output_tokens,
-        }
+        return parse_tailor_output(
+            raw,
+            source="Anthropic API",
+            token_count_input=response.usage.input_tokens,
+            token_count_output=response.usage.output_tokens,
+        )
 
     def beautify(
         self,
