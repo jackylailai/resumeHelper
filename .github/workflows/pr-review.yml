@@ -74,6 +74,16 @@ jobs:
             --report-json artifacts/evals/tailor.json \
             --report-md artifacts/evals/tailor.md \
             2>&1 | tee tailor-harness.txt
+          python -m backend.app.cli extract-harness \
+            --backend fake \
+            --report-json artifacts/evals/extract.json \
+            --report-md artifacts/evals/extract.md \
+            2>&1 | tee extract-harness.txt
+          python -m backend.app.cli beautify-harness \
+            --backend fake \
+            --report-json artifacts/evals/beautify.json \
+            --report-md artifacts/evals/beautify.md \
+            2>&1 | tee beautify-harness.txt
 
       - name: Run tests
         env:
@@ -119,7 +129,7 @@ jobs:
                 }
               }
 
-              const logs = ['eval-harness.txt', 'tailor-harness.txt']
+              const logs = ['eval-harness.txt', 'tailor-harness.txt', 'extract-harness.txt', 'beautify-harness.txt']
                 .filter(name => fs.existsSync(name))
                 .map(name => `### ${name}\n\n\`\`\`text\n${fs.readFileSync(name, 'utf8').slice(-4000)}\n\`\`\``);
               if (logs.length > 0) {
