@@ -20,19 +20,6 @@ const trackStatus = document.getElementById("track-status");
 const prevPage = document.getElementById("prev-page");
 const nextPage = document.getElementById("next-page");
 const pageRange = document.getElementById("page-range");
-const scrapeForm = document.getElementById("scrape-form");
-const scrapeSource = document.getElementById("scrape-source");
-const scrapeKeyword = document.getElementById("scrape-keyword");
-const scrapeLimit = document.getElementById("scrape-limit");
-const scrapeEvaluateAfter = document.getElementById("scrape-evaluate-after");
-const runScrapeButton = document.getElementById("run-scrape");
-const replaceScrapeButton = document.getElementById("replace-scrape");
-const stopScrapeButton = document.getElementById("stop-scrape");
-const evaluatePendingButton = document.getElementById("evaluate-pending");
-const refreshScrapeRuns = document.getElementById("refresh-scrape-runs");
-const scrapeActiveSummary = document.getElementById("scrape-active-summary");
-const scrapeStatus = document.getElementById("scrape-status");
-const scrapeRuns = document.getElementById("scrape-runs");
 const UI = window.ResumeHelper;
 
 const PAGE_SIZE = 20;
@@ -40,7 +27,6 @@ let selectedListingId = null;
 let currentListings = [];
 let selectedListingIds = new Set();
 let failedBatchListingIds = new Set();
-let scrapeRefreshTimer = null;
 const listingLabelsById = new Map();
 const pagination = {
     limit: PAGE_SIZE,
@@ -87,27 +73,6 @@ nextPage.addEventListener("click", async () => {
     }
 });
 
-scrapeForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await runScrape(false);
-});
-
-replaceScrapeButton.addEventListener("click", async () => {
-    await runScrape(true);
-});
-
-stopScrapeButton.addEventListener("click", async () => {
-    await stopCurrentScrape();
-});
-
-evaluatePendingButton.addEventListener("click", async () => {
-    await evaluatePendingListings();
-});
-
-refreshScrapeRuns.addEventListener("click", async () => {
-    await loadScrapeRuns();
-});
-
 window.addEventListener("DOMContentLoaded", () => {
     loadProfiles();
     loadListings().then(() => {
@@ -115,219 +80,9 @@ window.addEventListener("DOMContentLoaded", () => {
         const listingId = params.get("listing_id");
         if (listingId) loadDetail(listingId);
     });
-    loadScrapeRuns();
     updateSelectionControls();
     updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });
 });
-
-async function runScrape(stopExisting) {
-    const keyword = scrapeKeyword.value.trim();
-    const limit = Number(scrapeLimit.value || 25);
-    if (!keyword) {
-        scrapeStatus.textContent = "Enter a keyword before scraping.";
-        return;
-    }
-
-    setScrapeButtonsBusy(true);
-    scrapeStatus.textContent = stopExisting
-        ? "Stopping current scrape and queueing new keyword..."
-        : "Queueing scrape schedule...";
-
-    const requestBody = {
-        source: scrapeSource.value,
-        keyword,
-        limit,
-        evaluate_after_scrape: scrapeEvaluateAfter.checked,
-        evaluate_limit: 100,
-        stop_existing: stopExisting,
-    };
-    const profileId = profileSelect.value;
-    if (profileId) requestBody.profile_id = Number(profileId);
-
-    const { response, payload } = await safeApiFetch("/api/scrape/control/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-    });
-
-    setScrapeButtonsBusy(false);
-    if (!response.ok) {
-        setApiError(scrapeStatus, response, payload);
-        if (payload?.error?.details) {
-            renderScrapeControlStatus(payload.error.details);
-        }
-        return;
-    }
-
-    const runs = payload.data?.runs ?? [];
-    scrapeStatus.textContent = `Queued ${runs.length} scrape run(s).`;
-    if (payload.meta?.active_status) {
-        renderScrapeControlStatus(payload.meta.active_status);
-    } else {
-        renderScrapeRuns(runs);
-    }
-    scheduleScrapeStatusRefresh();
-}
-
-async function stopCurrentScrape() {
-    setScrapeButtonsBusy(true);
-    scrapeStatus.textContent = "Requesting scrape stop...";
-
-    const { response, payload } = await safeApiFetch("/api/scrape/control/stop", {
-        method: "POST",
-    });
-
-    setScrapeButtonsBusy(false);
-    if (!response.ok) {
-        setApiError(scrapeStatus, response, payload);
-        return;
-    }
-
-    const cancelled = payload.meta?.cancelled_runs ?? [];
-    scrapeStatus.textContent = cancelled.length
-        ? `Stop requested for ${cancelled.length} scrape run(s).`
-        : "No active scrape runs.";
-    renderScrapeControlStatus(payload.data);
-    scheduleScrapeStatusRefresh();
-}
-
-async function evaluatePendingListings() {
-    evaluatePendingButton.disabled = true;
-    scrapeStatus.textContent = "Evaluating pending listings...";
-    batchResults.hidden = true;
-    batchResults.innerHTML = "";
-
-    const requestBody = { limit: 100 };
-    const profileId = profileSelect.value;
-    if (profileId) requestBody.profile_id = Number(profileId);
-    if (!["all", "all_with_linkedin"].includes(scrapeSource.value)) {
-        requestBody.source = scrapeSource.value;
-    }
-
-    const { response, payload } = await safeApiFetch("/api/evaluate/pending-listings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-    });
-
-    evaluatePendingButton.disabled = false;
-    if (!response.ok) {
-        setApiError(scrapeStatus, response, payload);
-        return;
-    }
-
-    const data = payload.data;
-    scrapeStatus.textContent = (
-        `Evaluated ${data.succeeded}/${data.total}; ${data.failed} failed.`
-    );
-    renderBatchResults(data.results ?? []);
-    await loadListings();
-    if (selectedListingId) {
-        await loadDetail(selectedListingId);
-    }
-}
-
-async function loadScrapeRuns() {
-    const { response, payload } = await safeApiFetch("/api/scrape/control");
-    if (!response.ok) {
-        setApiError(scrapeStatus, response, payload);
-        return false;
-    }
-    renderScrapeControlStatus(payload.data);
-    return Boolean(payload.data?.active);
-}
-
-function renderScrapeControlStatus(status) {
-    const activeRuns = status?.active_runs ?? [];
-    const recentRuns = status?.recent_runs ?? [];
-    if (activeRuns.length > 0) {
-        const keywords = [...new Set(activeRuns.map((run) => run.keyword))].join(", ");
-        const sources = [...new Set(activeRuns.map((run) => run.source))].join(", ");
-        scrapeActiveSummary.innerHTML = (
-            `<strong>Running:</strong> ${esc(keywords)} `
-            + `<span class="muted">(${esc(sources)})</span>`
-        );
-        stopScrapeButton.disabled = false;
-    } else {
-        scrapeActiveSummary.textContent = "No active scrape schedule.";
-        stopScrapeButton.disabled = true;
-    }
-    renderScrapeRuns(recentRuns);
-}
-
-function renderScrapeRuns(runs) {
-    if (!runs || runs.length === 0) {
-        scrapeRuns.innerHTML = '<div class="empty-row">No scrape runs yet.</div>';
-        return;
-    }
-
-    scrapeRuns.innerHTML = `
-        <table class="scrape-run-table">
-            <thead>
-                <tr>
-                    <th>Source</th>
-                    <th>Status</th>
-                    <th>Keyword</th>
-                    <th>Stats</th>
-                    <th>Started</th>
-                    <th>Finished</th>
-                    <th>Errors</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${runs.map((run) => `
-                    <tr>
-                        <td>${esc(run.source)}</td>
-                        <td>
-                            <span class="run-status run-${esc(run.status)}">
-                                ${formatRunStatus(run.status)}
-                            </span>
-                        </td>
-                        <td>${esc(run.keyword)}</td>
-                        <td>${run.inserted}/${run.updated}/${run.skipped}/${run.failed}</td>
-                        <td>${formatDate(run.started_at)}</td>
-                        <td>${run.finished_at ? formatDate(run.finished_at) : "-"}</td>
-                        <td>${run.error_summary ? esc(run.error_summary) : ""}</td>
-                    </tr>
-                `).join("")}
-            </tbody>
-        </table>
-        <div class="muted scrape-run-help">Stats are inserted / updated / skipped / failed.</div>
-    `;
-}
-
-function scheduleScrapeStatusRefresh() {
-    if (scrapeRefreshTimer) clearTimeout(scrapeRefreshTimer);
-    let attempts = 0;
-    const refresh = async () => {
-        attempts += 1;
-        const active = await loadScrapeRuns();
-        if (active && attempts < 90) {
-            scrapeRefreshTimer = setTimeout(refresh, 2000);
-        }
-    };
-    scrapeRefreshTimer = setTimeout(refresh, 1000);
-}
-
-function formatRunStatus(status) {
-    if (status === "succeeded") return "Succeeded";
-    if (status === "partial") return "Partial";
-    if (status === "failed") return "Failed";
-    if (status === "cancel_requested") return "Stopping";
-    if (status === "cancelled") return "Cancelled";
-    if (status === "running") return "Running";
-    return "Queued";
-}
-
-function setScrapeButtonsBusy(isBusy) {
-    runScrapeButton.disabled = isBusy;
-    replaceScrapeButton.disabled = isBusy;
-    stopScrapeButton.disabled = isBusy;
-}
-
-function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : "-";
-}
 
 async function loadProfiles() {
     profileSelect.innerHTML = "";
@@ -759,8 +514,4 @@ function formatError(response, payload) {
 
 function setApiError(element, response, payload) {
     element.innerHTML = UI.apiErrorBanner(response, payload, { includeStatus: true });
-}
-
-function esc(value) {
-    return UI.escHtml(value);
 }

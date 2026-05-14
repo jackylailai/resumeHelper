@@ -23,6 +23,12 @@ profile + JD
   -> application tracking
 ```
 
+The main UI separates producer and consumer views:
+
+```text
+Scrapes -> JD Database -> Evaluate / Batch Score -> Opportunities / Submittable -> Applications
+```
+
 ## Core Entities
 
 ### BaselineProfile
@@ -158,7 +164,7 @@ Supported source selectors:
 Scrapers can run through:
 
 - API
-- JD Database UI
+- Scrapes UI
 - CLI
 - cron wrapper
 
@@ -189,10 +195,12 @@ The user can add promising listings to the application tracker and update
 status/follow-up information.
 
 The tracker is a user-owned pipeline, not an automated submission system. It
-records intent and progress after a listing has been evaluated or linked to a
-generated resume. Duplicate tracking requests for the same listing or analysis
-should return the existing application row and may update status, notes, or
-follow-up date.
+records intent and progress after a listing has been evaluated, reviewed as an
+opportunity, or linked to a generated resume. Submittable is the upstream review
+queue for strong matches and generated resumes; Applications is the downstream
+tracker for jobs the user chooses to act on. Duplicate tracking requests for the
+same listing or analysis should return the existing application row and may
+update status, notes, or follow-up date.
 
 ## LLM Flow And Spec Requirements
 
