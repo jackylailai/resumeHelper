@@ -128,6 +128,9 @@ Implemented AI workflow foundations:
 - persisted LLM audit logs for evaluate, tailor, structured extraction, and
   beautify calls
 
+For a concise demo-oriented view of what is ready to show, see
+[SHOWCASE.md](SHOWCASE.md).
+
 Known gaps:
 
 - tailoring factuality coverage is still smoke-level and needs broader fixtures
