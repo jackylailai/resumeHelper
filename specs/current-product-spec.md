@@ -295,10 +295,11 @@ Known gaps:
 
 - LLM output validation is incomplete outside score checks.
 - Tailoring factuality checks are not yet automated.
-- Prompt/model metadata is not uniformly audited across every LLM call.
 - Long-running work still relies partly on FastAPI BackgroundTasks.
 - CI eval reports currently cover deterministic evaluate fixtures only; tailor,
   extraction, and beautify harnesses are still pending.
+- Audit logs capture prompt/model metadata for production LLM calls, but there
+  is no user-facing audit browser yet.
 
 ## Non-Goals For Current Scope
 

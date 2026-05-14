@@ -119,14 +119,34 @@ Implemented AI workflow foundations:
 - structured JSON API error envelopes with request IDs
 - eval harness CLI for deterministic evaluate cases
 - CI gate for deterministic evaluate fixtures
+- persisted LLM audit logs for evaluate, tailor, structured extraction, and
+  beautify calls
 
 Known gaps:
 
 - tailor, structured extraction, and beautify need stricter contracts
 - factuality checks for tailored resumes are not automated yet
-- prompt/model metadata is not uniformly persisted
 - long-running AI work still needs durable job state
 - cost, quota, and privacy guardrails need product-level enforcement
+
+## LLM Audit Log
+
+Production LLM calls write one `llm_audit_logs` row on success or failure. The
+row is intentionally metadata-first:
+
+- `request_id`
+- workflow step: `evaluate`, `tailor`, `extract`, or `beautify`
+- backend and model
+- prompt version
+- input and output hashes
+- latency
+- token counts when the provider returns them
+- success/failure status and typed error code
+- links to profile, job analysis, generated resume, or beautification rows
+
+The audit table does not store full resume or JD text by default. The hashes are
+enough to correlate repeated inputs and outputs without turning the audit trail
+into another sensitive content store.
 
 ## Roadmap
 
