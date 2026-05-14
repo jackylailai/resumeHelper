@@ -19,8 +19,19 @@ from backend.app.services.eval_harness import (
     write_report_markdown,
 )
 from backend.app.services.llm import LLMClient, LLMUnavailableError
+from backend.app.services.llm.audit import llm_metadata
 from backend.app.services.llm.factory import create_llm_client
 from backend.app.services.llm.fake import FakeLLMClient
+from backend.app.services.llm.prompt_registry import (
+    STEP_EVALUATE,
+    STEP_TAILOR,
+    prompt_version_for_step,
+)
+from backend.app.services.prompt_replay import (
+    compare_evaluation_prompt_versions,
+    write_prompt_replay_json,
+    write_prompt_replay_markdown,
+)
 from backend.app.services.scrapers.pipeline import create_scrape_runs, execute_scrape_runs
 from backend.app.services.scrapers.registry import SCRAPERS, resolve_sources
 from backend.app.services.tailor_harness import (
@@ -112,7 +123,10 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
             run_tailoring(
                 job_analysis_id=job_id,
                 llm=llm,
-                prompt_version=settings.llm_prompt_version,
+                prompt_version=prompt_version_for_step(
+                    STEP_TAILOR,
+                    settings=settings,
+                ),
                 session_factory=SessionLocal,
             )
         if not args.quiet:
@@ -222,6 +236,60 @@ def _tailor_harness(args: argparse.Namespace) -> int:
     return 0 if report.failed == 0 else 1
 
 
+def _prompt_replay(args: argparse.Namespace) -> int:
+    old_prompt_version = prompt_version_for_step(
+        STEP_EVALUATE,
+        override=args.old_prompt_version,
+    )
+    new_prompt_version = prompt_version_for_step(
+        STEP_EVALUATE,
+        override=args.new_prompt_version,
+    )
+    try:
+        llm = _create_eval_harness_llm(args.backend, args.model)
+        backend, model = llm_metadata(llm)
+        fixture_set, fixture_path = load_evaluation_fixture_set(
+            Path(args.fixtures) if args.fixtures else None
+        )
+        report = compare_evaluation_prompt_versions(
+            llm=llm,
+            fixture_set=fixture_set,
+            fixture_path=fixture_path,
+            backend=backend,
+            model=model,
+            old_prompt_version=old_prompt_version,
+            new_prompt_version=new_prompt_version,
+            case_ids=args.case_id,
+        )
+    except (LLMUnavailableError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    if args.report_json:
+        write_prompt_replay_json(report, Path(args.report_json))
+    if args.report_md:
+        write_prompt_replay_markdown(report, Path(args.report_md))
+
+    if not args.quiet:
+        print(
+            f"prompt-replay backend={report.backend} model={report.model or ''} "
+            f"old={report.old_prompt_version} new={report.new_prompt_version} "
+            f"changed={report.changed}/{report.total} "
+            f"new_passed={report.new_passed}/{report.total}"
+        )
+        for delta in report.deltas:
+            score_delta = "" if delta.score_delta is None else f"{delta.score_delta:+d}"
+            old_result = "PASS" if delta.old_passed else "FAIL"
+            new_result = "PASS" if delta.new_passed else "FAIL"
+            print(
+                f"  {delta.id}: score={delta.old_score}->{delta.new_score} "
+                f"delta={score_delta} status={delta.old_status}->{delta.new_status} "
+                f"{old_result}->{new_result}"
+            )
+
+    return 0 if report.new_failed == 0 else 1
+
+
 def _create_eval_harness_llm(backend: str, model: str | None) -> LLMClient:
     if backend == "fake":
         return FakeLLMClient()
@@ -239,17 +307,13 @@ def _create_eval_harness_llm(backend: str, model: str | None) -> LLMClient:
 
 
 def _eval_harness_prompt_version(backend: str, override: str | None) -> str:
-    if override:
-        return override
     if backend == "fake":
-        return "resume-fit-v1"
-    return get_settings().llm_prompt_version
+        return prompt_version_for_step(STEP_EVALUATE, override=override)
+    return prompt_version_for_step(STEP_EVALUATE, override=override)
 
 
 def _tailor_harness_prompt_version(_backend: str, override: str | None) -> str:
-    if override:
-        return override
-    return "tailor-v1"
+    return prompt_version_for_step(STEP_TAILOR, override=override)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -354,6 +418,43 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="only return exit code",
     )
     tailor_harness.set_defaults(func=_tailor_harness)
+
+    prompt_replay = subparsers.add_parser(
+        "prompt-replay",
+        help="compare eval fixture output across two evaluate prompt versions",
+    )
+    prompt_replay.add_argument(
+        "--backend",
+        choices=["fake", "configured", "anthropic", "claude-cli"],
+        default="fake",
+        help="LLM backend used by the replay",
+    )
+    prompt_replay.add_argument("--model", default=None, help="model override for claude-cli")
+    prompt_replay.add_argument(
+        "--old-prompt-version",
+        default=None,
+        help="old evaluate prompt version; defaults to configured evaluate prompt",
+    )
+    prompt_replay.add_argument(
+        "--new-prompt-version",
+        required=True,
+        help="new evaluate prompt version to compare",
+    )
+    prompt_replay.add_argument(
+        "--case-id",
+        action="append",
+        default=None,
+        help="fixture case id to replay; repeat to select multiple cases",
+    )
+    prompt_replay.add_argument(
+        "--fixtures",
+        default=None,
+        help="fixture JSON path; defaults to backend/evals/fixtures/evaluate_cases.json",
+    )
+    prompt_replay.add_argument("--report-json", default=None, help="write JSON report")
+    prompt_replay.add_argument("--report-md", default=None, help="write Markdown report")
+    prompt_replay.add_argument("--quiet", action="store_true", help="only return exit code")
+    prompt_replay.set_defaults(func=_prompt_replay)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -44,6 +44,7 @@ from backend.app.services.llm.audit import (
     stable_payload_hash,
 )
 from backend.app.services.llm.contracts import validate_structured_extraction_output
+from backend.app.services.llm.prompt_registry import prompt_version_for_step
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -234,7 +235,7 @@ def extract_profile_structured(
             "Active LLM backend does not implement extract_structured().",
             status_code=503,
         )
-    prompt_version = "extract-v1"
+    prompt_version = prompt_version_for_step(STEP_EXTRACT)
     backend, model = llm_metadata(llm)
     input_hash = stable_payload_hash(
         {

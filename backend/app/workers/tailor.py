@@ -29,6 +29,10 @@ from backend.app.services.llm.audit import (
     stable_payload_hash,
 )
 from backend.app.services.llm.contracts import validate_tailor_output
+from backend.app.services.llm.prompt_registry import (
+    STEP_TAILOR,
+    prompt_version_for_step,
+)
 from backend.app.services.pdf import write_generated_resume_pdf
 
 logger = logging.getLogger(__name__)
@@ -43,7 +47,7 @@ def _get_default_session_factory() -> Any:
 def run_tailoring(
     job_analysis_id: uuid.UUID,
     llm: LLMClient,
-    prompt_version: str = "tailor-v1",
+    prompt_version: str | None = None,
     session_factory: Callable | None = None,
     request_id: str | None = None,
 ) -> None:
@@ -58,6 +62,7 @@ def run_tailoring(
     """
     if session_factory is None:
         session_factory = _get_default_session_factory()
+    prompt_version = prompt_version_for_step(STEP_TAILOR, override=prompt_version)
 
     with session_factory() as db:
         job = db.get(JobAnalysis, job_analysis_id)
@@ -131,6 +136,8 @@ def run_tailoring(
             resume_text=result["tailored_resume"],
             pdf_url=None,
             prompt_version=prompt_version,
+            llm_backend=backend,
+            llm_model=model,
         )
         db.add(resume)
         db.flush()

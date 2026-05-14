@@ -18,6 +18,10 @@ from backend.app.schemas.scrape import (
     ScrapeStatusOut,
 )
 from backend.app.services.batch_evaluator import evaluate_pending_listings
+from backend.app.services.llm.prompt_registry import (
+    STEP_TAILOR,
+    prompt_version_for_step,
+)
 from backend.app.services.scrapers.pipeline import (
     active_scrape_runs,
     create_scrape_runs,
@@ -225,7 +229,10 @@ def run_scrape_control_background(
             run_tailoring(
                 job_analysis_id=job_id,
                 llm=llm,
-                prompt_version=settings.llm_prompt_version,
+                prompt_version=prompt_version_for_step(
+                    STEP_TAILOR,
+                    settings=settings,
+                ),
                 session_factory=session_factory,
             )
 
