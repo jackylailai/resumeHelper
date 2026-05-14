@@ -67,9 +67,26 @@ def test_extract_structured_uses_llm(client: TestClient):
     saved = r.json()["data"]["structured_data"]
     # Fake client produces predictable shape
     assert saved is not None
-    assert "personal" in saved
+    assert saved["personal"]["name"] == "Fake Candidate"
     assert "work_experience" in saved
-    assert saved["_source_chars"] > 0
+    assert saved["skills"]["languages"] == ["Python"]
+
+
+@pytest.mark.integration
+def test_extract_structured_invalid_llm_output_returns_502(client: TestClient):
+    create = client.post("/api/profile", json={"skills_text": "Python"})
+    profile_id = create.json()["data"]["id"]
+
+    class _InvalidExtractLLM:
+        def extract_structured(self, _source_text: str) -> dict:
+            return {"unknown": "field"}
+
+    client.app.state.llm_client = _InvalidExtractLLM()
+
+    r = client.post(f"/api/profiles/{profile_id}/structured/extract")
+
+    assert r.status_code == 502
+    assert r.json()["error"]["code"] == "llm_invalid_output"
 
 
 @pytest.mark.integration

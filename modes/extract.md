@@ -53,9 +53,10 @@ Return ONLY a JSON object (no code fences, no preamble). Schema:
 Rules:
 1. **Every value comes verbatim from source.** Dates, numbers, employer names, school names, certification names — copy as-is.
 2. **Don't invent fields.** If source doesn't mention email / phone / location, omit those keys.
-3. **Don't editorialize.** "Backend Engineer" stays "Backend Engineer". Don't expand to "Senior Backend Engineer" if the source doesn't say so.
-4. **Don't summarize achievements.** Each bullet under work_experience must be a concrete claim from the source. If source has 5 bullets, output 5 bullets.
-5. **Preserve the original language.** If source mixes Chinese and English, preserve the original wording for proper nouns and quotes; you may translate connectors only if it improves clarity.
+3. **Don't add unknown keys.** Use only the top-level and nested keys shown in the schema. Unknown keys are rejected by application validation.
+4. **Don't editorialize.** "Backend Engineer" stays "Backend Engineer". Don't expand to "Senior Backend Engineer" if the source doesn't say so.
+5. **Don't summarize achievements.** Each bullet under work_experience must be a concrete claim from the source. If source has 5 bullets, output 5 bullets.
+6. **Preserve the original language.** If source mixes Chinese and English, preserve the original wording for proper nouns and quotes; you may translate connectors only if it improves clarity.
 
 Source profile:
 <source>

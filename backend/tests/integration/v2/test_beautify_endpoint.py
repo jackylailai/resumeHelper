@@ -94,6 +94,31 @@ def test_beautify_appears_in_history_detail(client: TestClient):
 
 
 @pytest.mark.integration
+def test_beautify_invalid_llm_output_returns_502(client: TestClient):
+    _, resume_id = _create_resume(client)
+
+    class _InvalidBeautifyLLM:
+        def beautify(self, _resume_markdown: str, style: str = "modern") -> dict:
+            return {
+                "html_content": (
+                    "<!DOCTYPE html><html><head><style>body{}</style></head>"
+                    "<body><script>alert(1)</script></body></html>"
+                ),
+                "prompt_version": f"beautify-{style}",
+            }
+
+    client.app.state.llm_client = _InvalidBeautifyLLM()
+
+    r = client.post(
+        f"/api/generated-resumes/{resume_id}/beautify",
+        json={"style": "modern"},
+    )
+
+    assert r.status_code == 502
+    assert r.json()["error"]["code"] == "llm_invalid_output"
+
+
+@pytest.mark.integration
 def test_beautify_unknown_resume_returns_404(client: TestClient):
     r = client.post(
         "/api/generated-resumes/00000000-0000-0000-0000-000000000000/beautify",

@@ -116,6 +116,8 @@ Implemented AI workflow foundations:
 - deterministic fake backend for tests
 - evaluate output contract for score, explanation, strengths, and gaps
 - tailor output contract for suggestions and generated Markdown
+- structured extraction schema with unknown-key rejection
+- beautify HTML contract for complete, self-contained, script-free documents
 - application-owned score routing
 - profile-scoped JD evaluation cache
 - generated resume review before submission
@@ -128,7 +130,6 @@ Implemented AI workflow foundations:
 
 Known gaps:
 
-- structured extraction and beautify need stricter contracts
 - tailoring factuality coverage is still smoke-level and needs broader fixtures
 - long-running AI work still needs durable job state
 - cost, quota, and privacy guardrails need product-level enforcement
@@ -171,6 +172,7 @@ Recommended implementation order:
 4. **Extraction and beautify contracts**
    Add typed schemas for structured extraction and safety checks for HTML/PDF
    generation.
+   Current status: implemented for the LLM adapters and API persistence path.
 
 5. **Prompt/model lifecycle**
    Version prompts per workflow step and support replay or comparison across

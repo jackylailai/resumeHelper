@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "name": "beautify-contract-smoke",
+  "description": "Deterministic fixtures for beautified HTML safety and factuality checks.",
+  "source_markdown": "# Jane Lin\n\nSoftware Engineer at Fubon Media from April 2024 - Present.\n\nBuilt Python FastAPI services handling 50,000 QPS.",
+  "valid_html": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>body{font-family:system-ui,sans-serif;}</style></head><body><h1>Jane Lin</h1><p>Software Engineer at Fubon Media from April 2024 - Present.</p><p>Built Python FastAPI services handling 50,000 QPS.</p></body></html>",
+  "forbidden_facts": ["Principal Architect", "Kubernetes"],
+  "invalid_html": [
+    {
+      "id": "script_tag",
+      "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><script>alert(1)</script></body></html>"
+    },
+    {
+      "id": "external_image",
+      "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><img src=\"https://example.com/a.png\"></body></html>"
+    },
+    {
+      "id": "hallucinated_fact",
+      "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><p>Principal Architect at Fubon Media</p></body></html>"
+    }
+  ]
+}
