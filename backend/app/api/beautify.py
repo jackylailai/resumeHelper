@@ -25,6 +25,7 @@ from backend.app.services.llm.audit import (
     record_llm_audit_log,
     stable_payload_hash,
 )
+from backend.app.services.llm.contracts import validate_beautify_result
 from backend.app.services.pdf import (
     beautified_html_path,
     beautified_pdf_path,
@@ -82,7 +83,11 @@ def beautify_resume(
     )
     started = time.perf_counter()
     try:
-        result = llm.beautify(resume.resume_text, style=body.style)
+        result = validate_beautify_result(
+            llm.beautify(resume.resume_text, style=body.style),
+            source=llm.__class__.__name__,
+            source_markdown=resume.resume_text,
+        )
     except LLMUnavailableError as exc:
         latency_ms = int((time.perf_counter() - started) * 1000)
         record_llm_audit_log(

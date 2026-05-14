@@ -8,10 +8,14 @@ from pathlib import Path
 
 from backend.app.services.llm import (
     EvaluationResult,
-    LLMInvalidOutputError,
     LLMUnavailableError,
 )
-from backend.app.services.llm.contracts import parse_evaluation_output, parse_tailor_output
+from backend.app.services.llm.contracts import (
+    parse_evaluation_output,
+    parse_structured_extraction_output,
+    parse_tailor_output,
+    validate_beautify_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -168,14 +172,6 @@ class ClaudeCLIClient:
             )
 
         html = result.stdout.strip()
-        if html.startswith("```"):
-            html = "\n".join(html.split("\n")[1:])
-            html = html.rstrip("`").strip()
-
-        if "<html" not in html.lower() or "</html>" not in html.lower():
-            raise LLMInvalidOutputError(
-                "claude CLI beautify did not return a complete HTML document"
-            )
 
         logger.info(
             "claude_cli beautify style=%s latency_ms=%d chars=%d",
@@ -184,7 +180,12 @@ class ClaudeCLIClient:
             len(html),
         )
 
-        return {"html_content": html, "prompt_version": "beautify-v1"}
+        return validate_beautify_output(
+            html,
+            source="claude CLI",
+            source_markdown=resume_markdown,
+            prompt_version="beautify-v1",
+        )
 
     def extract_structured(self, source_text: str) -> dict:
         """Parse a free-form profile text into a structured JSON dict via the
@@ -212,21 +213,10 @@ class ClaudeCLIClient:
                 f"claude CLI extract failed: {result.stderr[:200]}"
             )
 
-        raw = result.stdout.strip()
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:])
-            raw = raw.rstrip("`").strip()
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise LLMInvalidOutputError(
-                f"claude CLI extract returned invalid JSON: {exc}; raw[:200]={raw[:200]!r}"
-            ) from exc
-        if not isinstance(data, dict):
-            raise LLMInvalidOutputError(
-                "claude CLI extract did not return a JSON object"
-            )
+        data = parse_structured_extraction_output(
+            result.stdout,
+            source="claude CLI",
+        )
 
         logger.info(
             "claude_cli extract latency_ms=%d keys=%d", latency_ms, len(data)

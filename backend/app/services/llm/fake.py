@@ -115,5 +115,4 @@ class FakeLLMClient:
                 }
             ],
             "skills": {"languages": ["Python"]},
-            "_source_chars": len(source_text),
         }

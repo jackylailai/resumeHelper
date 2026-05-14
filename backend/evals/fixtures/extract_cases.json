@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "name": "structured-extraction-contract-smoke",
+  "description": "Deterministic fixtures for structured profile extraction output contracts.",
+  "valid_output": {
+    "personal": {
+      "name": "Jane Lin",
+      "location": "Taipei"
+    },
+    "work_experience": [
+      {
+        "employer": "Fubon Media",
+        "title": "Software Engineer",
+        "start_date": "April 2024",
+        "end_date": "Present",
+        "is_current": true,
+        "achievements": ["Built Python FastAPI services handling 50,000 QPS."]
+      }
+    ],
+    "education": [
+      {
+        "school": "National Taiwan University",
+        "degree": "BS Computer Science"
+      }
+    ],
+    "languages": [
+      {
+        "name": "English",
+        "test": "TOEIC",
+        "score": "790"
+      }
+    ],
+    "certifications": [
+      {
+        "name": "AWS Certified Developer"
+      }
+    ],
+    "skills": {
+      "languages": ["Python"],
+      "frameworks": ["FastAPI"],
+      "databases": ["PostgreSQL"]
+    }
+  },
+  "invalid_outputs": [
+    {
+      "id": "unknown_top_level",
+      "payload": {
+        "personal": {"name": "Jane Lin"},
+        "invented_field": "must fail"
+      }
+    },
+    {
+      "id": "unknown_nested_key",
+      "payload": {
+        "work_experience": [
+          {
+            "employer": "Fubon Media",
+            "made_up_seniority": "Principal"
+          }
+        ]
+      }
+    }
+  ]
+}

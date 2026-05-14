@@ -1,7 +1,7 @@
 # Eval Harness
 
 Issue #113 uses "eval harness" as a production guardrail for LLM behavior, not
-as a loose prompt playground. The current implementation covers two paths:
+as a loose prompt playground. The current implementation covers these paths:
 
 ```text
 baseline profile + JD
@@ -15,6 +15,16 @@ baseline profile + JD + gaps
   -> output contract validation
   -> required / forbidden fact checks
   -> regression report
+
+free-form profile text
+  -> LLM structured extraction output
+  -> schema validation with unknown-key rejection
+  -> persisted structured profile state
+
+tailored resume Markdown
+  -> LLM beautify HTML output
+  -> HTML safety and factuality validation
+  -> saved HTML/PDF artifacts
 ```
 
 ## Harness Boundaries
@@ -55,7 +65,49 @@ This is implemented in `backend/app/services/llm/contracts.py` and is shared by
 the Anthropic API and Claude CLI adapters. The background tailoring worker also
 validates any client result before creating a `GeneratedResume`.
 
-### 3. Scenario / Routing Harness
+### 3. Structured Extraction Contract
+
+Structured extraction validates profile JSON before it is persisted to
+`BaselineProfile.structured_data`. The schema is versioned in code as
+`StructuredExtractionOutputContract` and accepts only these top-level keys:
+
+- `personal`
+- `summary`
+- `work_experience`
+- `education`
+- `languages`
+- `certifications`
+- `skills`
+- `personal_qualities`
+
+Unknown-key policy: reject. Extra top-level or nested keys fail closed as
+`llm_invalid_output`, rather than being silently stored as profile facts.
+
+Deterministic fixtures live at:
+
+```text
+backend/evals/fixtures/extract_cases.json
+```
+
+### 4. Beautify HTML Contract
+
+Beautify validates HTML before it is written to reviewable HTML/PDF artifacts.
+The contract rejects:
+
+- incomplete HTML documents
+- markdown code fences
+- `<script>` and other unsafe resource tags
+- external CSS/fonts/images/scripts, including `@import`, `@font-face`, `url()`,
+  `src`, and `srcset`
+- known hallucinated facts that are not present in the source Markdown
+
+Deterministic fixtures live at:
+
+```text
+backend/evals/fixtures/beautify_cases.json
+```
+
+### 5. Scenario / Routing Harness
 
 The evaluate scenario harness is fixture-driven. Each fixture provides:
 
@@ -75,7 +127,7 @@ backend/evals/fixtures/evaluate_cases.json
 The fake backend supports `[[score=N]]` markers, so CI can verify routing
 without relying on provider variance.
 
-### 4. Tailor Factuality Harness
+### 6. Tailor Factuality Harness
 
 The tailor harness checks generated resume Markdown against source-of-truth
 facts. Each fixture provides:
@@ -99,7 +151,7 @@ in `tailored_resume`. This is a smoke-level factuality guard: it catches dropped
 key facts and obvious fabrications, while deeper proof-point checks are tracked
 separately.
 
-### 5. Report Harness
+### 7. Report Harness
 
 Both CLIs return exit code `1` when any fixture fails and can write JSON or
 Markdown reports for CI artifacts.
@@ -161,8 +213,6 @@ included in the automated CI comment before the standard SIT summary.
 
 The next harness layers should cover:
 
-- structured extraction schemas and source-fact preservation
-- beautified HTML source preservation and rendering safety
 - proof-point retrieval connecting JD requirements to profile evidence
 - provider/model replay across prompt versions
 - broader factuality fixtures for multi-job work histories and CJK profiles

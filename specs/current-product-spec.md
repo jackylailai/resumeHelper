@@ -268,12 +268,22 @@ Input spec:
 
 Expected output:
 
-- versioned structured profile JSON or Pydantic-compatible schema
+Known top-level profile JSON keys:
 
-Validation target:
+- `personal`
+- `summary`
+- `work_experience`
+- `education`
+- `languages`
+- `certifications`
+- `skills`
+- `personal_qualities`
+
+Validation requirements:
 
 - object shape is known
-- unknown keys follow explicit policy
+- unknown top-level or nested keys are rejected
+- blank string values are rejected
 - source facts are not invented
 
 ### Beautify Contract
@@ -288,7 +298,9 @@ Expected output:
 - self-contained HTML document
 - no scripts
 - no external resources
+- no markdown code fences or assistant preambles
 - source facts preserved
+- known hallucinated facts rejected when absent from source Markdown
 
 ## Current Gaps
 
@@ -300,12 +312,14 @@ Tracked in high-priority issues:
 
 Known gaps:
 
-- LLM output validation is incomplete outside evaluate and tailor checks.
+- Deeper source-fact validation is incomplete outside the current contract and
+  fixture checks.
 - Tailoring factuality has a deterministic smoke harness; broader fixture
   coverage is still needed.
 - Long-running work still relies partly on FastAPI BackgroundTasks.
 - CI eval reports currently cover deterministic evaluate and tailor fixtures;
-  extraction and beautify harnesses are still pending.
+  extraction and beautify contract fixtures are unit-test covered but not yet
+  surfaced as separate CI report artifacts.
 - Audit logs capture prompt/model metadata for production LLM calls, but there
   is no user-facing audit browser yet.
 

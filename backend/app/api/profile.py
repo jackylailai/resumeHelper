@@ -43,6 +43,7 @@ from backend.app.services.llm.audit import (
     record_llm_audit_log,
     stable_payload_hash,
 )
+from backend.app.services.llm.contracts import validate_structured_extraction_output
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -245,7 +246,10 @@ def extract_profile_structured(
     )
     started = time.perf_counter()
     try:
-        extracted = llm.extract_structured(profile.skills_text)
+        extracted = validate_structured_extraction_output(
+            llm.extract_structured(profile.skills_text),
+            source=llm.__class__.__name__,
+        )
     except Exception as exc:
         latency_ms = int((time.perf_counter() - started) * 1000)
         record_llm_audit_log(

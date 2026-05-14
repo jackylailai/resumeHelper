@@ -8,10 +8,14 @@ import anthropic
 from backend.app.config import get_settings
 from backend.app.services.llm import (
     EvaluationResult,
-    LLMInvalidOutputError,
     LLMUnavailableError,
 )
-from backend.app.services.llm.contracts import parse_evaluation_output, parse_tailor_output
+from backend.app.services.llm.contracts import (
+    parse_evaluation_output,
+    parse_structured_extraction_output,
+    parse_tailor_output,
+    validate_beautify_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,7 @@ Return ONLY a JSON object (no code fences, no preamble) with these top-level
 keys (all optional, omit when source has nothing): personal, summary,
 work_experience, education, languages, certifications, skills,
 personal_qualities.
+Do not include any other top-level keys or nested keys.
 
 Each work_experience entry: {employer, title, location, start_date, end_date,
 is_current, achievements: [...]}. Each education entry: {school, degree, field,
@@ -240,14 +245,6 @@ class AnthropicLLMClient:
             ) from exc
 
         html = response.content[0].text.strip()  # type: ignore[index]
-        if html.startswith("```"):
-            html = "\n".join(html.split("\n")[1:])
-            html = html.rstrip("`").strip()
-
-        if "<html" not in html.lower() or "</html>" not in html.lower():
-            raise LLMInvalidOutputError(
-                "Anthropic API beautify did not return a complete HTML document"
-            )
 
         logger.info(
             "beautify_llm_response model=%s style=%s tokens_in=%d tokens_out=%d",
@@ -257,12 +254,14 @@ class AnthropicLLMClient:
             response.usage.output_tokens,
         )
 
-        return {
-            "html_content": html,
-            "prompt_version": "beautify-v1",
-            "token_count_input": response.usage.input_tokens,
-            "token_count_output": response.usage.output_tokens,
-        }
+        return validate_beautify_output(
+            html,
+            source="Anthropic API",
+            source_markdown=resume_markdown,
+            prompt_version="beautify-v1",
+            token_count_input=response.usage.input_tokens,
+            token_count_output=response.usage.output_tokens,
+        )
 
     def extract_structured(self, source_text: str) -> dict:
         """Parse a free-form profile text into structured JSON via the SDK."""
@@ -279,17 +278,7 @@ class AnthropicLLMClient:
             ) from exc
 
         raw = response.content[0].text.strip()  # type: ignore[index]
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:])
-            raw = raw.rstrip("`").strip()
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise LLMInvalidOutputError(
-                f"Anthropic API extract returned invalid JSON: {exc}"
-            ) from exc
-        if not isinstance(data, dict):
-            raise LLMInvalidOutputError("Anthropic API extract was not a JSON object")
+        data = parse_structured_extraction_output(raw, source="Anthropic API")
         logger.info(
             "extract_llm_response model=%s keys=%d tokens_in=%d tokens_out=%d",
             self._model,
