@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "tailor-factuality-smoke",
+  "description": "Deterministic fake-backend fixtures for tailoring output contract and required/forbidden fact checks.",
+  "cases": [
+    {
+      "id": "preserve_backend_profile_facts",
+      "baseline_text": "Jane Lin\nSoftware Engineer at Fubon Media from April 2024 - Present.\nBuilt Python FastAPI services handling 50,000 QPS.\nEducation: BS Computer Science, National Taiwan University.\nCertification: AWS Certified Developer.\nLanguage: TOEIC 790.",
+      "job_description": "We need a backend engineer with Python, FastAPI, Kubernetes, Terraform, and observability experience.",
+      "score": 72,
+      "gaps": ["Kubernetes", "Terraform"],
+      "required_facts": [
+        "Fubon Media",
+        "April 2024 - Present",
+        "50,000 QPS",
+        "National Taiwan University",
+        "AWS Certified Developer",
+        "TOEIC 790"
+      ],
+      "forbidden_facts": [
+        "Kubernetes",
+        "Terraform",
+        "principal architect",
+        "automatic application submitted",
+        "Google Cloud Professional Architect"
+      ]
+    }
+  ]
+}

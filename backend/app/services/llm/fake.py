@@ -31,6 +31,7 @@ class FakeLLMClient:
     ) -> EvaluationResult:
         if self._delay:
             import time
+
             time.sleep(self._delay)
 
         for prefix, result in self._overrides.items():
@@ -60,17 +61,16 @@ class FakeLLMClient:
         score: int,
         structured_data: dict | None = None,
     ) -> dict:
-        """Fake tailoring — returns deterministic output for tests."""
+        """Fake tailoring returns deterministic output for tests."""
         return {
             "tailoring_suggestions": [
-                "Add quantified achievements",
-                "Highlight relevant keywords from the JD",
+                "Keep source facts unchanged while emphasizing relevant evidence",
+                "Review gaps manually before submitting",
             ],
             "tailored_resume": (
                 f"# Tailored Resume (fake)\n\n"
                 f"**Score before tailoring:** {score}\n\n"
-                f"## Skills\n\nPython, FastAPI, PostgreSQL\n\n"
-                f"## Experience\n\nSoftware Engineer — tailored for this role.\n"
+                f"## Source Profile\n\n{baseline_text.strip()}\n"
             ),
             "token_count_input": 120,
             "token_count_output": 80,
@@ -81,11 +81,11 @@ class FakeLLMClient:
         resume_markdown: str,
         style: str = "modern",
     ) -> dict:
-        """Fake beautify — returns canned HTML wrapping the markdown for tests."""
+        """Fake beautify returns canned HTML wrapping the markdown for tests."""
         html = (
             "<!DOCTYPE html>"
             "<html><head><meta charset='utf-8'>"
-            f"<title>Fake Beautified Resume — {style}</title>"
+            f"<title>Fake Beautified Resume - {style}</title>"
             "<style>body{font-family:system-ui;max-width:720px;margin:2rem auto;}"
             "pre{white-space:pre-wrap;}</style>"
             "</head><body>"
@@ -101,7 +101,7 @@ class FakeLLMClient:
         }
 
     def extract_structured(self, source_text: str) -> dict:
-        """Fake structured extraction — deterministic for tests."""
+        """Fake structured extraction is deterministic for tests."""
         return {
             "personal": {"name": "Fake Candidate"},
             "summary": f"Fake summary derived from {len(source_text)} chars.",

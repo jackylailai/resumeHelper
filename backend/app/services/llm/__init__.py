@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 
 @dataclass
@@ -33,3 +33,12 @@ class LLMClient(Protocol):
         job_description: str,
         prompt_version: str,
     ) -> EvaluationResult: ...
+
+    def tailor(
+        self,
+        baseline_text: str,
+        jd_text: str,
+        gaps: list[str],
+        score: int,
+        structured_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]: ...

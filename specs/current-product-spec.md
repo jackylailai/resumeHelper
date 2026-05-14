@@ -243,13 +243,20 @@ Input spec:
 
 Expected output:
 
-- tailored resume Markdown
-- optional suggestions
+```json
+{
+  "tailoring_suggestions": ["Relevant source-preserving edits"],
+  "tailored_resume": "Markdown resume text"
+}
+```
 
-Validation target:
+Validation requirements:
 
 - output is non-empty
-- no code fence or preamble
+- output is JSON with no unexpected fields
+- `tailored_resume` is non-empty and bounded
+- `tailored_resume` has no code fence or assistant preamble
+- `tailoring_suggestions` is a bounded `list[str]`
 - no invented employer/date/metric/certification/degree/skill
 - key baseline facts are preserved
 
@@ -293,11 +300,12 @@ Tracked in high-priority issues:
 
 Known gaps:
 
-- LLM output validation is incomplete outside score checks.
-- Tailoring factuality checks are not yet automated.
+- LLM output validation is incomplete outside evaluate and tailor checks.
+- Tailoring factuality has a deterministic smoke harness; broader fixture
+  coverage is still needed.
 - Long-running work still relies partly on FastAPI BackgroundTasks.
-- CI eval reports currently cover deterministic evaluate fixtures only; tailor,
-  extraction, and beautify harnesses are still pending.
+- CI eval reports currently cover deterministic evaluate and tailor fixtures;
+  extraction and beautify harnesses are still pending.
 - Audit logs capture prompt/model metadata for production LLM calls, but there
   is no user-facing audit browser yet.
 
