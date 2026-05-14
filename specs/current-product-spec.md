@@ -297,7 +297,8 @@ Known gaps:
 - Tailoring factuality checks are not yet automated.
 - Prompt/model metadata is not uniformly audited across every LLM call.
 - Long-running work still relies partly on FastAPI BackgroundTasks.
-- No formal eval harness report exists in CI yet.
+- CI eval reports currently cover deterministic evaluate fixtures only; tailor,
+  extraction, and beautify harnesses are still pending.
 
 ## Non-Goals For Current Scope
 
