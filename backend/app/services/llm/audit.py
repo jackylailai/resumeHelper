@@ -126,7 +126,7 @@ def record_llm_audit_log(
 
 
 def _json_default(value: object) -> str:
-    if isinstance(value, (uuid.UUID, datetime, date)):
+    if isinstance(value, uuid.UUID | datetime | date):
         return str(value)
     return repr(value)
 
