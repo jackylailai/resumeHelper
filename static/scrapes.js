@@ -4,6 +4,8 @@ const scrapeSource = document.getElementById("scrape-source");
 const scrapeKeyword = document.getElementById("scrape-keyword");
 const scrapeLimit = document.getElementById("scrape-limit");
 const scrapeEvaluateAfter = document.getElementById("scrape-evaluate-after");
+const scrapeMustContain = document.getElementById("scrape-must-contain");
+const scrapeRegex = document.getElementById("scrape-regex");
 const runScrapeButton = document.getElementById("run-scrape");
 const replaceScrapeButton = document.getElementById("replace-scrape");
 const stopScrapeButton = document.getElementById("stop-scrape");
@@ -66,6 +68,12 @@ async function runScrape(stopExisting) {
     };
     const profileId = profileSelect.value;
     if (profileId) requestBody.profile_id = Number(profileId);
+    const mustContain = parseMustContain(scrapeMustContain?.value || "");
+    if (mustContain.length > 0) {
+        requestBody.must_contain = mustContain;
+        requestBody.match_mode = getSelectedMatchMode();
+        requestBody.regex = Boolean(scrapeRegex?.checked);
+    }
 
     const { response, payload } = await safeApiFetch("/api/scrape/control/start", {
         method: "POST",
@@ -204,7 +212,7 @@ function renderScrapeRuns(runs) {
                             </span>
                         </td>
                         <td>${esc(run.keyword)}</td>
-                        <td>${run.inserted}/${run.updated}/${run.skipped}/${run.failed}</td>
+                        <td>${run.inserted}/${run.updated}/${run.skipped}/${run.failed}/${run.skipped_by_filter ?? 0}</td>
                         <td>${formatDate(run.started_at)}</td>
                         <td>${run.finished_at ? formatDate(run.finished_at) : "-"}</td>
                         <td>${run.error_summary ? esc(run.error_summary) : ""}</td>
@@ -212,7 +220,7 @@ function renderScrapeRuns(runs) {
                 `).join("")}
             </tbody>
         </table>
-        <div class="muted scrape-run-help">Stats are inserted / updated / skipped / failed.</div>
+        <div class="muted scrape-run-help">Stats are inserted / updated / skipped / failed / filtered (by must-contain).</div>
     `;
 }
 
@@ -335,4 +343,16 @@ function setApiError(element, response, payload) {
 
 function esc(value) {
     return UI.escHtml(value);
+}
+
+function parseMustContain(raw) {
+    return raw
+        .split(",")
+        .map((term) => term.trim())
+        .filter((term) => term.length > 0);
+}
+
+function getSelectedMatchMode() {
+    const checked = document.querySelector('input[name="scrape_match_mode"]:checked');
+    return checked?.value === "any" ? "any" : "all";
 }

@@ -3,8 +3,15 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db import Base
@@ -38,6 +45,10 @@ class ScrapeRun(Base):
             ),
             name="ck_scrape_runs_status",
         ),
+        CheckConstraint(
+            "match_mode IN ('all', 'any')",
+            name="ck_scrape_runs_match_mode",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -51,6 +62,10 @@ class ScrapeRun(Base):
     updated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     skipped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_by_filter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    must_contain: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    match_mode: Mapped[str] = mapped_column(String(8), nullable=False, default="all")
+    regex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now, index=True
