@@ -187,5 +187,6 @@ Docker must be running for integration tests that use testcontainers.
 - [Historical OpenAPI contract](specs/001-resume-upload-rating/contracts/openapi.yaml)
 - [Eval harness](docs/eval-harness.md)
 - [Scrape scheduling](docs/scheduling.md)
+- [Scrapers (per-platform mechanisms)](docs/scrapers.md)
 - [Script inventory](scripts/README.md)
 - Historical Phase 1 spec: [specs/001-resume-upload-rating/spec.md](specs/001-resume-upload-rating/spec.md)

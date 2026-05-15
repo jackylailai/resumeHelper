@@ -167,6 +167,11 @@ TDD: write tests RED before implementation.
 - [x] `.env.example` — documents `RESUMEHELPER_BACKUP_DIR` placeholder
 - [x] `CLAUDE.md` / `agent.md` — explain the host-vs-container app trade-off; `claude_cli` mode requires host-mode on macOS because Keychain isn't reachable from a Linux container
 
+### P2.5-T19 · Scraper mechanism docs ✅ (issue #142)
+- [x] `docs/scrapers.md` — per-platform mechanism reference (104 / Yourator / LinkedIn): endpoints, headers, listing→detail flow, keyword handling, pagination, politeness, fragilities, and a "keyword filter runs *where*" summary table that highlights Yourator's title-only client-side filter.
+- [x] `readme.md` — linked from the Documentation section.
+- [x] `backend/app/services/scrapers/__init__.py` — added a one-line comment pointing to `docs/scrapers.md` so readers find the doc from code too.
+
 ### P2.5-T15 · Container becomes the default dev mode ✅
 - [x] `CLAUDE.md` — flips the host-vs-container table; container w/ `CLAUDE_CODE_OAUTH_TOKEN` is now the recommended dev setup. Host mode kept as a fallback for uvicorn reload-driven debugging.
 - [x] `.env.example` — adds `CLAUDE_CODE_OAUTH_TOKEN` slot and removes the obsolete "Docker app runs do not inherit the host login" note.
