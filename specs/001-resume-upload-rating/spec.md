@@ -119,6 +119,7 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **FR-010**: No authentication or multi-user support required. Single-user tool.
 - **FR-011**: PDF generation is out of scope for Phase 1; `pdf_url` is null.
 - **FR-012**: System MUST persist uploaded profile PDFs on local disk and store the absolute path on `baseline_profile.pdf_path`. Path scheme is `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf`. Multiple uploads against the same profile accumulate as separate timestamped files; the latest path is what lives on the row. S3 is deferred to a later phase — column type is plain TEXT so the migration is path-scheme-only.
+- **FR-013** (Phase 2.5): Scrape endpoints (`POST /api/scrape/run`, `POST /api/scrape/control/start`) and the CLI `scrape` command MUST accept an optional `must_contain` list of terms with `match_mode` (`all` | `any`) and `regex` flag. When set, listings whose JD `description` does not match are dropped after `fetch_detail()` and counted on `ScrapeRun.skipped_by_filter`; the pipeline over-fetches up to `min(limit * 3, 200)` candidates from the source to satisfy `limit` matches when possible. Default (`must_contain` unset) preserves prior behaviour.
 
 ## Key Entities
 

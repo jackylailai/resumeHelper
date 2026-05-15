@@ -73,6 +73,9 @@ def run_scrape(
         source=body.source,
         keyword=keyword,
         limit=body.limit,
+        must_contain=body.must_contain,
+        match_mode=body.match_mode,
+        regex=body.regex,
     )
     background_tasks.add_task(
         run_scrape_background,
@@ -126,6 +129,9 @@ def start_scrape_control(
         source=body.source,
         keyword=keyword,
         limit=body.limit,
+        must_contain=body.must_contain,
+        match_mode=body.match_mode,
+        regex=body.regex,
     )
     background_tasks.add_task(
         run_scrape_control_background,

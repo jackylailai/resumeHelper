@@ -16,12 +16,16 @@ ScrapeRunStatus = Literal[
     "partial",
     "failed",
 ]
+MatchMode = Literal["all", "any"]
 
 
 class ScrapeRunCreateIn(BaseModel):
     source: ScrapeSource = "all"
     keyword: Annotated[str, Field(min_length=1, max_length=120)]
     limit: Annotated[int, Field(ge=1, le=100)] = 25
+    must_contain: list[Annotated[str, Field(min_length=1, max_length=120)]] | None = None
+    match_mode: MatchMode = "all"
+    regex: bool = False
 
 
 class ScrapeControlStartIn(ScrapeRunCreateIn):
@@ -43,6 +47,10 @@ class ScrapeRunOut(BaseModel):
     updated: int
     skipped: int
     failed: int
+    skipped_by_filter: int = 0
+    must_contain: list[str] | None = None
+    match_mode: MatchMode = "all"
+    regex: bool = False
     error_summary: str | None = None
     started_at: datetime
     finished_at: datetime | None = None

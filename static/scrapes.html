@@ -69,6 +69,34 @@
                     <input id="scrape-evaluate-after" type="checkbox" checked />
                     Evaluate after scrape
                 </label>
+                <details class="scrape-advanced">
+                    <summary>Advanced filter (match inside JD body)</summary>
+                    <label>
+                        Must contain
+                        <input
+                            id="scrape-must-contain"
+                            name="scrape_must_contain"
+                            type="text"
+                            placeholder="kubernetes, terraform"
+                        />
+                        <span class="muted">Comma-separated. Listings whose JD description doesn't match are skipped after fetching.</span>
+                    </label>
+                    <fieldset class="scrape-match-mode">
+                        <legend>Match</legend>
+                        <label class="checkbox-label">
+                            <input type="radio" name="scrape_match_mode" value="all" checked />
+                            All terms (AND)
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="radio" name="scrape_match_mode" value="any" />
+                            Any term (OR)
+                        </label>
+                    </fieldset>
+                    <label class="checkbox-label">
+                        <input id="scrape-regex" type="checkbox" />
+                        Treat terms as regular expressions
+                    </label>
+                </details>
                 <div class="scrape-actions">
                     <button id="run-scrape" type="submit">Run schedule</button>
                     <button id="replace-scrape" type="button">Stop + run new</button>
