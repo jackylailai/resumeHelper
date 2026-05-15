@@ -12,7 +12,13 @@ from backend.app.api.envelope import error, success
 from backend.app.db import get_db
 from backend.app.models.job_analysis import JobAnalysis
 from backend.app.models.job_listing import JobListing
-from backend.app.schemas.job_listing import JobListingDetailOut, JobListingSummaryOut
+from backend.app.schemas.job_listing import (
+    JobListingBulkDeleteIn,
+    JobListingBulkDeleteOut,
+    JobListingDetailOut,
+    JobListingSummaryOut,
+)
+from backend.app.services.listing_admin import bulk_delete
 
 router = APIRouter()
 
@@ -193,6 +199,42 @@ def list_job_listings(
         sort_dir=sort_dir,
         status=status_value,
     )
+
+
+@router.post("/job-listings/bulk-delete")
+def bulk_delete_job_listings(
+    body: JobListingBulkDeleteIn,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Bulk-delete job listings either by id list or by age.
+
+    Listings linked to a JobAnalysis are refused by default; pass `force=True`
+    to delete them anyway. A CSV snapshot is written to
+    `$RESUMEHELPER_BACKUP_DIR/deletions-<ts>.csv` before any rows are removed,
+    unless `backup=false`. POST rather than DELETE because DELETE bodies
+    aren't universally supported by clients/proxies."""
+    try:
+        deleted, refused, backup_path = bulk_delete(
+            db,
+            ids=body.ids,
+            older_than_days=body.older_than_days,
+            only_unanalyzed=body.only_unanalyzed,
+            force=body.force,
+            backup=body.backup,
+        )
+    except OSError as exc:
+        return error(
+            "backup_failed",
+            f"Failed to write deletion backup: {exc}",
+            status_code=500,
+        )
+    out = JobListingBulkDeleteOut(
+        deleted=deleted,
+        refused=len(refused),
+        refused_ids=refused,
+        backup_path=str(backup_path) if backup_path else None,
+    )
+    return success(out.model_dump(mode="json"))
 
 
 @router.get("/job-listings/{listing_id}")
