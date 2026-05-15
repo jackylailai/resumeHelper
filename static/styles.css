@@ -137,3 +137,36 @@ button:disabled{cursor:not-allowed;opacity:.5}
 /* Empty-state CTAs */
 .empty-cta{display:inline-block;margin-top:.75rem;padding:.4rem .85rem;border-radius:6px;background:#2563eb;color:#fff;font-size:.85rem;text-decoration:none;border:none;cursor:pointer}
 .empty-cta:hover{background:#1d4ed8}
+
+/* Mobile responsiveness — #148 */
+@media (max-width: 600px) {
+  .wrap { padding: .85rem; }
+  .site-header h1 { font-size: 1.1rem; }
+  .site-header .sub { font-size: .8rem; }
+  /* Tab nav: horizontal scroll instead of wrap so order stays stable */
+  .tabs.app-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: .25rem; gap: .4rem; }
+  .tabs.app-tabs .tab-btn { flex: 0 0 auto; }
+  /* Header row: stack and shrink */
+  .header-row, .list-header, .detail-header, .scrape-header { flex-direction: column; align-items: flex-start; gap: .5rem; }
+  /* Tables become horizontally scrollable inside their wrappers */
+  .scrape-runs, .tracker-table-wrap { overflow-x: auto; }
+  /* Filters / grids: single column */
+  .filters, .batch-actions, .scrape-controls, .tracker-filters { grid-template-columns: 1fr; }
+  .scrape-actions { flex-direction: column; }
+  .scrape-actions button { width: 100%; }
+  /* Detail panel: stack list + detail */
+  .jobs-layout { grid-template-columns: 1fr; }
+  .job-list-panel, .job-detail-panel { min-height: unset; }
+  /* Pagination buttons should not break out */
+  .pagination-controls { flex-wrap: wrap; }
+  /* Toast: full-width minus margins */
+  .rh-toast-container { left: .75rem; right: .75rem; top: .75rem; max-width: none; }
+}
+
+@media (max-width: 400px) {
+  .wrap { padding: .65rem; }
+  .panel { padding: .75rem; }
+  body { font-size: .9rem; }
+  .stat-chip-label { display: none; }
+  .stat-chip { padding: .12rem .35rem; gap: 0; }
+}
