@@ -212,7 +212,7 @@ function renderScrapeRuns(runs) {
                             </span>
                         </td>
                         <td>${esc(run.keyword)}</td>
-                        <td>${run.inserted}/${run.updated}/${run.skipped}/${run.failed}/${run.skipped_by_filter ?? 0}</td>
+                        <td>${renderStatChips(run)}</td>
                         <td>${formatDate(run.started_at)}</td>
                         <td>${run.finished_at ? formatDate(run.finished_at) : "-"}</td>
                         <td>${run.error_summary ? esc(run.error_summary) : ""}</td>
@@ -220,8 +220,25 @@ function renderScrapeRuns(runs) {
                 `).join("")}
             </tbody>
         </table>
-        <div class="muted scrape-run-help">Stats are inserted / updated / skipped / failed / filtered (by must-contain).</div>
     `;
+}
+
+function renderStatChips(run) {
+    const items = [
+        { label: "inserted", value: run.inserted ?? 0, kind: "ok" },
+        { label: "updated", value: run.updated ?? 0, kind: "neutral" },
+        { label: "skipped", value: run.skipped ?? 0, kind: "neutral" },
+        { label: "failed", value: run.failed ?? 0, kind: "warn" },
+        { label: "filtered", value: run.skipped_by_filter ?? 0, kind: "neutral" },
+    ];
+    return items
+        .map((item) => (
+            `<span class="stat-chip stat-chip-${item.kind}" title="${item.label}">`
+            + `<span class="stat-chip-label">${item.label}</span>`
+            + `<span class="stat-chip-value">${item.value}</span>`
+            + `</span>`
+        ))
+        .join("");
 }
 
 function renderBatchResults(results) {

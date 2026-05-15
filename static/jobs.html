@@ -40,12 +40,12 @@
                 </label>
                 <label>
                     Source
-                    <input
-                        id="source"
-                        name="source"
-                        type="text"
-                        placeholder="104, yourator, linkedin"
-                    />
+                    <select id="source" name="source">
+                        <option value="">All sources</option>
+                        <option value="104">104</option>
+                        <option value="yourator">Yourator</option>
+                        <option value="linkedin">LinkedIn</option>
+                    </select>
                 </label>
                 <label>
                     Status
@@ -92,23 +92,6 @@
                 <span id="batch-status" class="muted"></span>
             </div>
             <div id="batch-results" class="batch-results" hidden></div>
-        </section>
-
-        <section class="panel direct-evaluate-panel">
-            <h2>Paste JD</h2>
-            <label>
-                Job description
-                <textarea
-                    id="paste-jd"
-                    rows="5"
-                    placeholder="Paste a job description to score against the selected profile"
-                ></textarea>
-            </label>
-            <div class="inline-actions">
-                <button id="score-pasted" type="button">Score pasted JD</button>
-                <span id="paste-status" class="muted"></span>
-            </div>
-            <div id="paste-result" class="batch-results" hidden></div>
         </section>
 
         <section class="jobs-layout">
