@@ -162,7 +162,10 @@ async function loadListings() {
     });
 
     if (listings.length === 0) {
-        listStatus.textContent = "No job listings found.";
+        listStatus.innerHTML = (
+            'No job listings found. '
+            + '<a class="empty-cta" href="/scrapes.html">Run a scrape</a>'
+        );
         updateSelectionControls();
         return;
     }

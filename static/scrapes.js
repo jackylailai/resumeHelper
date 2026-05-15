@@ -50,6 +50,8 @@ async function runScrape(stopExisting) {
     const limit = Number(scrapeLimit.value || 25);
     if (!keyword) {
         scrapeStatus.textContent = "Enter a keyword before scraping.";
+        UI.toast.warning("Enter a keyword before scraping.");
+        scrapeKeyword.focus();
         return;
     }
 
@@ -84,6 +86,7 @@ async function runScrape(stopExisting) {
     setScrapeButtonsBusy(false);
     if (!response.ok) {
         setApiError(scrapeStatus, response, payload);
+        UI.toast.fromApiError(response, payload, { title: "Scrape failed to start" });
         if (payload?.error?.details) {
             renderScrapeControlStatus(payload.error.details);
         }
@@ -92,6 +95,7 @@ async function runScrape(stopExisting) {
 
     const runs = payload.data?.runs ?? [];
     scrapeStatus.textContent = `Queued ${runs.length} scrape run(s).`;
+    UI.toast.success(`Queued ${runs.length} scrape run(s).`, { title: "Scrape started" });
     if (payload.meta?.active_status) {
         renderScrapeControlStatus(payload.meta.active_status);
     } else {
@@ -185,7 +189,15 @@ function renderScrapeControlStatus(status) {
 
 function renderScrapeRuns(runs) {
     if (!runs || runs.length === 0) {
-        scrapeRuns.innerHTML = '<div class="empty-row">No scrape runs yet.</div>';
+        scrapeRuns.innerHTML = (
+            '<div class="empty-row">'
+            + 'No scrape runs yet.'
+            + ' <button class="empty-cta" type="button" id="empty-run-first">Run your first scrape</button>'
+            + '</div>'
+        );
+        document.getElementById("empty-run-first")?.addEventListener("click", () => {
+            scrapeKeyword.focus();
+        });
         return;
     }
 

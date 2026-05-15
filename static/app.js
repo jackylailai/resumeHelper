@@ -441,7 +441,7 @@ function buildProfileUploadRequest(file, name, skillsText, isDefault) {
 // ---- Evaluate ----
 async function runEvaluate() {
   const jd = document.getElementById('jd-input').value.trim();
-  if (!jd) { setEvalError('Please paste a job description.'); return; }
+  if (!jd) { UI.toast.warning('Please paste a job description.'); return; }
 
   currentJdText = jd;
   setEvalError('');
@@ -458,11 +458,16 @@ async function runEvaluate() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jd_text: jd, profile_id: profileId ? parseInt(profileId) : null }),
     });
-    if (!res.ok) { setEvalApiError(res, body); return; }
+    if (!res.ok) {
+      setEvalApiError(res, body);
+      UI.toast.fromApiError(res, body, { title: 'Evaluate failed' });
+      return;
+    }
     data = body.data;
     cached = body.meta?.cached === true;
   } catch (e) {
     setEvalError('Network error: ' + e.message);
+    UI.toast.error('Network error: ' + e.message, { title: 'Evaluate failed' });
     return;
   } finally {
     setEvalBtnDisabled(false);
@@ -470,6 +475,10 @@ async function runEvaluate() {
   }
 
   renderEvalResult(data, cached);
+  UI.toast.success(
+    `Scored ${data.score}/100 — ${data.status}${cached ? ' (cached)' : ''}`,
+    { title: 'Evaluate' },
+  );
 
   if (data.status === 'needs_tailoring') {
     showTailoringSpinner();

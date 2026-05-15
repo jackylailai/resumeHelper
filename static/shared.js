@@ -105,6 +105,73 @@
         }
     });
 
+    function ensureToastContainer() {
+        let container = document.getElementById("rh-toast-container");
+        if (container) return container;
+        container = document.createElement("div");
+        container.id = "rh-toast-container";
+        container.className = "rh-toast-container";
+        document.body.appendChild(container);
+        return container;
+    }
+
+    function toast(kind, message, options = {}) {
+        const container = ensureToastContainer();
+        const node = document.createElement("div");
+        node.className = `rh-toast rh-toast-${kind}`;
+        node.setAttribute("role", kind === "error" ? "alert" : "status");
+        node.setAttribute(
+            "aria-live",
+            kind === "error" ? "assertive" : "polite",
+        );
+        const titleHtml = options.title
+            ? `<div class="rh-toast-title">${escHtml(options.title)}</div>`
+            : "";
+        const requestHtml = options.requestId
+            ? ` <span class="rh-toast-request-id">Request ID: ${escHtml(options.requestId)}</span>`
+                + ` <button type="button" class="copy-request-id" data-copy-request-id="${escHtml(options.requestId)}">Copy</button>`
+            : "";
+        node.innerHTML = (
+            `${titleHtml}`
+            + `<div class="rh-toast-body">${escHtml(message)}${requestHtml}</div>`
+            + `<button type="button" class="rh-toast-close" aria-label="Dismiss">×</button>`
+        );
+
+        const dismiss = () => {
+            if (!node.isConnected) return;
+            node.classList.add("rh-toast-leaving");
+            setTimeout(() => node.remove(), 180);
+        };
+        node.querySelector(".rh-toast-close").addEventListener("click", dismiss);
+
+        const defaultDuration = kind === "error" ? 0 : kind === "warning" ? 8000 : 4000;
+        const duration = options.duration ?? defaultDuration;
+        if (duration > 0) setTimeout(dismiss, duration);
+
+        container.appendChild(node);
+        return dismiss;
+    }
+
+    function toastFromApiError(response, payload, options = {}) {
+        const message = payload?.error?.message || response.statusText || "Request failed";
+        const id = requestId(response, payload);
+        return toast("error", `${message}`, {
+            title: options.title,
+            requestId: id,
+            duration: options.duration,
+        });
+    }
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        const container = document.getElementById("rh-toast-container");
+        if (!container) return;
+        for (const node of [...container.children]) {
+            const closeBtn = node.querySelector(".rh-toast-close");
+            if (closeBtn) closeBtn.click();
+        }
+    });
+
     function statusBadgeClass(status) {
         if (status === "ready_to_submit") return "badge-ready";
         if (status === "needs_tailoring") return "badge-tailoring";
@@ -129,5 +196,12 @@
         errorBanner,
         statusBadgeClass,
         statusPillClass,
+        toast: {
+            success: (msg, opts) => toast("success", msg, opts),
+            error: (msg, opts) => toast("error", msg, opts),
+            warning: (msg, opts) => toast("warning", msg, opts),
+            info: (msg, opts) => toast("info", msg, opts),
+            fromApiError: toastFromApiError,
+        },
     };
 })();
