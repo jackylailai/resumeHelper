@@ -37,7 +37,7 @@ class DescriptionFilter:
         terms: list[str] | None,
         mode: str = "all",
         regex: bool = False,
-    ) -> "DescriptionFilter | None":
+    ) -> DescriptionFilter | None:
         if not terms:
             return None
         cleaned = tuple(term for term in (t.strip() for t in terms) if term)
