@@ -161,6 +161,24 @@
 .empty-cta { display: inline-block; margin-top: .75rem; padding: .4rem .85rem; border-radius: 6px; background: var(--accent); color: #fff; font-size: .85rem; text-decoration: none; border: none; cursor: pointer; }
 .empty-cta:hover { filter: brightness(1.1); }
 
+/* Sidebar nav (#158) — left rail with grouped sections */
+.app-shell { display: grid; grid-template-columns: 220px 1fr; align-items: stretch; min-height: calc(100vh - 56px); }
+.app-sidebar { background: var(--card); border-right: 1px solid var(--border); padding: 1rem 0; }
+.sidebar-group { padding: .35rem 0 .75rem; }
+.sidebar-group-title { padding: .35rem 1.25rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.app-sidebar .tab-btn { display: block; width: 100%; text-align: left; padding: .5rem 1.25rem; border: 0; border-left: 2px solid transparent; border-bottom: 0; border-radius: 0; background: none; color: var(--muted); font-size: .9rem; cursor: pointer; text-decoration: none; }
+.app-sidebar .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+.app-sidebar .tab-btn.active, .app-sidebar .tab-btn[aria-current="page"] { color: var(--text); border-left-color: var(--accent); background: rgba(124,58,237,0.08); border-bottom-color: transparent; }
+.app-main { min-width: 0; }
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; min-height: auto; }
+  .app-sidebar { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--border); -webkit-overflow-scrolling: touch; }
+  .sidebar-group { display: flex; align-items: center; gap: .35rem; padding: 0 .5rem; flex: 0 0 auto; }
+  .sidebar-group-title { display: none; }
+  .app-sidebar .tab-btn { padding: .65rem .9rem; border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .app-sidebar .tab-btn.active, .app-sidebar .tab-btn[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--accent); background: none; }
+}
+
 /* Mobile responsiveness — #148 */
 @media (max-width: 600px) {
   .page { padding: .85rem; }
