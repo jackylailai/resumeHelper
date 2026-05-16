@@ -11,10 +11,6 @@ const selectionCount = document.getElementById("selection-count");
 const scoreSelected = document.getElementById("score-selected");
 const batchStatus = document.getElementById("batch-status");
 const batchResults = document.getElementById("batch-results");
-const pasteJd = document.getElementById("paste-jd");
-const scorePasted = document.getElementById("score-pasted");
-const pasteStatus = document.getElementById("paste-status");
-const pasteResult = document.getElementById("paste-result");
 const trackListing = document.getElementById("track-listing");
 const trackStatus = document.getElementById("track-status");
 const prevPage = document.getElementById("prev-page");
@@ -50,10 +46,6 @@ clearSelection.addEventListener("click", () => {
 
 scoreSelected.addEventListener("click", async () => {
     await scoreSelectedListings();
-});
-
-scorePasted.addEventListener("click", async () => {
-    await scorePastedJd();
 });
 
 trackListing.addEventListener("click", async () => {
@@ -356,59 +348,6 @@ function renderBatchResults(results) {
 
     batchResults.innerHTML = "";
     batchResults.appendChild(list);
-}
-
-async function scorePastedJd() {
-    const profileId = profileSelect.value;
-    const jdText = pasteJd.value.trim();
-
-    pasteResult.hidden = true;
-    pasteResult.innerHTML = "";
-
-    if (!jdText) {
-        pasteStatus.textContent = "Paste a job description first.";
-        return;
-    }
-
-    scorePasted.disabled = true;
-    pasteStatus.textContent = "Scoring pasted JD...";
-
-    const requestBody = { jd_text: jdText };
-    if (profileId) requestBody.profile_id = Number(profileId);
-
-    const { response, payload } = await safeApiFetch("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-    });
-
-    scorePasted.disabled = false;
-    if (!response.ok) {
-        setApiError(pasteStatus, response, payload);
-        return;
-    }
-
-    pasteStatus.textContent = "Scored pasted JD.";
-    renderPastedResult(payload.data, payload.meta?.cached === true);
-}
-
-function renderPastedResult(result, cached) {
-    pasteResult.hidden = false;
-    pasteResult.innerHTML = "";
-
-    const score = document.createElement("div");
-    score.className = "result-score";
-    score.textContent = (
-        `${result.score}/100 ${formatStatus(result.status)}`
-        + (cached ? " (cached)" : "")
-    );
-
-    const message = document.createElement("p");
-    message.className = "muted";
-    message.textContent = result.message || result.explanation || "";
-
-    pasteResult.appendChild(score);
-    pasteResult.appendChild(message);
 }
 
 function listingLabel(id) {

@@ -72,13 +72,16 @@ button:disabled{cursor:not-allowed;opacity:.5}
 .run-succeeded{background:rgba(16,185,129,.12);color:#34d399}
 .run-partial{background:rgba(45,212,191,.12);color:#5eead4}
 .run-failed{background:rgba(239,68,68,.12);color:#fca5a5}
-.scrape-run-help{font-size:.8rem;margin-top:.4rem}
+.stat-chip{display:inline-flex;align-items:baseline;gap:.3rem;margin:0 .25rem .15rem 0;padding:.1rem .45rem;border-radius:10px;font-size:.72rem;line-height:1.4;background:rgba(148,163,184,.12);color:#cbd5e1;white-space:nowrap}
+.stat-chip-label{opacity:.75;text-transform:uppercase;letter-spacing:.04em;font-size:.65rem}
+.stat-chip-value{font-weight:700;color:#e6eef8}
+.stat-chip-ok{background:rgba(16,185,129,.12);color:#a7f3d0}
+.stat-chip-ok .stat-chip-value{color:#34d399}
+.stat-chip-warn{background:rgba(239,68,68,.12);color:#fecaca}
+.stat-chip-warn .stat-chip-value{color:#fca5a5}
 .error-msg{color:#fca5a5}
 .copy-request-id{margin-left:.35rem;padding:.15rem .4rem;border:1px solid rgba(148,163,184,.35);border-radius:4px;background:#111827;color:#e6eef8;font-size:.75rem}
 .inline-button{padding:.3rem .55rem;font-size:.85rem}
-.direct-evaluate-panel{margin-top:1.25rem}
-.inline-actions{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:.75rem}
-.result-score{font-weight:700;color:#e6eef8;margin-bottom:.35rem}
 .jobs-layout{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:1.25rem;margin-top:1.25rem}
 .job-list-panel,.job-detail-panel{min-height:560px}
 .list-header,.detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}
