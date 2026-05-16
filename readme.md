@@ -181,6 +181,7 @@ Docker must be running for integration tests that use testcontainers.
 
 ## Documentation
 
+- [Quickstart (end-user, 5 minutes)](docs/quickstart.md)
 - [Current product spec](specs/current-product-spec.md)
 - [Roadmap](specs/roadmap.md)
 - [AI workflow engineering](docs/ai-workflow/README.md)
