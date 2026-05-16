@@ -170,3 +170,7 @@ button:disabled{cursor:not-allowed;opacity:.5}
   .stat-chip-label { display: none; }
   .stat-chip { padding: .12rem .35rem; gap: 0; }
 }
+
+/* Danger button for bulk delete (#150) */
+.batch-actions button.danger { background: rgba(239, 68, 68, .15); color: #fca5a5; border-color: rgba(239, 68, 68, .4); }
+.batch-actions button.danger:hover:not(:disabled) { background: rgba(239, 68, 68, .25); }

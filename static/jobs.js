@@ -9,6 +9,8 @@ const selectPage = document.getElementById("select-page");
 const clearSelection = document.getElementById("clear-selection");
 const selectionCount = document.getElementById("selection-count");
 const scoreSelected = document.getElementById("score-selected");
+const deleteSelected = document.getElementById("delete-selected");
+const deleteStale = document.getElementById("delete-stale");
 const batchStatus = document.getElementById("batch-status");
 const batchResults = document.getElementById("batch-results");
 const trackListing = document.getElementById("track-listing");
@@ -47,6 +49,15 @@ clearSelection.addEventListener("click", () => {
 scoreSelected.addEventListener("click", async () => {
     await scoreSelectedListings();
 });
+
+deleteSelected.addEventListener("click", async () => {
+    await deleteSelectedListings();
+});
+
+deleteStale.addEventListener("click", async () => {
+    await deleteStaleListings();
+});
+
 
 trackListing.addEventListener("click", async () => {
     await addSelectedListingToTracker();
@@ -351,6 +362,80 @@ function renderBatchResults(results) {
 
     batchResults.innerHTML = "";
     batchResults.appendChild(list);
+}
+
+async function deleteSelectedListings() {
+    const ids = Array.from(selectedListingIds);
+    if (ids.length === 0) {
+        batchStatus.textContent = "Select listings to delete first.";
+        return;
+    }
+    const ok = window.confirm(
+        `Delete ${ids.length} listing(s)? Listings linked to an analysis will be refused unless you choose to force-delete.\n\n`
+        + `A CSV backup is written to your RESUMEHELPER_BACKUP_DIR first.`
+    );
+    if (!ok) return;
+    const force = window.confirm(
+        `Also force-delete listings that already have an analysis attached?\n\n`
+        + `OK = force (deletes everything), Cancel = skip analyzed (default).`
+    );
+    deleteSelected.disabled = true;
+    batchStatus.textContent = "Deleting...";
+    const { response, payload } = await safeApiFetch("/api/job-listings/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, force }),
+    });
+    deleteSelected.disabled = false;
+    if (!response.ok) {
+        setApiError(batchStatus, response, payload);
+        return;
+    }
+    const data = payload.data || {};
+    batchStatus.textContent = (
+        `Deleted ${data.deleted}, refused ${data.refused}.`
+        + (data.backup_path ? ` Backup: ${data.backup_path}` : "")
+    );
+    selectedListingIds.clear();
+    updateSelectionControls();
+    await loadListings();
+}
+
+async function deleteStaleListings() {
+    const raw = window.prompt(
+        "Delete listings older than how many days? (1-365)\n"
+        + "Only unanalyzed listings will be deleted; analyzed rows are preserved.",
+        "30",
+    );
+    if (raw === null) return;
+    const days = parseInt(raw, 10);
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+        batchStatus.textContent = "Enter a number between 1 and 365.";
+        return;
+    }
+    const ok = window.confirm(
+        `Delete all unanalyzed listings older than ${days} days?\n\n`
+        + `A CSV backup is written to your RESUMEHELPER_BACKUP_DIR first.`
+    );
+    if (!ok) return;
+    deleteStale.disabled = true;
+    batchStatus.textContent = "Deleting stale listings...";
+    const { response, payload } = await safeApiFetch("/api/job-listings/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ older_than_days: days, only_unanalyzed: true }),
+    });
+    deleteStale.disabled = false;
+    if (!response.ok) {
+        setApiError(batchStatus, response, payload);
+        return;
+    }
+    const data = payload.data || {};
+    batchStatus.textContent = (
+        `Deleted ${data.deleted}, refused ${data.refused}.`
+        + (data.backup_path ? ` Backup: ${data.backup_path}` : "")
+    );
+    await loadListings();
 }
 
 function listingLabel(id) {
