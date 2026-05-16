@@ -160,3 +160,32 @@
 /* Empty-state CTAs */
 .empty-cta { display: inline-block; margin-top: .75rem; padding: .4rem .85rem; border-radius: 6px; background: var(--accent); color: #fff; font-size: .85rem; text-decoration: none; border: none; cursor: pointer; }
 .empty-cta:hover { filter: brightness(1.1); }
+
+/* Mobile responsiveness — #148 */
+@media (max-width: 600px) {
+  .page { padding: .85rem; }
+  header { padding: .85rem 1rem; }
+  header h1 { font-size: 1.05rem; }
+  .sub { font-size: .8rem; }
+  /* Tabs: horizontal scroll, keep order */
+  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: .25rem; gap: .4rem; }
+  .tabs .tab-btn { flex: 0 0 auto; }
+  /* Tables wrapped by their .card: enable horizontal scroll on the card body */
+  .card { padding: .85rem; }
+  .card table { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
+  .card table thead, .card table tbody { display: table; width: max-content; min-width: 100%; }
+  /* Modal: full-bleed on phones */
+  .modal-box { width: 100%; max-width: none; max-height: 95vh; padding: 1rem; border-radius: 0; }
+  .modal-header { flex-direction: column; align-items: flex-start; gap: .5rem; }
+  .modal-header .flex { flex-wrap: wrap; gap: .35rem; }
+  /* Compare view */
+  .resume-compare { grid-template-columns: 1fr; }
+  /* Toast position */
+  .rh-toast-container { left: .75rem; right: .75rem; top: .75rem; max-width: none; }
+}
+
+@media (max-width: 400px) {
+  .page { padding: .65rem; }
+  body { font-size: .9rem; }
+  textarea { font-size: .95rem; }
+}
