@@ -150,7 +150,8 @@ def upload_profile_pdf(
     try:
         extracted_text = _extract_pdf_text(pdf_bytes)
     except Exception as exc:
-        logger.error("PDF extraction failed: %s", exc, exc_info=True)
+        logger.error("pdf_extraction_failed reason=%s", type(exc).__name__)
+        logger.debug("pdf_extraction_failed detail", exc_info=True)
         return error(
             "pdf_error",
             "Could not extract text from PDF. Please check the file format.",
@@ -175,7 +176,8 @@ def preview_profile_pdf(file: UploadFile = File(...)) -> JSONResponse:
     try:
         skills_text = _extract_pdf_text(pdf_bytes)
     except Exception as exc:
-        logger.error("PDF extraction failed: %s", exc, exc_info=True)
+        logger.error("pdf_extraction_failed reason=%s", type(exc).__name__)
+        logger.debug("pdf_extraction_failed detail", exc_info=True)
         return error(
             "pdf_error",
             "Could not extract text from PDF. Please check the file format.",
@@ -299,7 +301,19 @@ def get_profile_pdf(
         return error("not_found", f"profile {profile_id} not found", status_code=404)
     if not profile.pdf_path:
         return error("not_found", "profile has no uploaded PDF", status_code=404)
-    path = Path(profile.pdf_path)
+    # Defense-in-depth: pdf_path comes from the DB and should already point
+    # under storage_dir, but resolve the symlink chain and check containment
+    # so a poisoned row can't escape via `..` or an absolute path.
+    storage_root = Path(get_settings().storage_dir).resolve()
+    try:
+        path = Path(profile.pdf_path).resolve()
+        path.relative_to(storage_root)
+    except (OSError, ValueError):
+        logger.error(
+            "profile_pdf_path_outside_storage profile_id=%s",
+            profile_id,
+        )
+        return error("not_found", "profile PDF file is missing on disk", status_code=404)
     if not path.exists():
         return error("not_found", "profile PDF file is missing on disk", status_code=404)
     return FileResponse(
@@ -386,8 +400,9 @@ def upload_profile_legacy(
     try:
         skills_text = _extract_pdf_text(pdf_bytes)
     except Exception as exc:
-        logger.error("PDF extraction failed: %s", exc, exc_info=True)
-        return error("pdf_error", f"Could not read PDF: {exc}", status_code=422)
+        logger.error("pdf_extraction_failed reason=%s", type(exc).__name__)
+        logger.debug("pdf_extraction_failed detail", exc_info=True)
+        return error("pdf_error", "Could not read PDF.", status_code=422)
     try:
         profile = create_profile(db, skills_text)
     except ValueError as exc:
