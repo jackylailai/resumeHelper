@@ -16,17 +16,26 @@
         </div>
     </header>
 
-    <nav class="tabs app-tabs" aria-label="Primary">
-        <a class="tab-btn" href="/#evaluate">Evaluate</a>
-        <a class="tab-btn" href="/jobs.html">JD Database</a>
-        <a class="tab-btn active" href="/scrapes.html" aria-current="page">Scrapes</a>
-        <a class="tab-btn" href="/applications.html">Applications</a>
-        <a class="tab-btn" href="/#history">History</a>
-        <a class="tab-btn" href="/#submittable">Submittable</a>
-        <a class="tab-btn" href="/#profile">Profile</a>
-    </nav>
-
-    <main class="wrap">
+    <div class="app-shell">
+    <aside class="app-sidebar" aria-label="Primary">
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Evaluate</div>
+            <a class="tab-btn" href="/#evaluate">Evaluate</a>
+            <a class="tab-btn" href="/#history">History</a>
+            <a class="tab-btn" href="/#submittable">Submittable</a>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Data</div>
+            <a class="tab-btn" href="/jobs.html">JD Database</a>
+            <a class="tab-btn" href="/#profile">Profile</a>
+            <a class="tab-btn" href="/applications.html">Applications</a>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Pipeline</div>
+            <a class="tab-btn active" href="/scrapes.html" aria-current="page">Scrapes</a>
+        </div>
+    </aside>
+    <main class="app-main"><div class="wrap">
         <section class="panel scrape-panel">
             <div class="scrape-header">
                 <div>
@@ -112,7 +121,8 @@
             <div id="scrape-runs" class="scrape-runs"></div>
             <div id="batch-results" class="batch-results" hidden></div>
         </section>
-    </main>
+    </div></main>
+    </div>
 
     <script src="/shared.js" defer></script>
     <script src="/scrapes.js" defer></script>
