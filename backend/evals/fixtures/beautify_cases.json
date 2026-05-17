@@ -17,6 +17,30 @@
     {
       "id": "hallucinated_fact",
       "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><p>Principal Architect at Fubon Media</p></body></html>"
+    },
+    {
+      "id": "onclick_handler",
+      "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><button onclick=\"alert(1)\">Click</button></body></html>"
+    },
+    {
+      "id": "onerror_on_svg",
+      "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><svg onerror=\"alert(1)\"></svg></body></html>"
+    },
+    {
+      "id": "javascript_href",
+      "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><a href=\"javascript:alert(1)\">Click</a></body></html>"
+    },
+    {
+      "id": "data_uri_href",
+      "html": "<!DOCTYPE html><html><head><style>body{}</style></head><body><a href=\"data:text/html,<x>\">Open</a></body></html>"
+    },
+    {
+      "id": "escaped_font_face",
+      "html": "<!DOCTYPE html><html><head><style>\\40 font-face{src:url(evil.woff)}</style></head><body></body></html>"
+    },
+    {
+      "id": "commented_import",
+      "html": "<!DOCTYPE html><html><head><style>/*x*/@import url(evil.css);</style></head><body></body></html>"
     }
   ]
 }
