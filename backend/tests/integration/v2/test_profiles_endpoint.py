@@ -270,3 +270,57 @@ def test_legacy_get_profile_returns_explicit_default(client: TestClient):
     r = client.get("/api/profile")
     assert r.status_code == 200
     assert r.json()["data"]["skills_text"] == "First"
+
+
+@pytest.mark.integration
+def test_pdf_download_rejects_path_outside_storage(
+    client: TestClient,
+    db_engine,  # type: ignore[no-untyped-def]
+    tmp_path,  # type: ignore[no-untyped-def]
+):
+    """Regression for #140 — if pdf_path ever points outside storage_dir
+    (poisoned import, SQL injection, future bulk-edit feature), the download
+    endpoint must refuse to serve the file rather than follow the path."""
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.models.baseline_profile import BaselineProfile
+
+    pdf_bytes = _make_minimal_pdf("Path traversal test")
+    r = client.post(
+        "/api/profiles/upload",
+        files={"file": ("resume.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
+        data={"name": "Traversal"},
+    )
+    profile_id = r.json()["data"]["id"]
+
+    # Create a file outside storage_dir and point pdf_path at it.
+    outside = tmp_path / "escape.pdf"
+    outside.write_bytes(b"%PDF-attacker")
+
+    Session = sessionmaker(bind=db_engine)
+    with Session() as db:
+        profile = db.get(BaselineProfile, profile_id)
+        assert profile is not None
+        profile.pdf_path = str(outside)
+        db.commit()
+
+    download = client.get(f"/api/profiles/{profile_id}/pdf")
+    assert download.status_code == 404
+    assert download.json()["error"]["code"] == "not_found"
+
+
+@pytest.mark.integration
+def test_debug_endpoint_does_not_leak_credential_presence(
+    client: TestClient,
+    monkeypatch,
+):
+    """Regression for #140 — the dev debug endpoint must not confirm
+    whether OAuth token / API key env vars are set."""
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "secret-value")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "secret-value")
+
+    r = client.get("/api/debug/claude-cli-ping")
+    assert r.status_code == 200
+    payload = r.json()["data"]
+    assert "oauth_token_set" not in payload
+    assert "anthropic_api_key_set" not in payload

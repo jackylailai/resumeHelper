@@ -24,6 +24,15 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY . .
 
+# Drop privileges — any RCE in uvicorn / pypdf / a dep no longer yields root
+# inside the container. The bind-mounted storage dir at
+# /app/backend/storage relies on host perms allowing UID 1000 to write;
+# pre-create + chown so a fresh image works without manual host fixup.
+RUN useradd -m -u 1000 appuser \
+    && mkdir -p /app/backend/storage \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 # Run DB migrations then start the server

@@ -33,6 +33,9 @@ def claude_cli_ping() -> JSONResponse:
     home = os.environ.get("HOME", "")
     claude_dir = Path(home) / ".claude" if home else None
     claude_json = Path(home) / ".claude.json" if home else None
+    # NOTE: do not expose whether OAuth token / API key env vars are set —
+    # confirming credential presence to an unauthenticated caller widens
+    # the recon surface. The live ping below is sufficient signal.
     payload: dict[str, object] = {
         "ok": False,
         "returncode": None,
@@ -43,8 +46,6 @@ def claude_cli_ping() -> JSONResponse:
         "home": home,
         "claude_dir_exists": bool(claude_dir and claude_dir.exists()),
         "claude_json_exists": bool(claude_json and claude_json.exists()),
-        "oauth_token_set": bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")),
-        "anthropic_api_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "model_used": settings.llm_model,
     }
 

@@ -64,6 +64,10 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Explicit: never send cookies / auth headers cross-origin. Turning
+        # this on requires a concrete origin list (never "*") — see
+        # config.py validate_production_config.
+        allow_credentials=False,
     )
 
     @app.middleware("http")
