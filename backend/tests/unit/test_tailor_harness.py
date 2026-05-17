@@ -22,7 +22,7 @@ def test_default_fake_tailor_harness_passes() -> None:
         prompt_version="tailor-harness-test",
     )
 
-    assert report.total == 1
+    assert report.total == 2
     assert report.failed == 0
     assert report.results[0].suggestions_count == 2
 

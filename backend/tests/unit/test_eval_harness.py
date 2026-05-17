@@ -23,12 +23,18 @@ def test_default_fake_evaluation_harness_passes() -> None:
         prompt_version="eval-harness-test",
     )
 
-    assert report.total == 3
+    assert report.total == 6
     assert report.failed == 0
     assert [result.status for result in report.results] == [
         "ready_to_submit",
         "needs_tailoring",
         "skip",
+        # #139 adversarial cases — fake backend honours `[[score=72]]`
+        # markers in the JD and routes to needs_tailoring regardless of
+        # the prompt-injection text appended to each fixture.
+        "needs_tailoring",
+        "needs_tailoring",
+        "needs_tailoring",
     ]
 
 

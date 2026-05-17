@@ -16,6 +16,7 @@ from backend.app.services.llm.contracts import (
     parse_tailor_output,
     validate_beautify_output,
 )
+from backend.app.services.llm.prompt_safety import escape_closing_tags
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,14 @@ _CLAUDE_BIN = "claude"
 
 
 def _render(template_path: Path, **kwargs: str) -> str:
+    """Render a mode template, escaping any closing-tag literals in the
+    substituted values so untrusted content (JD / baseline / source text)
+    cannot break out of its `<tag>...</tag>` wrapper. See #139 and
+    `prompt_safety.escape_closing_tags`."""
     text = template_path.read_text()
     for key, value in kwargs.items():
-        text = text.replace(f"{{{{{key}}}}}", value)
+        safe_value = escape_closing_tags(value)
+        text = text.replace(f"{{{{{key}}}}}", safe_value)
     return text
 
 

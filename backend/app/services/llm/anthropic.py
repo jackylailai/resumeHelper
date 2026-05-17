@@ -16,13 +16,21 @@ from backend.app.services.llm.contracts import (
     parse_tailor_output,
     validate_beautify_output,
 )
+from backend.app.services.llm.prompt_safety import (
+    TRUST_BOUNDARY_CLAUSE,
+    wrap_untrusted,
+)
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """\
+_SYSTEM_PROMPT = (
+    """\
 You are an expert recruiter and resume evaluator. Analyze the provided resume
 against the job description and return a structured JSON evaluation.
 
+"""
+    + TRUST_BOUNDARY_CLAUSE
+    + """
 Return ONLY valid JSON with this exact schema:
 {
   "score": <integer 0-100>,
@@ -40,8 +48,10 @@ Scoring guide:
 
 Return ONLY the JSON object, no markdown, no extra text.
 """
+)
 
-_BEAUTIFY_SYSTEM_PROMPT = """\
+_BEAUTIFY_SYSTEM_PROMPT = (
+    """\
 You are a resume designer. You receive a tailored resume in Markdown and must
 transform it into a single self-contained HTML document with embedded CSS,
 suitable for both browser display and PDF rendering via WeasyPrint.
@@ -74,8 +84,11 @@ Hard rules:
 
 Return ONLY the HTML document. No markdown code fences, no preamble.
 """
+    + TRUST_BOUNDARY_CLAUSE
+)
 
-_EXTRACT_SYSTEM_PROMPT = """\
+_EXTRACT_SYSTEM_PROMPT = (
+    """\
 You receive a candidate's free-form resume / profile text. Extract every
 concrete fact you can find into a structured JSON object. Use only what is
 explicitly in the source — do not invent, paraphrase facts, or add boilerplate.
@@ -101,8 +114,11 @@ Rules:
 - Preserve original language for proper nouns and quotes. You may translate
   connectors only if it improves clarity.
 """
+    + TRUST_BOUNDARY_CLAUSE
+)
 
-_TAILOR_SYSTEM_PROMPT = """\
+_TAILOR_SYSTEM_PROMPT = (
+    """\
 You are an expert resume writer. Treat the candidate's baseline profile as the
 source of truth — your job is to rephrase, reorder, and emphasize what is
 already there, never to add or omit hard data.
@@ -132,6 +148,8 @@ Return ONLY valid JSON with this exact schema:
 The tailored_resume should be a complete, polished resume in Markdown format.
 Return ONLY the JSON object, no markdown code fences, no extra text.
 """
+    + TRUST_BOUNDARY_CLAUSE
+)
 
 
 class AnthropicLLMClient:
@@ -147,8 +165,9 @@ class AnthropicLLMClient:
         prompt_version: str,
     ) -> EvaluationResult:
         user_content = (
-            f"<resume>\n{parsed_text}\n</resume>\n\n"
-            f"<job_description>\n{job_description}\n</job_description>"
+            wrap_untrusted(parsed_text, "resume")
+            + "\n\n"
+            + wrap_untrusted(job_description, "job_description")
         )
 
         try:
@@ -191,12 +210,18 @@ class AnthropicLLMClient:
             if structured_data
             else "(none — fall back to baseline_resume text below)"
         )
+        # current_score is an int we generated, not untrusted text — leave
+        # as-is. Every other block is wrapped to neutralise closing-tag
+        # injection in scraped/uploaded content.
         user_content = (
             f"<current_score>{score}</current_score>\n\n"
-            f"<identified_gaps>\n{gaps_text}\n</identified_gaps>\n\n"
-            f"<structured_data>\n{structured_block}\n</structured_data>\n\n"
-            f"<baseline_resume>\n{baseline_text}\n</baseline_resume>\n\n"
-            f"<job_description>\n{jd_text}\n</job_description>"
+            + wrap_untrusted(gaps_text, "identified_gaps")
+            + "\n\n"
+            + wrap_untrusted(structured_block, "structured_data")
+            + "\n\n"
+            + wrap_untrusted(baseline_text, "baseline_resume")
+            + "\n\n"
+            + wrap_untrusted(jd_text, "job_description")
         )
 
         response = self._client.messages.create(
@@ -227,9 +252,10 @@ class AnthropicLLMClient:
         style: str = "modern",
     ) -> dict:
         """Transform a tailored markdown resume into a styled HTML document."""
+        # style is a controlled enum from the API, not untrusted text.
         user_content = (
             f"<style_preset>{style}</style_preset>\n\n"
-            f"<source_markdown>\n{resume_markdown}\n</source_markdown>"
+            + wrap_untrusted(resume_markdown, "source_markdown")
         )
 
         try:
@@ -265,12 +291,13 @@ class AnthropicLLMClient:
 
     def extract_structured(self, source_text: str) -> dict:
         """Parse a free-form profile text into structured JSON via the SDK."""
+        wrapped = wrap_untrusted(source_text, "source_text")
         try:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=4096,
                 system=_EXTRACT_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": source_text}],
+                messages=[{"role": "user", "content": wrapped}],
             )
         except anthropic.APIError as exc:
             raise LLMUnavailableError(

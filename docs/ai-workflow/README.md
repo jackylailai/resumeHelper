@@ -91,6 +91,49 @@ Target metadata for each LLM call:
 
 This turns AI behavior from a black box into an auditable product workflow.
 
+### Prompt-Injection Trust Boundary
+
+All LLM input to this project includes data sourced from the open web (scraped
+JDs), user uploads (resume text), and free-form text. All LLM output is treated
+as untrusted and must pass through a typed contract before persistence; the
+contract validates the output **shape**, not the content semantics.
+
+The trust boundary is enforced at two layers (#139):
+
+1. **System-prompt clauses.** Every system prompt (and every `modes/*.md`
+   template) starts with an explicit `SECURITY BOUNDARY` block that names the
+   tagged content (`<job_description>`, `<resume>`, `<baseline_resume>`,
+   `<baseline_skills>`, `<source_markdown>`, `<source_text>`, `<source>`,
+   `<structured_data>`, `<identified_gaps>`) as data to analyze and tells the
+   model to refuse compliance with in-content instructions to change format,
+   skip fields, leak baseline content, return a specific score, or claim a
+   different identity.
+
+2. **Tag-breakout neutralisation.** Untrusted text is run through
+   `backend/app/services/llm/prompt_safety.py::escape_closing_tags` before it
+   is spliced into a `<tag>...</tag>` block. A JD that contains a literal
+   `</job_description>` followed by a fake system message can no longer fool
+   pattern-matching into thinking the data block ended early — closing tags
+   are rewritten to `<\\/tag>`, which is readable but no longer parsed as a
+   close.
+
+`wrap_untrusted(text, tag)` is the single-call helper that both wraps and
+escapes; every LLM call site in `anthropic.py` and `claude_cli.py` uses it.
+
+Adversarial fixtures live in the existing harness corpora:
+
+```text
+backend/evals/fixtures/evaluate_cases.json   (score inflation, tag breakout, baseline leak)
+backend/evals/fixtures/tailor_cases.json     (JD plants forbidden fact)
+backend/evals/fixtures/extract_cases.json    (injection-induced extra key)
+backend/evals/fixtures/beautify_cases.json   (script/handler injection — covered by #136)
+```
+
+With the `fake` backend these are fixture pins: they prove the corpus
+exercises the adversarial shape and that the contract still routes correctly.
+With `--backend claude-cli` or `--backend anthropic` they become a real smoke
+check — record the result; do not gate CI on real-backend behaviour.
+
 ### Egress Policy (SSRF guard)
 
 Every outbound HTTP request that touches user or external input (`scraper_104`,
