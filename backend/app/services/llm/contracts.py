@@ -52,6 +52,52 @@ _UNSAFE_HTML_TAGS = {
     "source",
 }
 _UNSAFE_CSS_PATTERN = re.compile(r"(@import|@font-face|url\s*\()", re.IGNORECASE)
+_UNSAFE_URL_SCHEMES = {"javascript", "vbscript", "data"}
+_URL_ATTRS = {"href", "xlink:href", "formaction", "action", "poster"}
+_CSS_COMMENT_PATTERN = re.compile(r"/\*.*?\*/", re.DOTALL)
+_CSS_ESCAPE_PATTERN = re.compile(r"\\([0-9a-fA-F]{1,6})\s?")
+
+
+def _normalize_css(text: str) -> str:
+    """Strip CSS comments and decode unicode escapes so obfuscated rules
+    (`/*@*/font-face`, `\\40font-face`) match the same regex as the
+    plain form. CSS spec: backslash + 1-6 hex digits + optional single
+    whitespace = the escaped character."""
+    if not text:
+        return text
+    normalized = _CSS_COMMENT_PATTERN.sub("", text)
+
+    def _decode(match: re.Match[str]) -> str:
+        try:
+            return chr(int(match.group(1), 16))
+        except (ValueError, OverflowError):
+            return match.group(0)
+
+    return _CSS_ESCAPE_PATTERN.sub(_decode, normalized)
+
+
+def _css_has_unsafe(text: str) -> bool:
+    if not text:
+        return False
+    normalized = _normalize_css(text)
+    if _UNSAFE_CSS_PATTERN.search(normalized):
+        return True
+    lowered = normalized.casefold()
+    return any(
+        f"{scheme}:" in lowered for scheme in _UNSAFE_URL_SCHEMES
+    )
+
+
+def _extract_url_scheme(value: str) -> str:
+    """Return the lowercased scheme of a URL-bearing attribute. Strips
+    leading control whitespace (CSS allows tabs/newlines inside attrs
+    that browsers happily ignore when resolving the scheme)."""
+    if not value:
+        return ""
+    candidate = re.sub(r"^[\s\x00-\x20\xa0]+", "", value)
+    if ":" not in candidate:
+        return ""
+    return candidate.split(":", 1)[0].casefold()
 
 _BoundedText = Annotated[
     StrictStr,
@@ -333,6 +379,7 @@ class _HTMLContractParser(HTMLParser):
         super().__init__()
         self.tags: set[str] = set()
         self.unsafe_reasons: list[str] = []
+        self._style_depth = 0
 
     def handle_starttag(
         self,
@@ -343,6 +390,8 @@ class _HTMLContractParser(HTMLParser):
         self.tags.add(tag_name)
         if tag_name in _UNSAFE_HTML_TAGS:
             self.unsafe_reasons.append(f"disallowed <{tag_name}> tag")
+        if tag_name == "style":
+            self._style_depth += 1
         for attr_name, attr_value in attrs:
             name = attr_name.casefold()
             value = attr_value or ""
@@ -350,8 +399,30 @@ class _HTMLContractParser(HTMLParser):
                 self.unsafe_reasons.append(
                     f"disallowed external resource attribute {name}"
                 )
-            if name == "style" and _UNSAFE_CSS_PATTERN.search(value):
+            if name == "style" and _css_has_unsafe(value):
                 self.unsafe_reasons.append("disallowed CSS external resource")
+            if name.startswith("on"):
+                # `on*` event handlers run JS regardless of tag — block
+                # `onclick`/`onerror`/`onload`/`onmouseover`/... everywhere.
+                self.unsafe_reasons.append(
+                    f"disallowed event handler attribute {name}"
+                )
+            if name in _URL_ATTRS:
+                scheme = _extract_url_scheme(value)
+                if scheme in _UNSAFE_URL_SCHEMES:
+                    self.unsafe_reasons.append(
+                        f"disallowed scheme {scheme}: in {name}"
+                    )
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.casefold() == "style":
+            self._style_depth = max(0, self._style_depth - 1)
+
+    def handle_data(self, data: str) -> None:
+        if self._style_depth > 0 and _css_has_unsafe(data):
+            # Catches escape/comment-obfuscated @-rules that the broad
+            # top-level regex would miss.
+            self.unsafe_reasons.append("disallowed CSS in <style> block")
 
 
 def strip_json_code_fence(raw: str) -> str:

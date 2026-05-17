@@ -91,15 +91,27 @@ backend/evals/fixtures/extract_cases.json
 
 ### 4. Beautify HTML Contract
 
-Beautify validates HTML before it is written to reviewable HTML/PDF artifacts.
-The contract rejects:
+Beautify HTML is treated as **untrusted output of the LLM**. The validator
+in `backend/app/services/llm/contracts.py` is the single trust boundary
+before the bytes reach a browser or weasyprint. It rejects:
 
 - incomplete HTML documents
 - markdown code fences
-- `<script>` and other unsafe resource tags
-- external CSS/fonts/images/scripts, including `@import`, `@font-face`, `url()`,
-  `src`, and `srcset`
+- `<script>` and other unsafe resource tags (`<iframe>`, `<object>`,
+  `<embed>`, `<img>`, `<video>`, `<audio>`, `<source>`, `<link>`)
+- external CSS/fonts/images/scripts, including `@import`, `@font-face`,
+  `url()`, `src`, and `srcset` — including escape- and comment-obfuscated
+  forms like `\40 font-face` or `/*x*/@import` (#136)
+- any attribute starting with `on` (event handlers — `onclick`, `onerror`,
+  `onload`, ...) regardless of tag
+- `javascript:`, `vbscript:`, and `data:` schemes in `href` / `xlink:href`
+  / `formaction` / `action` / `poster` attributes
 - known hallucinated facts that are not present in the source Markdown
+
+What the contract does **not** promise: it does not vouch for content
+semantics. Two safe HTML documents can both satisfy the contract while
+saying different things — factuality is a separate guarantee enforced by
+the tailor harness and forbidden-facts list.
 
 Deterministic fixtures live at:
 
