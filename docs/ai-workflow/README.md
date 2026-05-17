@@ -91,6 +91,28 @@ Target metadata for each LLM call:
 
 This turns AI behavior from a black box into an auditable product workflow.
 
+### Egress Policy (SSRF guard)
+
+Every outbound HTTP request that touches user or external input (`scraper_104`,
+`scraper_yourator`, `scraper_linkedin`, and the upcoming #74 URL workflow)
+flows through `backend/app/services/http/safe_client.py::safe_async_client`.
+The guard transport:
+
+- Resolves the target host before each request and refuses if any address
+  is loopback, RFC 1918 (`10/8`, `172.16/12`, `192.168/16`), link-local
+  (`169.254/16` including cloud-instance metadata), multicast, reserved,
+  or unspecified (`0.0.0.0` / `::`).
+- Re-applies the same check on every redirect hop (the check sits at the
+  `AsyncBaseTransport` layer, so httpx routes each hop back through it).
+- Refuses non-HTTP(S) schemes.
+- Bounds response body size via `max_response_bytes` (default 10 MB).
+
+Residual risk: DNS rebinding. A hostile resolver can answer the pre-check
+with a public IP and the connection with an internal IP. Closing this
+requires pinning the resolved IP and forwarding the original `Host` header,
+which is out of scope for #137. Document this limitation wherever the
+client is given an attacker-supplied URL.
+
 ### Factuality Guardrails
 
 Resume generation is higher risk than scoring because it produces material a

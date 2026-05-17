@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from backend.app.services.http.safe_client import safe_async_client
 from backend.app.services.scrapers.base import BaseScraper, JobListingDraft
 
 log = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class Scraper104(BaseScraper):
 
     async def __aenter__(self) -> Scraper104:
         if self._client is None:
-            self._client = httpx.AsyncClient(
+            self._client = safe_async_client(
                 headers=DEFAULT_HEADERS, timeout=httpx.Timeout(15.0)
             )
         return self
