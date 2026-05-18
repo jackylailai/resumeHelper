@@ -156,6 +156,39 @@ requires pinning the resolved IP and forwarding the original `Host` header,
 which is out of scope for #137. Document this limitation wherever the
 client is given an attacker-supplied URL.
 
+### Rate Limiting And DoS Protection
+
+LLM-triggering and external-fetching write endpoints are protected by an
+in-process fixed-window limiter keyed by route group and ASGI client IP. The
+current per-minute defaults are:
+
+- `POST /api/evaluate`: 10 requests
+- `POST /api/evaluate/bulk`: 2 requests
+- `POST /api/evaluate/by-listings` and `POST /api/evaluate/pending-listings`:
+  10 requests
+- `POST /api/scrape/run`: 3 requests
+- `POST */beautify`: 5 requests
+- `POST /api/callback`: 10 requests
+
+Rejected requests return the standard JSON error envelope with
+`error.code = "rate_limited"` and a `Retry-After` header. Set
+`RATE_LIMIT_ENABLED=false` for trusted CI, cron, or e2e jobs that intentionally
+exercise these endpoints in a tight loop. Override individual route groups with
+`RATE_LIMIT_EVALUATE_PER_MINUTE`, `RATE_LIMIT_EVALUATE_BULK_PER_MINUTE`,
+`RATE_LIMIT_EVALUATE_BATCH_PER_MINUTE`, `RATE_LIMIT_SCRAPE_RUN_PER_MINUTE`,
+`RATE_LIMIT_BEAUTIFY_PER_MINUTE`, and `RATE_LIMIT_CALLBACK_PER_MINUTE`; setting
+a route-group limit to `0` disables that specific group.
+
+This implementation is intentionally dependency-free and per process. It is a
+DoS backstop for the single-replica deployment shape, not a global quota
+system. If the API runs behind multiple Uvicorn workers or multiple replicas,
+replace the app-state limiter with Redis using the same route keys and client
+identifier. A Redis upgrade should use an atomic `INCR` plus `EXPIRE` fixed
+window, or a Lua token-bucket script if smoother refill behavior is needed.
+When running behind a reverse proxy, only derive the client identifier from
+forwarded headers after the proxy is explicitly trusted and strips spoofed
+incoming values.
+
 ### Factuality Guardrails
 
 Resume generation is higher risk than scoring because it produces material a
