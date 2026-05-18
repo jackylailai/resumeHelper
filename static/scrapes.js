@@ -153,7 +153,8 @@ async function evaluatePendingListings() {
 
     const data = payload.data;
     scrapeStatus.textContent = (
-        `Evaluated ${data.succeeded}/${data.total}; ${data.failed} failed.`
+        `Evaluated ${data.succeeded}/${data.total}; ${data.failed} failed; ` +
+        `${data.skipped ?? 0} skipped; ${data.blocked ?? 0} blocked.`
     );
     renderBatchResults(data.results ?? []);
     await loadScrapeRuns();

@@ -8,6 +8,11 @@ from pathlib import Path
 
 from backend.app.config import get_settings
 from backend.app.db import SessionLocal
+from backend.app.services.ai_guardrails import (
+    EVALUATE_LISTINGS_WORKFLOW,
+    SCRAPE_AFTER_EVALUATE_WORKFLOW,
+    QuotaExceededError,
+)
 from backend.app.services.batch_evaluator import (
     ListingEvaluationSummary,
     evaluate_pending_listings,
@@ -89,6 +94,7 @@ async def _scrape(args: argparse.Namespace) -> int:
                 limit=args.evaluate_limit,
                 no_tailor=args.no_tailor,
                 quiet=args.quiet,
+                workflow=SCRAPE_AFTER_EVALUATE_WORKFLOW,
             )
         )
 
@@ -105,6 +111,7 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
 
     with SessionLocal() as db:
         try:
+            workflow = getattr(args, "workflow", EVALUATE_LISTINGS_WORKFLOW)
             summary = evaluate_pending_listings(
                 db,
                 llm=llm,
@@ -112,9 +119,16 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
                 profile_id=args.profile_id,
                 source=args.source,
                 limit=args.limit,
+                workflow=workflow,
+                max_items=settings.max_scrape_after_evaluate_items
+                if workflow == SCRAPE_AFTER_EVALUATE_WORKFLOW
+                else settings.max_evaluate_pending_items,
             )
         except LookupError as exc:
             print(str(exc), file=sys.stderr)
+            return 1
+        except QuotaExceededError as exc:
+            print(f"{exc.result.code}: {exc.result.message}", file=sys.stderr)
             return 1
 
     if not args.quiet:
@@ -139,8 +153,17 @@ def _print_eval_summary(
     scope = source or "all"
     print(
         f"evaluated source={scope} total={summary.total} "
-        f"succeeded={summary.succeeded} failed={summary.failed}"
+        f"succeeded={summary.succeeded} failed={summary.failed} "
+        f"skipped={summary.skipped} blocked={summary.blocked}"
     )
+    if summary.estimate is not None:
+        print(
+            f"  estimate input_tokens={summary.estimate.estimated_input_tokens} "
+            f"output_tokens={summary.estimate.estimated_output_tokens} "
+            f"cost_usd={summary.estimate.estimated_cost_usd}"
+        )
+    for warning in summary.warnings:
+        print(f"  warning={warning.get('code')}: {warning.get('message')}")
     for result in summary.results:
         if result.error:
             print(f"  {result.listing_id}: error={result.error}")

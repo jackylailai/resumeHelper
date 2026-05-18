@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 from backend.app.api.envelope import current_request_id
 from backend.app.config import get_settings
 from backend.app.models.llm_audit_log import LLMAuditLog
+from backend.app.services.ai_guardrails import (
+    cost_usd_to_micros,
+    estimate_batch_cost_usd,
+)
 from backend.app.services.llm import LLMInvalidOutputError, LLMUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -82,6 +86,7 @@ def record_llm_audit_log(
     latency_ms: int | None = None,
     token_count_input: int | None = None,
     token_count_output: int | None = None,
+    estimated_cost_micros: int | None = None,
     status: str,
     error_code: str | None = None,
     error_message: str | None = None,
@@ -91,6 +96,20 @@ def record_llm_audit_log(
     generated_resume_id: uuid.UUID | None = None,
     resume_beautification_id: uuid.UUID | None = None,
 ) -> LLMAuditLog | None:
+    settings = get_settings()
+    resolved_cost_micros = estimated_cost_micros
+    if (
+        resolved_cost_micros is None
+        and token_count_input is not None
+        and token_count_output is not None
+    ):
+        resolved_cost_micros = cost_usd_to_micros(
+            estimate_batch_cost_usd(
+                settings,
+                input_tokens=token_count_input,
+                output_tokens=token_count_output,
+            )
+        )
     row = LLMAuditLog(
         request_id=request_id or current_request_id(),
         workflow_step=workflow_step,
@@ -102,6 +121,7 @@ def record_llm_audit_log(
         latency_ms=latency_ms,
         token_count_input=token_count_input,
         token_count_output=token_count_output,
+        estimated_cost_micros=resolved_cost_micros,
         status=status,
         error_code=error_code,
         error_message=error_message,
