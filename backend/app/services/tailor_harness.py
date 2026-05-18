@@ -26,8 +26,10 @@ class TailorHarnessCase(BaseModel):
     score: int = Field(ge=0, le=100, default=72)
     gaps: list[str] = Field(default_factory=list)
     structured_data: dict[str, Any] | None = None
+    proof_points: list[str] = Field(default_factory=list)
     required_facts: list[str] = Field(default_factory=list)
     forbidden_facts: list[str] = Field(default_factory=list)
+    jd_only_terms: list[str] = Field(default_factory=list)
     notes: str | None = None
 
     @field_validator("id", "baseline_text", "job_description")
@@ -38,7 +40,13 @@ class TailorHarnessCase(BaseModel):
             raise ValueError("value must not be blank")
         return value
 
-    @field_validator("gaps", "required_facts", "forbidden_facts")
+    @field_validator(
+        "gaps",
+        "proof_points",
+        "required_facts",
+        "forbidden_facts",
+        "jd_only_terms",
+    )
     @classmethod
     def _strip_list_items(cls, value: list[str]) -> list[str]:
         return [item.strip() for item in value if item.strip()]
@@ -60,6 +68,7 @@ class TailorHarnessCaseResult:
     failures: list[str]
     required_fact_misses: list[str] = field(default_factory=list)
     forbidden_fact_hits: list[str] = field(default_factory=list)
+    jd_only_term_hits: list[str] = field(default_factory=list)
     suggestions_count: int = 0
     tailored_resume_chars: int = 0
 
@@ -149,17 +158,22 @@ def format_tailor_report_markdown(report: TailorHarnessReport) -> str:
         f"- fixtures: `{report.fixture_path}`",
         f"- result: {report.passed}/{report.total} passed",
         "",
-        "| Case | Result | Required Misses | Forbidden Hits | Suggestions | Chars | Failures |",
-        "|------|--------|-----------------|----------------|-------------|-------|----------|",
+        (
+            "| Case | Result | Required Misses | Forbidden Hits | JD-only Hits | "
+            "Suggestions | Chars | Failures |"
+        ),
+        "|------|--------|-----------------|----------------|--------------|-------------|-------|----------|",
     ]
     for result in report.results:
         outcome = "PASS" if result.passed else "FAIL"
         failures = "<br>".join(result.failures) if result.failures else ""
         required_misses = "<br>".join(result.required_fact_misses)
         forbidden_hits = "<br>".join(result.forbidden_fact_hits)
+        jd_only_hits = "<br>".join(result.jd_only_term_hits)
         lines.append(
             "| "
             f"{result.id} | {outcome} | {required_misses} | {forbidden_hits} | "
+            f"{jd_only_hits} | "
             f"{result.suggestions_count} | {result.tailored_resume_chars} | "
             f"{failures} |"
         )
@@ -201,8 +215,17 @@ def _run_tailor_case(
     forbidden_hits = [
         fact for fact in case.forbidden_facts if fact.casefold() in folded_resume
     ]
+    evidence_text = "\n".join([case.baseline_text, *case.proof_points]).casefold()
+    jd_only_hits = [
+        term
+        for term in case.jd_only_terms
+        if term.casefold() in folded_resume and term.casefold() not in evidence_text
+    ]
     failures = [f"missing required fact: {fact}" for fact in required_misses]
     failures.extend(f"forbidden fact present: {fact}" for fact in forbidden_hits)
+    failures.extend(
+        f"JD-only term injected without proof: {term}" for term in jd_only_hits
+    )
 
     return TailorHarnessCaseResult(
         id=case.id,
@@ -210,6 +233,7 @@ def _run_tailor_case(
         failures=failures,
         required_fact_misses=required_misses,
         forbidden_fact_hits=forbidden_hits,
+        jd_only_term_hits=jd_only_hits,
         suggestions_count=len(suggestions),
         tailored_resume_chars=len(tailored_resume),
     )

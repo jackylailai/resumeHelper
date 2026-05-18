@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 
 from backend.app import cli
@@ -64,3 +66,28 @@ def test_scrape_evaluate_all_with_linkedin_uses_all_source_scope(monkeypatch):
 
     assert result == 0
     assert captured["source"] is None
+
+
+def test_eval_harness_cli_writes_json_and_markdown_reports(tmp_path: Path) -> None:
+    report_json = tmp_path / "report.json"
+    report_md = tmp_path / "report.md"
+
+    result = cli.main(
+        [
+            "eval-harness",
+            "--backend",
+            "fake",
+            "--report-json",
+            str(report_json),
+            "--report-md",
+            str(report_md),
+            "--quiet",
+        ]
+    )
+
+    assert result == 0
+    payload = json.loads(report_json.read_text(encoding="utf-8"))
+    assert payload["backend"] == "fake"
+    assert payload["failed"] == 0
+    assert payload["results"]
+    assert "Eval Harness Report" in report_md.read_text(encoding="utf-8")

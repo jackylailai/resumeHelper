@@ -22,6 +22,7 @@ from backend.app.models.job_analysis import (
     THRESHOLD_MID,
 )
 from backend.app.services.llm import LLMClient
+from backend.app.services.llm.contracts import EvaluationOutputContract
 
 DEFAULT_EVALUATE_FIXTURE_PATH = (
     Path(__file__).resolve().parents[2] / "evals" / "fixtures" / "evaluate_cases.json"
@@ -229,7 +230,7 @@ def _run_evaluation_case(
 
     failures = _validate_result_contract(result)
     score_value = getattr(result, "score", None)
-    score = score_value if isinstance(score_value, int) else None
+    score = score_value if type(score_value) is int else None
     status = status_for_score(score) if score is not None else None
 
     if score is not None and not (
@@ -275,18 +276,17 @@ def _validate_result_contract(result: Any) -> list[str]:
     explanation = getattr(result, "explanation", None)
     strengths = getattr(result, "strengths", None)
     gaps = getattr(result, "gaps", None)
-    if not isinstance(score, int) or not 0 <= score <= 100:
-        failures.append("score must be an integer from 0 to 100")
-    if not isinstance(explanation, str) or not explanation.strip():
-        failures.append("explanation must be a non-empty string")
-    if not _is_string_list(strengths):
-        failures.append("strengths must be a list of non-empty strings")
-    if not _is_string_list(gaps):
-        failures.append("gaps must be a list of non-empty strings")
+    try:
+        EvaluationOutputContract.model_validate(
+            {
+                "score": score,
+                "explanation": explanation,
+                "strengths": strengths,
+                "gaps": gaps,
+            }
+        )
+    except ValidationError as exc:
+        for error in exc.errors():
+            field = ".".join(str(part) for part in error["loc"])
+            failures.append(f"{field}: {error['msg']}")
     return failures
-
-
-def _is_string_list(value: Any) -> bool:
-    return isinstance(value, list) and all(
-        isinstance(item, str) and bool(item.strip()) for item in value
-    )
