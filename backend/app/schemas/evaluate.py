@@ -134,6 +134,12 @@ class BulkEvaluateOut(BaseModel):
     total: int
     new: int
     cached: int
+    skipped: int = 0
+    blocked: int = 0
+    estimated_input_tokens: int | None = None
+    estimated_output_tokens: int | None = None
+    estimated_total_tokens: int | None = None
+    estimated_cost_usd: float | None = None
     results: list[BulkEvaluateResult]
 
 
@@ -161,4 +167,12 @@ class EvaluateByListingsOut(BaseModel):
     total: int
     succeeded: int
     failed: int
+    skipped: int = 0
+    blocked: int = 0
+    tailoring_blocked: int = 0
+    estimated_input_tokens: int | None = None
+    estimated_output_tokens: int | None = None
+    estimated_total_tokens: int | None = None
+    estimated_cost_usd: float | None = None
+    warnings: list[dict[str, object]] = Field(default_factory=list)
     results: list[EvaluateByListingsResult]

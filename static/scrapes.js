@@ -4,6 +4,8 @@ const scrapeSource = document.getElementById("scrape-source");
 const scrapeKeyword = document.getElementById("scrape-keyword");
 const scrapeLimit = document.getElementById("scrape-limit");
 const scrapeEvaluateAfter = document.getElementById("scrape-evaluate-after");
+const scrapeMustContain = document.getElementById("scrape-must-contain");
+const scrapeRegex = document.getElementById("scrape-regex");
 const runScrapeButton = document.getElementById("run-scrape");
 const replaceScrapeButton = document.getElementById("replace-scrape");
 const stopScrapeButton = document.getElementById("stop-scrape");
@@ -48,6 +50,8 @@ async function runScrape(stopExisting) {
     const limit = Number(scrapeLimit.value || 25);
     if (!keyword) {
         scrapeStatus.textContent = "Enter a keyword before scraping.";
+        UI.toast.warning("Enter a keyword before scraping.");
+        scrapeKeyword.focus();
         return;
     }
 
@@ -66,6 +70,12 @@ async function runScrape(stopExisting) {
     };
     const profileId = profileSelect.value;
     if (profileId) requestBody.profile_id = Number(profileId);
+    const mustContain = parseMustContain(scrapeMustContain?.value || "");
+    if (mustContain.length > 0) {
+        requestBody.must_contain = mustContain;
+        requestBody.match_mode = getSelectedMatchMode();
+        requestBody.regex = Boolean(scrapeRegex?.checked);
+    }
 
     const { response, payload } = await safeApiFetch("/api/scrape/control/start", {
         method: "POST",
@@ -76,6 +86,7 @@ async function runScrape(stopExisting) {
     setScrapeButtonsBusy(false);
     if (!response.ok) {
         setApiError(scrapeStatus, response, payload);
+        UI.toast.fromApiError(response, payload, { title: "Scrape failed to start" });
         if (payload?.error?.details) {
             renderScrapeControlStatus(payload.error.details);
         }
@@ -84,6 +95,7 @@ async function runScrape(stopExisting) {
 
     const runs = payload.data?.runs ?? [];
     scrapeStatus.textContent = `Queued ${runs.length} scrape run(s).`;
+    UI.toast.success(`Queued ${runs.length} scrape run(s).`, { title: "Scrape started" });
     if (payload.meta?.active_status) {
         renderScrapeControlStatus(payload.meta.active_status);
     } else {
@@ -141,7 +153,8 @@ async function evaluatePendingListings() {
 
     const data = payload.data;
     scrapeStatus.textContent = (
-        `Evaluated ${data.succeeded}/${data.total}; ${data.failed} failed.`
+        `Evaluated ${data.succeeded}/${data.total}; ${data.failed} failed; ` +
+        `${data.skipped ?? 0} skipped; ${data.blocked ?? 0} blocked.`
     );
     renderBatchResults(data.results ?? []);
     await loadScrapeRuns();
@@ -177,7 +190,15 @@ function renderScrapeControlStatus(status) {
 
 function renderScrapeRuns(runs) {
     if (!runs || runs.length === 0) {
-        scrapeRuns.innerHTML = '<div class="empty-row">No scrape runs yet.</div>';
+        scrapeRuns.innerHTML = (
+            '<div class="empty-row">'
+            + 'No scrape runs yet.'
+            + ' <button class="empty-cta" type="button" id="empty-run-first">Run your first scrape</button>'
+            + '</div>'
+        );
+        document.getElementById("empty-run-first")?.addEventListener("click", () => {
+            scrapeKeyword.focus();
+        });
         return;
     }
 
@@ -204,7 +225,7 @@ function renderScrapeRuns(runs) {
                             </span>
                         </td>
                         <td>${esc(run.keyword)}</td>
-                        <td>${run.inserted}/${run.updated}/${run.skipped}/${run.failed}</td>
+                        <td>${renderStatChips(run)}</td>
                         <td>${formatDate(run.started_at)}</td>
                         <td>${run.finished_at ? formatDate(run.finished_at) : "-"}</td>
                         <td>${run.error_summary ? esc(run.error_summary) : ""}</td>
@@ -212,8 +233,25 @@ function renderScrapeRuns(runs) {
                 `).join("")}
             </tbody>
         </table>
-        <div class="muted scrape-run-help">Stats are inserted / updated / skipped / failed.</div>
     `;
+}
+
+function renderStatChips(run) {
+    const items = [
+        { label: "inserted", value: run.inserted ?? 0, kind: "ok" },
+        { label: "updated", value: run.updated ?? 0, kind: "neutral" },
+        { label: "skipped", value: run.skipped ?? 0, kind: "neutral" },
+        { label: "failed", value: run.failed ?? 0, kind: "warn" },
+        { label: "filtered", value: run.skipped_by_filter ?? 0, kind: "neutral" },
+    ];
+    return items
+        .map((item) => (
+            `<span class="stat-chip stat-chip-${item.kind}" title="${item.label}">`
+            + `<span class="stat-chip-label">${item.label}</span>`
+            + `<span class="stat-chip-value">${item.value}</span>`
+            + `</span>`
+        ))
+        .join("");
 }
 
 function renderBatchResults(results) {
@@ -335,4 +373,16 @@ function setApiError(element, response, payload) {
 
 function esc(value) {
     return UI.escHtml(value);
+}
+
+function parseMustContain(raw) {
+    return raw
+        .split(",")
+        .map((term) => term.trim())
+        .filter((term) => term.length > 0);
+}
+
+function getSelectedMatchMode() {
+    const checked = document.querySelector('input[name="scrape_match_mode"]:checked');
+    return checked?.value === "any" ? "any" : "all";
 }

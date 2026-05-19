@@ -71,6 +71,34 @@ baseline profile + JD
 The LLM can suggest and generate content, but the application owns state
 transitions. Human review is required before any real submission.
 
+## Spend And Privacy Guardrails
+
+Batch workflows run a quota preflight before launching provider calls. Configure
+the limits in `.env`:
+
+- `MAX_BULK_EVALUATE_ITEMS`, `MAX_EVALUATE_LISTING_ITEMS`,
+  `MAX_EVALUATE_PENDING_ITEMS`, and `MAX_SCRAPE_AFTER_EVALUATE_ITEMS` cap how
+  many JDs can be evaluated in one workflow.
+- `MAX_TAILORING_JOBS_PER_BATCH` caps how many generated resume jobs can be
+  queued from one batch.
+- `MAX_BATCH_ESTIMATED_TOKENS` and `MAX_BATCH_ESTIMATED_COST_USD` block batches
+  whose preflight estimate is too large. `0` disables that specific budget.
+- `LLM_INPUT_COST_PER_MILLION_TOKENS` and
+  `LLM_OUTPUT_COST_PER_MILLION_TOKENS` drive approximate cost estimates. Provider
+  token metadata is stored in `llm_audit_logs` when available, with estimated
+  cost in micro-USD.
+- `AI_PROVIDER_CALLS_ENABLED=false` blocks real provider calls for batch
+  workflows when `LLM_BACKEND` is not `fake`.
+
+Privacy posture: evaluation sends the selected baseline profile full text and
+the full JD text to the configured LLM provider. Tailoring sends the baseline
+profile, structured profile data when present, the full JD text, score, and gaps.
+Beautification sends the generated resume markdown. The audit log stores hashes,
+workflow metadata, latency, token counts, and estimated cost; it does not store
+raw resume/JD/provider output text. Application tables still store baseline
+profiles, JDs, analyses, and generated resumes because those are the product
+state users review.
+
 ## AI Engineering Direction
 
 High-priority hardening work is tracked in:
@@ -181,11 +209,13 @@ Docker must be running for integration tests that use testcontainers.
 
 ## Documentation
 
+- [Quickstart (end-user, 5 minutes)](docs/quickstart.md)
 - [Current product spec](specs/current-product-spec.md)
 - [Roadmap](specs/roadmap.md)
 - [AI workflow engineering](docs/ai-workflow/README.md)
 - [Historical OpenAPI contract](specs/001-resume-upload-rating/contracts/openapi.yaml)
 - [Eval harness](docs/eval-harness.md)
 - [Scrape scheduling](docs/scheduling.md)
+- [Scrapers (per-platform mechanisms)](docs/scrapers.md)
 - [Script inventory](scripts/README.md)
 - Historical Phase 1 spec: [specs/001-resume-upload-rating/spec.md](specs/001-resume-upload-rating/spec.md)

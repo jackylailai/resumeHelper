@@ -1,14 +1,14 @@
 """prompt lifecycle metadata
 
-Revision ID: 0015
-Revises: 0014
+Revision ID: 0017
+Revises: 0016
 Create Date: 2026-05-14
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0015"
-down_revision = "0014"
+revision = "0017"
+down_revision = "0016"
 branch_labels = None
 depends_on = None
 

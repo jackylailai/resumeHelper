@@ -9,12 +9,10 @@ const selectPage = document.getElementById("select-page");
 const clearSelection = document.getElementById("clear-selection");
 const selectionCount = document.getElementById("selection-count");
 const scoreSelected = document.getElementById("score-selected");
+const deleteSelected = document.getElementById("delete-selected");
+const deleteStale = document.getElementById("delete-stale");
 const batchStatus = document.getElementById("batch-status");
 const batchResults = document.getElementById("batch-results");
-const pasteJd = document.getElementById("paste-jd");
-const scorePasted = document.getElementById("score-pasted");
-const pasteStatus = document.getElementById("paste-status");
-const pasteResult = document.getElementById("paste-result");
 const trackListing = document.getElementById("track-listing");
 const trackStatus = document.getElementById("track-status");
 const prevPage = document.getElementById("prev-page");
@@ -52,9 +50,14 @@ scoreSelected.addEventListener("click", async () => {
     await scoreSelectedListings();
 });
 
-scorePasted.addEventListener("click", async () => {
-    await scorePastedJd();
+deleteSelected.addEventListener("click", async () => {
+    await deleteSelectedListings();
 });
+
+deleteStale.addEventListener("click", async () => {
+    await deleteStaleListings();
+});
+
 
 trackListing.addEventListener("click", async () => {
     await addSelectedListingToTracker();
@@ -162,7 +165,10 @@ async function loadListings() {
     });
 
     if (listings.length === 0) {
-        listStatus.textContent = "No job listings found.";
+        listStatus.innerHTML = (
+            'No job listings found. '
+            + '<a class="empty-cta" href="/scrapes.html">Run a scrape</a>'
+        );
         updateSelectionControls();
         return;
     }
@@ -304,7 +310,8 @@ async function scoreSelectedListings() {
 
     const data = payload.data;
     batchStatus.textContent = (
-        `Scored ${data.succeeded}/${data.total}; ${data.failed} failed.`
+        `Scored ${data.succeeded}/${data.total}; ${data.failed} failed; ` +
+        `${data.skipped ?? 0} skipped; ${data.blocked ?? 0} blocked.`
     );
     renderBatchResults(data.results ?? []);
     for (const result of data.results ?? []) {
@@ -358,57 +365,78 @@ function renderBatchResults(results) {
     batchResults.appendChild(list);
 }
 
-async function scorePastedJd() {
-    const profileId = profileSelect.value;
-    const jdText = pasteJd.value.trim();
-
-    pasteResult.hidden = true;
-    pasteResult.innerHTML = "";
-
-    if (!jdText) {
-        pasteStatus.textContent = "Paste a job description first.";
+async function deleteSelectedListings() {
+    const ids = Array.from(selectedListingIds);
+    if (ids.length === 0) {
+        batchStatus.textContent = "Select listings to delete first.";
         return;
     }
-
-    scorePasted.disabled = true;
-    pasteStatus.textContent = "Scoring pasted JD...";
-
-    const requestBody = { jd_text: jdText };
-    if (profileId) requestBody.profile_id = Number(profileId);
-
-    const { response, payload } = await safeApiFetch("/api/evaluate", {
+    const ok = window.confirm(
+        `Delete ${ids.length} listing(s)? Listings linked to an analysis will be refused unless you choose to force-delete.\n\n`
+        + `A CSV backup is written to your RESUMEHELPER_BACKUP_DIR first.`
+    );
+    if (!ok) return;
+    const force = window.confirm(
+        `Also force-delete listings that already have an analysis attached?\n\n`
+        + `OK = force (deletes everything), Cancel = skip analyzed (default).`
+    );
+    deleteSelected.disabled = true;
+    batchStatus.textContent = "Deleting...";
+    const { response, payload } = await safeApiFetch("/api/job-listings/bulk-delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ ids, force }),
     });
-
-    scorePasted.disabled = false;
+    deleteSelected.disabled = false;
     if (!response.ok) {
-        setApiError(pasteStatus, response, payload);
+        setApiError(batchStatus, response, payload);
         return;
     }
-
-    pasteStatus.textContent = "Scored pasted JD.";
-    renderPastedResult(payload.data, payload.meta?.cached === true);
+    const data = payload.data || {};
+    batchStatus.textContent = (
+        `Deleted ${data.deleted}, refused ${data.refused}.`
+        + (data.backup_path ? ` Backup: ${data.backup_path}` : "")
+    );
+    selectedListingIds.clear();
+    updateSelectionControls();
+    await loadListings();
 }
 
-function renderPastedResult(result, cached) {
-    pasteResult.hidden = false;
-    pasteResult.innerHTML = "";
-
-    const score = document.createElement("div");
-    score.className = "result-score";
-    score.textContent = (
-        `${result.score}/100 ${formatStatus(result.status)}`
-        + (cached ? " (cached)" : "")
+async function deleteStaleListings() {
+    const raw = window.prompt(
+        "Delete listings older than how many days? (1-365)\n"
+        + "Only unanalyzed listings will be deleted; analyzed rows are preserved.",
+        "30",
     );
-
-    const message = document.createElement("p");
-    message.className = "muted";
-    message.textContent = result.message || result.explanation || "";
-
-    pasteResult.appendChild(score);
-    pasteResult.appendChild(message);
+    if (raw === null) return;
+    const days = parseInt(raw, 10);
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+        batchStatus.textContent = "Enter a number between 1 and 365.";
+        return;
+    }
+    const ok = window.confirm(
+        `Delete all unanalyzed listings older than ${days} days?\n\n`
+        + `A CSV backup is written to your RESUMEHELPER_BACKUP_DIR first.`
+    );
+    if (!ok) return;
+    deleteStale.disabled = true;
+    batchStatus.textContent = "Deleting stale listings...";
+    const { response, payload } = await safeApiFetch("/api/job-listings/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ older_than_days: days, only_unanalyzed: true }),
+    });
+    deleteStale.disabled = false;
+    if (!response.ok) {
+        setApiError(batchStatus, response, payload);
+        return;
+    }
+    const data = payload.data || {};
+    batchStatus.textContent = (
+        `Deleted ${data.deleted}, refused ${data.refused}.`
+        + (data.backup_path ? ` Backup: ${data.backup_path}` : "")
+    );
+    await loadListings();
 }
 
 function listingLabel(id) {

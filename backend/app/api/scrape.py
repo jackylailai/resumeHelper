@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api.envelope import error, success
+from backend.app.config import get_settings
 from backend.app.db import SessionLocal, get_db
 from backend.app.models.scrape_run import ScrapeRun
 from backend.app.schemas.scrape import (
@@ -17,6 +18,7 @@ from backend.app.schemas.scrape import (
     ScrapeRunOut,
     ScrapeStatusOut,
 )
+from backend.app.services.ai_guardrails import SCRAPE_AFTER_EVALUATE_WORKFLOW
 from backend.app.services.batch_evaluator import evaluate_pending_listings
 from backend.app.services.llm.prompt_registry import (
     STEP_TAILOR,
@@ -77,6 +79,9 @@ def run_scrape(
         source=body.source,
         keyword=keyword,
         limit=body.limit,
+        must_contain=body.must_contain,
+        match_mode=body.match_mode,
+        regex=body.regex,
     )
     background_tasks.add_task(
         run_scrape_background,
@@ -113,6 +118,26 @@ def start_scrape_control(
     except ValueError as exc:
         return error("invalid_source", str(exc), status_code=422)
 
+    settings = get_settings()
+    if (
+        body.evaluate_after_scrape
+        and settings.max_scrape_after_evaluate_items > 0
+        and body.evaluate_limit > settings.max_scrape_after_evaluate_items
+    ):
+        return error(
+            "ai_batch_item_limit_exceeded",
+            (
+                f"scrape_after_evaluate requested {body.evaluate_limit} items; "
+                f"limit is {settings.max_scrape_after_evaluate_items}."
+            ),
+            status_code=429,
+            details={
+                "workflow": SCRAPE_AFTER_EVALUATE_WORKFLOW,
+                "items": body.evaluate_limit,
+                "max_items": settings.max_scrape_after_evaluate_items,
+            },
+        )
+
     active = active_scrape_runs(db)
     if active and not body.stop_existing:
         status = _control_status_out(db)
@@ -130,6 +155,9 @@ def start_scrape_control(
         source=body.source,
         keyword=keyword,
         limit=body.limit,
+        must_contain=body.must_contain,
+        match_mode=body.match_mode,
+        regex=body.regex,
     )
     background_tasks.add_task(
         run_scrape_control_background,
@@ -220,6 +248,8 @@ def run_scrape_control_background(
                 profile_id=profile_id,
                 source=source,
                 limit=evaluate_limit,
+                workflow=SCRAPE_AFTER_EVALUATE_WORKFLOW,
+                max_items=settings.max_scrape_after_evaluate_items,
             )
         except Exception as exc:
             _append_evaluation_error(db, completed, str(exc))

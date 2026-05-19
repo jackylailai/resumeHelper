@@ -18,7 +18,6 @@ from backend.app.services.llm import LLMUnavailableError
 from backend.app.services.llm.audit import (
     STATUS_FAILED,
     STATUS_SUCCEEDED,
-    STEP_BEAUTIFY,
     error_code_for_exception,
     error_message_for_exception,
     llm_metadata,
@@ -27,6 +26,7 @@ from backend.app.services.llm.audit import (
 )
 from backend.app.services.llm.contracts import validate_beautify_result
 from backend.app.services.llm.prompt_registry import (
+    STEP_BEAUTIFY,
     prompt_version_for_step,
 )
 from backend.app.services.pdf import (

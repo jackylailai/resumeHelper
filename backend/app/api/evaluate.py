@@ -25,6 +25,13 @@ from backend.app.services.batch_evaluator import (
     evaluate_listing_ids,
     evaluate_pending_listings,
 )
+from backend.app.services.ai_guardrails import (
+    EVALUATE_WORKFLOW,
+    EVALUATE_LISTINGS_WORKFLOW,
+    QuotaExceededError,
+    enforce_batch_guardrails,
+    estimate_evaluation_batch,
+)
 from backend.app.services.evaluator_v2 import (
     evaluate_jd,
     get_default_profile as get_baseline,
@@ -104,6 +111,16 @@ def _queue_tailoring_if_needed(
         request_id=getattr(request.state, "request_id", None),
     )
     logger.info("tailor_task_queued job_id=%s score=%s", job.id, job.score)
+
+
+def _quota_error(exc: QuotaExceededError) -> JSONResponse:
+    result = exc.result
+    return error(
+        result.code or "ai_quota_blocked",
+        result.message or "AI quota guard blocked this request.",
+        status_code=429,
+        details=result.details,
+    )
 
 
 @router.post("/evaluate")
@@ -196,7 +213,8 @@ def bulk_evaluate(
 ) -> JSONResponse:
     """Evaluate multiple JDs in one request. Deduplicates by content hash."""
     # Check baseline exists before touching any JD — avoids partial DB writes on missing profile
-    if get_baseline(db) is None:
+    baseline = get_baseline(db)
+    if baseline is None:
         return error("not_found", "baseline_profile not set", status_code=404)
 
     settings = get_settings()
@@ -214,6 +232,21 @@ def bulk_evaluate(
         length_error = _jd_length_error(jd_text, settings.max_jd_chars, index=index)
         if length_error is not None:
             return length_error
+    estimate = estimate_evaluation_batch(
+        settings,
+        workflow=EVALUATE_WORKFLOW,
+        profile_text=baseline.skills_text,
+        jd_texts=body.jd_texts,
+    )
+    try:
+        enforce_batch_guardrails(
+            settings,
+            workflow=EVALUATE_WORKFLOW,
+            estimate=estimate,
+            max_items=settings.max_bulk_evaluate_items,
+        )
+    except QuotaExceededError as exc:
+        return _quota_error(exc)
 
     for jd_text in body.jd_texts:
         try:
@@ -256,6 +289,10 @@ def bulk_evaluate(
         total=len(results),
         new=new_count,
         cached=cached_count,
+        estimated_input_tokens=estimate.estimated_input_tokens,
+        estimated_output_tokens=estimate.estimated_output_tokens,
+        estimated_total_tokens=estimate.estimated_total_tokens,
+        estimated_cost_usd=estimate.estimated_cost_usd,
         results=results,
     )
     return success(out.model_dump(mode="json"))
@@ -279,6 +316,8 @@ def evaluate_by_listings(
             llm=llm,
             settings=settings,
             profile_id=body.profile_id,
+            workflow=EVALUATE_LISTINGS_WORKFLOW,
+            max_items=settings.max_evaluate_listing_items,
             on_evaluated=lambda job, cached: _queue_tailoring_if_needed(
                 job,
                 cached,
@@ -290,11 +329,29 @@ def evaluate_by_listings(
         )
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
+    except QuotaExceededError as exc:
+        return _quota_error(exc)
 
     out = schemas.EvaluateByListingsOut(
         total=summary.total,
         succeeded=summary.succeeded,
         failed=summary.failed,
+        skipped=summary.skipped,
+        blocked=summary.blocked,
+        tailoring_blocked=summary.tailoring_blocked,
+        estimated_input_tokens=summary.estimate.estimated_input_tokens
+        if summary.estimate
+        else None,
+        estimated_output_tokens=summary.estimate.estimated_output_tokens
+        if summary.estimate
+        else None,
+        estimated_total_tokens=summary.estimate.estimated_total_tokens
+        if summary.estimate
+        else None,
+        estimated_cost_usd=summary.estimate.estimated_cost_usd
+        if summary.estimate
+        else None,
+        warnings=summary.warnings,
         results=[
             schemas.EvaluateByListingsResult(
                 listing_id=result.listing_id,
@@ -328,6 +385,8 @@ def evaluate_pending_scraped_listings(
             profile_id=body.profile_id,
             source=body.source,
             limit=body.limit,
+            workflow=EVALUATE_LISTINGS_WORKFLOW,
+            max_items=settings.max_evaluate_pending_items,
             on_evaluated=lambda job, cached: _queue_tailoring_if_needed(
                 job,
                 cached,
@@ -339,11 +398,29 @@ def evaluate_pending_scraped_listings(
         )
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
+    except QuotaExceededError as exc:
+        return _quota_error(exc)
 
     out = schemas.EvaluateByListingsOut(
         total=summary.total,
         succeeded=summary.succeeded,
         failed=summary.failed,
+        skipped=summary.skipped,
+        blocked=summary.blocked,
+        tailoring_blocked=summary.tailoring_blocked,
+        estimated_input_tokens=summary.estimate.estimated_input_tokens
+        if summary.estimate
+        else None,
+        estimated_output_tokens=summary.estimate.estimated_output_tokens
+        if summary.estimate
+        else None,
+        estimated_total_tokens=summary.estimate.estimated_total_tokens
+        if summary.estimate
+        else None,
+        estimated_cost_usd=summary.estimate.estimated_cost_usd
+        if summary.estimate
+        else None,
+        warnings=summary.warnings,
         results=[
             schemas.EvaluateByListingsResult(
                 listing_id=result.listing_id,

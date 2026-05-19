@@ -13,15 +13,26 @@
   <div class="sub">End-to-end JD evaluation &amp; tailoring</div>
 </header>
 
-<div class="tabs">
-  <button class="tab-btn active" data-tab="evaluate" onclick="switchTab('evaluate')">Evaluate</button>
-  <button class="tab-btn" type="button" onclick="window.location.href='/jobs.html'">JD Database</button>
-  <button class="tab-btn" type="button" onclick="window.location.href='/scrapes.html'">Scrapes</button>
-  <button class="tab-btn" type="button" onclick="window.location.href='/applications.html'">Applications</button>
-  <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
-  <button class="tab-btn" data-tab="submittable" onclick="switchTab('submittable')">Submittable</button>
-  <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Profile</button>
-</div>
+<div class="app-shell">
+<aside class="app-sidebar" aria-label="Primary">
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Evaluate</div>
+    <button class="tab-btn active" data-tab="evaluate" onclick="switchTab('evaluate')">Evaluate</button>
+    <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
+    <button class="tab-btn" data-tab="submittable" onclick="switchTab('submittable')">Submittable</button>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Data</div>
+    <button class="tab-btn" type="button" onclick="window.location.href='/jobs.html'">JD Database</button>
+    <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Profile</button>
+    <button class="tab-btn" type="button" onclick="window.location.href='/applications.html'">Applications</button>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Pipeline</div>
+    <button class="tab-btn" type="button" onclick="window.location.href='/scrapes.html'">Scrapes</button>
+  </div>
+</aside>
+<main class="app-main">
 
 <!-- EVALUATE -->
 <div id="tab-evaluate" class="page active">
@@ -37,7 +48,8 @@
   </section>
 
   <div id="no-profile-notice" class="notice" style="display:none">
-    No baseline profile set. Go to the <strong>Profile</strong> tab to add your resume/skills first.
+    <div>No baseline profile set yet.</div>
+    <button class="empty-cta" type="button" onclick="switchTab('profile'); toggleAddForm(true)">+ Add your first profile</button>
   </div>
   <div class="card">
     <label for="profile-select">Profile to evaluate against</label>
@@ -194,6 +206,9 @@
   </div>
 </div>
 
+</main>
+</div>
+
 <!-- RESUME MODAL -->
 <div id="resume-modal" class="resume-modal">
   <div class="modal-box">
@@ -277,5 +292,6 @@
 
 <script src="/shared.js"></script>
 <script src="/app.js"></script>
+<script src="/features/beautify.js"></script>
 </body>
 </html>

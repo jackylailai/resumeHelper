@@ -16,17 +16,26 @@
         </div>
     </header>
 
-    <nav class="tabs app-tabs" aria-label="Primary">
-        <a class="tab-btn" href="/#evaluate">Evaluate</a>
-        <a class="tab-btn" href="/jobs.html">JD Database</a>
-        <a class="tab-btn active" href="/scrapes.html" aria-current="page">Scrapes</a>
-        <a class="tab-btn" href="/applications.html">Applications</a>
-        <a class="tab-btn" href="/#history">History</a>
-        <a class="tab-btn" href="/#submittable">Submittable</a>
-        <a class="tab-btn" href="/#profile">Profile</a>
-    </nav>
-
-    <main class="wrap">
+    <div class="app-shell">
+    <aside class="app-sidebar" aria-label="Primary">
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Evaluate</div>
+            <a class="tab-btn" href="/#evaluate">Evaluate</a>
+            <a class="tab-btn" href="/#history">History</a>
+            <a class="tab-btn" href="/#submittable">Submittable</a>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Data</div>
+            <a class="tab-btn" href="/jobs.html">JD Database</a>
+            <a class="tab-btn" href="/#profile">Profile</a>
+            <a class="tab-btn" href="/applications.html">Applications</a>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Pipeline</div>
+            <a class="tab-btn active" href="/scrapes.html" aria-current="page">Scrapes</a>
+        </div>
+    </aside>
+    <main class="app-main"><div class="wrap">
         <section class="panel scrape-panel">
             <div class="scrape-header">
                 <div>
@@ -69,6 +78,34 @@
                     <input id="scrape-evaluate-after" type="checkbox" checked />
                     Evaluate after scrape
                 </label>
+                <details class="scrape-advanced">
+                    <summary>Advanced filter (match inside JD body)</summary>
+                    <label>
+                        Must contain
+                        <input
+                            id="scrape-must-contain"
+                            name="scrape_must_contain"
+                            type="text"
+                            placeholder="kubernetes, terraform"
+                        />
+                        <span class="muted">Comma-separated. Listings whose JD description doesn't match are skipped after fetching.</span>
+                    </label>
+                    <fieldset class="scrape-match-mode">
+                        <legend>Match</legend>
+                        <label class="checkbox-label">
+                            <input type="radio" name="scrape_match_mode" value="all" checked />
+                            All terms (AND)
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="radio" name="scrape_match_mode" value="any" />
+                            Any term (OR)
+                        </label>
+                    </fieldset>
+                    <label class="checkbox-label">
+                        <input id="scrape-regex" type="checkbox" />
+                        Treat terms as regular expressions
+                    </label>
+                </details>
                 <div class="scrape-actions">
                     <button id="run-scrape" type="submit">Run schedule</button>
                     <button id="replace-scrape" type="button">Stop + run new</button>
@@ -84,7 +121,8 @@
             <div id="scrape-runs" class="scrape-runs"></div>
             <div id="batch-results" class="batch-results" hidden></div>
         </section>
-    </main>
+    </div></main>
+    </div>
 
     <script src="/shared.js" defer></script>
     <script src="/scrapes.js" defer></script>

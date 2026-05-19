@@ -167,6 +167,19 @@ TDD: write tests RED before implementation.
 - [x] `.env.example` — documents `RESUMEHELPER_BACKUP_DIR` placeholder
 - [x] `CLAUDE.md` / `agent.md` — explain the host-vs-container app trade-off; `claude_cli` mode requires host-mode on macOS because Keychain isn't reachable from a Linux container
 
+### P2.5-T20 · Advanced scrape filter (issue #141) ✅
+- [x] `schemas/scrape.py` — `ScrapeRunCreateIn` (and via inheritance `ScrapeControlStartIn`) gains optional `must_contain: list[str] | None`, `match_mode: "all" | "any"` (default `all`), `regex: bool` (default false). `ScrapeRunOut` exposes `skipped_by_filter`, plus the three filter params for read-back.
+- [x] `models/scrape_run.py` + `alembic/versions/0015_scrape_run_advanced_filter.py` — `scrape_runs` gains `skipped_by_filter INT`, `must_contain JSONB`, `match_mode VARCHAR(8) CHECK IN ('all','any')`, `regex BOOL`. All have server defaults; existing rows keep current behaviour.
+- [x] `services/scrapers/pipeline.py` — `DescriptionFilter` dataclass (case-insensitive substring or `re.search`, AND/OR mode). `scrape_with_runner` over-fetches `min(limit * 3, 200)` candidates from the source when a filter is active, applies the filter after `fetch_detail()`, and short-circuits once `limit` matches are kept. `skipped_by_filter` is threaded back through the return tuple → `_apply_stats` → `ScrapeRun.skipped_by_filter`.
+- [x] `api/scrape.py` — both `POST /api/scrape/run` and `POST /api/scrape/control/start` pass the new fields through to `create_scrape_runs`.
+- [x] `static/scrapes.html` + `scrapes.js` — collapsible "Advanced filter" `<details>` block with CSV input, AND/OR radio, regex checkbox. POSTed only when at least one term is entered. Run stats now show `inserted/updated/skipped/failed/filtered`.
+- [x] `tests/integration/v2/test_scrape_runs.py` — covers default-off path, AND/OR substring, regex, feed-exhausted-under-limit, `DescriptionFilter.from_optional` normalisation, bad regex fail-closed, and API-level passthrough. Full suite green (217 passed).
+
+### P2.5-T19 · Scraper mechanism docs ✅ (issue #142)
+- [x] `docs/scrapers.md` — per-platform mechanism reference (104 / Yourator / LinkedIn): endpoints, headers, listing→detail flow, keyword handling, pagination, politeness, fragilities, and a "keyword filter runs *where*" summary table that highlights Yourator's title-only client-side filter.
+- [x] `readme.md` — linked from the Documentation section.
+- [x] `backend/app/services/scrapers/__init__.py` — added a one-line comment pointing to `docs/scrapers.md` so readers find the doc from code too.
+
 ### P2.5-T15 · Container becomes the default dev mode ✅
 - [x] `CLAUDE.md` — flips the host-vs-container table; container w/ `CLAUDE_CODE_OAUTH_TOKEN` is now the recommended dev setup. Host mode kept as a fallback for uvicorn reload-driven debugging.
 - [x] `.env.example` — adds `CLAUDE_CODE_OAUTH_TOKEN` slot and removes the obsolete "Docker app runs do not inherit the host login" note.

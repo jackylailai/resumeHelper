@@ -91,15 +91,27 @@ backend/evals/fixtures/extract_cases.json
 
 ### 4. Beautify HTML Contract
 
-Beautify validates HTML before it is written to reviewable HTML/PDF artifacts.
-The contract rejects:
+Beautify HTML is treated as **untrusted output of the LLM**. The validator
+in `backend/app/services/llm/contracts.py` is the single trust boundary
+before the bytes reach a browser or weasyprint. It rejects:
 
 - incomplete HTML documents
 - markdown code fences
-- `<script>` and other unsafe resource tags
-- external CSS/fonts/images/scripts, including `@import`, `@font-face`, `url()`,
-  `src`, and `srcset`
+- `<script>` and other unsafe resource tags (`<iframe>`, `<object>`,
+  `<embed>`, `<img>`, `<video>`, `<audio>`, `<source>`, `<link>`)
+- external CSS/fonts/images/scripts, including `@import`, `@font-face`,
+  `url()`, `src`, and `srcset` — including escape- and comment-obfuscated
+  forms like `\40 font-face` or `/*x*/@import` (#136)
+- any attribute starting with `on` (event handlers — `onclick`, `onerror`,
+  `onload`, ...) regardless of tag
+- `javascript:`, `vbscript:`, and `data:` schemes in `href` / `xlink:href`
+  / `formaction` / `action` / `poster` attributes
 - known hallucinated facts that are not present in the source Markdown
+
+What the contract does **not** promise: it does not vouch for content
+semantics. Two safe HTML documents can both satisfy the contract while
+saying different things — factuality is a separate guarantee enforced by
+the tailor harness and forbidden-facts list.
 
 Deterministic fixtures live at:
 
@@ -137,8 +149,10 @@ facts. Each fixture provides:
 - `score`
 - `gaps`
 - optional `structured_data`
+- optional `proof_points`
 - `required_facts`
 - `forbidden_facts`
+- `jd_only_terms`
 
 The deterministic fixture set lives at:
 
@@ -147,18 +161,22 @@ backend/evals/fixtures/tailor_cases.json
 ```
 
 Required facts must appear in `tailored_resume`. Forbidden facts must not appear
-in `tailored_resume`. This is a smoke-level factuality guard: it catches dropped
-key facts and obvious fabrications, while deeper proof-point checks are tracked
-separately.
+in `tailored_resume`. Terms listed in `jd_only_terms` are rejected when they
+appear in the generated resume without matching evidence in the baseline profile
+or `proof_points`. This is a smoke-level factuality guard: it catches dropped key
+facts, obvious fabrications, and common JD-only skill injection.
 
 ### 7. Report Harness
 
-Both CLIs return exit code `1` when any fixture fails and can write JSON or
+Harness CLIs return exit code `1` when any fixture fails and can write JSON or
 Markdown reports for CI artifacts.
 
 ```bash
 python -m backend.app.cli eval-harness --backend fake
 python -m backend.app.cli tailor-harness --backend fake
+python -m backend.app.cli extract-harness --backend fake
+python -m backend.app.cli beautify-harness --backend fake
+python -m backend.app.cli prompt-replay --backend fake --old-prompt-version resume-fit-v1 --new-prompt-version resume-fit-v2
 ```
 
 ```bash
@@ -171,6 +189,23 @@ python -m backend.app.cli tailor-harness \
   --backend fake \
   --report-json artifacts/evals/tailor.json \
   --report-md artifacts/evals/tailor.md
+
+python -m backend.app.cli extract-harness \
+  --backend fake \
+  --report-json artifacts/evals/extract.json \
+  --report-md artifacts/evals/extract.md
+
+python -m backend.app.cli beautify-harness \
+  --backend fake \
+  --report-json artifacts/evals/beautify.json \
+  --report-md artifacts/evals/beautify.md
+
+python -m backend.app.cli prompt-replay \
+  --backend fake \
+  --old-prompt-version resume-fit-v1 \
+  --new-prompt-version resume-fit-v2 \
+  --report-json artifacts/evals/prompt-replay.json \
+  --report-md artifacts/evals/prompt-replay.md
 ```
 
 Manual provider runs are supported for smoke checks:
@@ -214,5 +249,5 @@ included in the automated CI comment before the standard SIT summary.
 The next harness layers should cover:
 
 - proof-point retrieval connecting JD requirements to profile evidence
-- provider/model replay across prompt versions
+- prompt replay for tailor, structured extraction, and beautify fixtures
 - broader factuality fixtures for multi-job work histories and CJK profiles

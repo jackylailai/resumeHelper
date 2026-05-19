@@ -21,7 +21,6 @@ from backend.app.services.llm import LLMClient, LLMInvalidOutputError
 from backend.app.services.llm.audit import (
     STATUS_FAILED,
     STATUS_SUCCEEDED,
-    STEP_TAILOR,
     error_code_for_exception,
     error_message_for_exception,
     llm_metadata,
@@ -29,10 +28,7 @@ from backend.app.services.llm.audit import (
     stable_payload_hash,
 )
 from backend.app.services.llm.contracts import validate_tailor_output
-from backend.app.services.llm.prompt_registry import (
-    STEP_TAILOR,
-    prompt_version_for_step,
-)
+from backend.app.services.llm.prompt_registry import STEP_TAILOR, prompt_version_for_step
 from backend.app.services.pdf import write_generated_resume_pdf
 
 logger = logging.getLogger(__name__)

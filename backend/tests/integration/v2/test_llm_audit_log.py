@@ -38,6 +38,7 @@ def test_evaluate_and_tailor_write_success_audit_logs(
     assert evaluate_log.output_hash
     assert evaluate_log.token_count_input == 100
     assert evaluate_log.token_count_output == 50
+    assert evaluate_log.estimated_cost_micros == 1050
     assert evaluate_log.job_analysis_id is not None
 
     assert tailor_log.status == "succeeded"
@@ -46,6 +47,7 @@ def test_evaluate_and_tailor_write_success_audit_logs(
     assert tailor_log.output_hash
     assert tailor_log.token_count_input == 120
     assert tailor_log.token_count_output == 80
+    assert tailor_log.estimated_cost_micros == 1560
     assert tailor_log.job_analysis_id == evaluate_log.job_analysis_id
     assert tailor_log.generated_resume_id is not None
 

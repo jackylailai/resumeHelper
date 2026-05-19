@@ -23,6 +23,11 @@ from backend.app.api.opportunities import router as opportunities_router
 from backend.app.api.profile import router as profile_router
 from backend.app.api.scrape import router as scrape_router
 from backend.app.config import get_settings
+from backend.app.rate_limit import (
+    FixedWindowRateLimiter,
+    client_identifier,
+    rate_limit_rule_for,
+)
 from backend.app.security import is_management_authorized, write_auth_required
 from backend.app.services.llm.factory import create_llm_client
 
@@ -58,12 +63,17 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.rate_limiter = FixedWindowRateLimiter()
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Explicit: never send cookies / auth headers cross-origin. Turning
+        # this on requires a concrete origin list (never "*") — see
+        # config.py validate_production_config.
+        allow_credentials=False,
     )
 
     @app.middleware("http")
@@ -74,6 +84,32 @@ def create_app() -> FastAPI:
         started = time.perf_counter()
         status_code = 500
         try:
+            if settings.rate_limit_enabled:
+                rule = rate_limit_rule_for(request, settings)
+                if rule is not None:
+                    decision = app.state.rate_limiter.check(
+                        route_key=rule.key,
+                        client_id=client_identifier(request),
+                        limit=rule.limit,
+                        window_seconds=rule.window_seconds,
+                    )
+                    if not decision.allowed:
+                        response = error(
+                            "rate_limited",
+                            "Too many requests. Please retry after the rate limit window resets.",
+                            status_code=429,
+                            details={
+                                "limit": decision.limit,
+                                "window_seconds": decision.window_seconds,
+                                "retry_after_seconds": decision.retry_after_seconds,
+                            },
+                            retry_after_seconds=decision.retry_after_seconds,
+                        )
+                        status_code = response.status_code
+                        response.headers["Retry-After"] = str(decision.retry_after_seconds)
+                        response.headers["X-Request-ID"] = request_id
+                        return response
+
             auth_required = write_auth_required(request, settings)
             if auth_required and not is_management_authorized(request, settings):
                 response = error(

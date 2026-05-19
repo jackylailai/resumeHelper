@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 
 from backend.app import cli
@@ -64,3 +66,59 @@ def test_scrape_evaluate_all_with_linkedin_uses_all_source_scope(monkeypatch):
 
     assert result == 0
     assert captured["source"] is None
+
+
+def test_eval_harness_cli_writes_json_and_markdown_reports(tmp_path: Path) -> None:
+    report_json = tmp_path / "report.json"
+    report_md = tmp_path / "report.md"
+
+    result = cli.main(
+        [
+            "eval-harness",
+            "--backend",
+            "fake",
+            "--report-json",
+            str(report_json),
+            "--report-md",
+            str(report_md),
+            "--quiet",
+        ]
+    )
+
+    assert result == 0
+    payload = json.loads(report_json.read_text(encoding="utf-8"))
+    assert payload["backend"] == "fake"
+    assert payload["failed"] == 0
+    assert payload["results"]
+    assert "Eval Harness Report" in report_md.read_text(encoding="utf-8")
+
+
+def test_prompt_replay_cli_writes_json_and_markdown_reports(tmp_path: Path) -> None:
+    report_json = tmp_path / "prompt-replay.json"
+    report_md = tmp_path / "prompt-replay.md"
+
+    result = cli.main(
+        [
+            "prompt-replay",
+            "--backend",
+            "fake",
+            "--old-prompt-version",
+            "resume-fit-v1",
+            "--new-prompt-version",
+            "resume-fit-v2",
+            "--case-id",
+            "high_backend_fit",
+            "--report-json",
+            str(report_json),
+            "--report-md",
+            str(report_md),
+            "--quiet",
+        ]
+    )
+
+    assert result == 0
+    payload = json.loads(report_json.read_text(encoding="utf-8"))
+    assert payload["old_prompt_version"] == "resume-fit-v1"
+    assert payload["new_prompt_version"] == "resume-fit-v2"
+    assert payload["total"] == 1
+    assert "Prompt Replay Report" in report_md.read_text(encoding="utf-8")

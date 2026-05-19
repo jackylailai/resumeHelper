@@ -38,6 +38,23 @@ class Settings(BaseSettings):
     # Limits
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
     max_jd_chars: int = 5000
+    rate_limit_enabled: bool = True
+    rate_limit_evaluate_per_minute: int = 10
+    rate_limit_evaluate_bulk_per_minute: int = 2
+    rate_limit_evaluate_batch_per_minute: int = 10
+    rate_limit_scrape_run_per_minute: int = 3
+    rate_limit_beautify_per_minute: int = 5
+    rate_limit_callback_per_minute: int = 10
+    ai_provider_calls_enabled: bool = True
+    max_bulk_evaluate_items: int = 100
+    max_evaluate_listing_items: int = 20
+    max_evaluate_pending_items: int = 100
+    max_scrape_after_evaluate_items: int = 100
+    max_tailoring_jobs_per_batch: int = 20
+    max_batch_estimated_tokens: int = 0
+    max_batch_estimated_cost_usd: float = 0.0
+    llm_input_cost_per_million_tokens: float = 3.0
+    llm_output_cost_per_million_tokens: float = 15.0
 
     # Server
     environment: str = "development"

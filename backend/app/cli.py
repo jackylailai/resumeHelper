@@ -8,15 +8,32 @@ from pathlib import Path
 
 from backend.app.config import get_settings
 from backend.app.db import SessionLocal
+from backend.app.services.ai_guardrails import (
+    EVALUATE_LISTINGS_WORKFLOW,
+    SCRAPE_AFTER_EVALUATE_WORKFLOW,
+    QuotaExceededError,
+)
 from backend.app.services.batch_evaluator import (
     ListingEvaluationSummary,
     evaluate_pending_listings,
+)
+from backend.app.services.beautify_harness import (
+    load_beautify_fixture_set,
+    run_beautify_harness,
+    write_beautify_report_json,
+    write_beautify_report_markdown,
 )
 from backend.app.services.eval_harness import (
     load_evaluation_fixture_set,
     run_evaluation_harness,
     write_report_json,
     write_report_markdown,
+)
+from backend.app.services.extract_harness import (
+    load_extract_fixture_set,
+    run_extract_harness,
+    write_extract_report_json,
+    write_extract_report_markdown,
 )
 from backend.app.services.llm import LLMClient, LLMUnavailableError
 from backend.app.services.llm.audit import llm_metadata
@@ -88,6 +105,7 @@ async def _scrape(args: argparse.Namespace) -> int:
                 limit=args.evaluate_limit,
                 no_tailor=args.no_tailor,
                 quiet=args.quiet,
+                workflow=SCRAPE_AFTER_EVALUATE_WORKFLOW,
             )
         )
 
@@ -104,6 +122,7 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
 
     with SessionLocal() as db:
         try:
+            workflow = getattr(args, "workflow", EVALUATE_LISTINGS_WORKFLOW)
             summary = evaluate_pending_listings(
                 db,
                 llm=llm,
@@ -111,9 +130,16 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
                 profile_id=args.profile_id,
                 source=args.source,
                 limit=args.limit,
+                workflow=workflow,
+                max_items=settings.max_scrape_after_evaluate_items
+                if workflow == SCRAPE_AFTER_EVALUATE_WORKFLOW
+                else settings.max_evaluate_pending_items,
             )
         except LookupError as exc:
             print(str(exc), file=sys.stderr)
+            return 1
+        except QuotaExceededError as exc:
+            print(f"{exc.result.code}: {exc.result.message}", file=sys.stderr)
             return 1
 
     if not args.quiet:
@@ -141,8 +167,17 @@ def _print_eval_summary(
     scope = source or "all"
     print(
         f"evaluated source={scope} total={summary.total} "
-        f"succeeded={summary.succeeded} failed={summary.failed}"
+        f"succeeded={summary.succeeded} failed={summary.failed} "
+        f"skipped={summary.skipped} blocked={summary.blocked}"
     )
+    if summary.estimate is not None:
+        print(
+            f"  estimate input_tokens={summary.estimate.estimated_input_tokens} "
+            f"output_tokens={summary.estimate.estimated_output_tokens} "
+            f"cost_usd={summary.estimate.estimated_cost_usd}"
+        )
+    for warning in summary.warnings:
+        print(f"  warning={warning.get('code')}: {warning.get('message')}")
     for result in summary.results:
         if result.error:
             print(f"  {result.listing_id}: error={result.error}")
@@ -288,6 +323,78 @@ def _prompt_replay(args: argparse.Namespace) -> int:
             )
 
     return 0 if report.new_failed == 0 else 1
+
+
+def _extract_harness(args: argparse.Namespace) -> int:
+    prompt_version = args.prompt_version or "extract-v1"
+    try:
+        fixture_set, fixture_path = load_extract_fixture_set(
+            Path(args.fixtures) if args.fixtures else None
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    report = run_extract_harness(
+        fixture_set=fixture_set,
+        fixture_path=fixture_path,
+        backend=args.backend,
+        prompt_version=prompt_version,
+    )
+
+    if args.report_json:
+        write_extract_report_json(report, Path(args.report_json))
+    if args.report_md:
+        write_extract_report_markdown(report, Path(args.report_md))
+
+    if not args.quiet:
+        print(
+            f"extract-harness backend={args.backend} "
+            f"fixtures={fixture_path} passed={report.passed}/{report.total}"
+        )
+        for result in report.results:
+            outcome = "PASS" if result.passed else "FAIL"
+            print(f"  {result.id} ({result.kind}): {outcome}")
+            for failure in result.failures:
+                print(f"    - {failure}")
+
+    return 0 if report.failed == 0 else 1
+
+
+def _beautify_harness(args: argparse.Namespace) -> int:
+    prompt_version = args.prompt_version or "beautify-v1"
+    try:
+        fixture_set, fixture_path = load_beautify_fixture_set(
+            Path(args.fixtures) if args.fixtures else None
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    report = run_beautify_harness(
+        fixture_set=fixture_set,
+        fixture_path=fixture_path,
+        backend=args.backend,
+        prompt_version=prompt_version,
+    )
+
+    if args.report_json:
+        write_beautify_report_json(report, Path(args.report_json))
+    if args.report_md:
+        write_beautify_report_markdown(report, Path(args.report_md))
+
+    if not args.quiet:
+        print(
+            f"beautify-harness backend={args.backend} "
+            f"fixtures={fixture_path} passed={report.passed}/{report.total}"
+        )
+        for result in report.results:
+            outcome = "PASS" if result.passed else "FAIL"
+            print(f"  {result.id} ({result.kind}): {outcome}")
+            for failure in result.failures:
+                print(f"    - {failure}")
+
+    return 0 if report.failed == 0 else 1
 
 
 def _create_eval_harness_llm(backend: str, model: str | None) -> LLMClient:
@@ -455,6 +562,64 @@ def main(argv: Sequence[str] | None = None) -> int:
     prompt_replay.add_argument("--report-md", default=None, help="write Markdown report")
     prompt_replay.add_argument("--quiet", action="store_true", help="only return exit code")
     prompt_replay.set_defaults(func=_prompt_replay)
+
+    extract_harness = subparsers.add_parser(
+        "extract-harness",
+        help="run deterministic structured-extraction output contract fixtures",
+    )
+    extract_harness.add_argument(
+        "--backend",
+        choices=["fake", "configured", "anthropic", "claude-cli"],
+        default="fake",
+        help="LLM backend label recorded in the report (validation is local)",
+    )
+    extract_harness.add_argument(
+        "--prompt-version",
+        default=None,
+        help="prompt version recorded in the harness report",
+    )
+    extract_harness.add_argument(
+        "--fixtures",
+        default=None,
+        help="fixture JSON path; defaults to backend/evals/fixtures/extract_cases.json",
+    )
+    extract_harness.add_argument("--report-json", default=None, help="write JSON report")
+    extract_harness.add_argument("--report-md", default=None, help="write Markdown report")
+    extract_harness.add_argument(
+        "--quiet",
+        action="store_true",
+        help="only return exit code",
+    )
+    extract_harness.set_defaults(func=_extract_harness)
+
+    beautify_harness = subparsers.add_parser(
+        "beautify-harness",
+        help="run deterministic beautify HTML safety and factuality fixtures",
+    )
+    beautify_harness.add_argument(
+        "--backend",
+        choices=["fake", "configured", "anthropic", "claude-cli"],
+        default="fake",
+        help="LLM backend label recorded in the report (validation is local)",
+    )
+    beautify_harness.add_argument(
+        "--prompt-version",
+        default=None,
+        help="prompt version recorded in the harness report",
+    )
+    beautify_harness.add_argument(
+        "--fixtures",
+        default=None,
+        help="fixture JSON path; defaults to backend/evals/fixtures/beautify_cases.json",
+    )
+    beautify_harness.add_argument("--report-json", default=None, help="write JSON report")
+    beautify_harness.add_argument("--report-md", default=None, help="write Markdown report")
+    beautify_harness.add_argument(
+        "--quiet",
+        action="store_true",
+        help="only return exit code",
+    )
+    beautify_harness.set_defaults(func=_beautify_harness)
 
     args = parser.parse_args(argv)
     return args.func(args)
