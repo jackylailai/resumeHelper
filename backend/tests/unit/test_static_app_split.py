@@ -24,6 +24,13 @@ def _read_static(path: str) -> str:
     return (STATIC / path).read_text(encoding="utf-8")
 
 
+def _home_script_text() -> str:
+    return "\n".join(
+        (STATIC / src.lstrip("/")).read_text(encoding="utf-8")
+        for src in HOME_SCRIPTS[1:]
+    )
+
+
 def test_home_app_entrypoint_stays_thin() -> None:
     app_js = _read_static("app.js")
 
@@ -50,17 +57,14 @@ def test_home_feature_scripts_are_loaded_in_dependency_order() -> None:
 
 def test_inline_handlers_are_defined_by_home_scripts() -> None:
     html = _read_static("index.html")
-    handler_bodies = re.findall(r"\bon\w+=\"([^\"]+)\"", html)
+    script_text = _home_script_text()
+    handler_bodies = re.findall(r"\bon\w+=\"([^\"]+)\"", html + "\n" + script_text)
     handler_names = {
         name
         for body in handler_bodies
         for name in re.findall(r"\b([A-Za-z_$][\w$]*)\s*\(", body)
     }
 
-    script_text = "\n".join(
-        (STATIC / src.lstrip("/")).read_text(encoding="utf-8")
-        for src in HOME_SCRIPTS[1:]
-    )
     exposed_functions = set(
         re.findall(r"^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(", script_text, re.M)
     )
