@@ -13,8 +13,18 @@
 ## AI Prompt / Model Changes
 
 If this PR changes a prompt, model, LLM output contract, score routing rule, or
-LLM validation policy, include an eval report delta:
+LLM validation policy, include the impacted workflow step and an eval report
+delta:
 
 - [ ] Not applicable
 - [ ] Prompt/model/output-contract change includes harness results
 - [ ] Prompt comparison uses `python -m backend.app.cli prompt-replay --backend fake --old-prompt-version <old> --new-prompt-version <new>`
+
+## AI Workflow Readiness
+
+For changes that affect evaluate, tailor, structured extraction, beautify,
+scraping-to-evaluate, generated resumes, audit logs, or application routing:
+
+- [ ] Not applicable
+- [ ] Updated `docs/ai-engineering-readiness.md` or linked the relevant owner issue
+- [ ] Documented factuality, privacy, cost/quota, and audit-trail impact
