@@ -117,6 +117,23 @@ Statuses include:
 - `offer`
 - `archived`
 
+### ProofPoint
+
+Stores reusable achievement evidence for future resume tailoring.
+
+Important fields:
+
+- `profile_id`
+- `title`
+- `context`
+- `metrics`
+- `skills`
+- `tags`
+- STAR fields: `situation`, `task`, `action`, `result`
+
+The first implementation exposes CRUD APIs. Tailoring prompt retrieval and
+generated-resume attribution are tracked by #77 follow-up work.
+
 ## Main User Flows
 
 ### 1. Manage Profiles
@@ -187,7 +204,9 @@ For `needs_tailoring`, the system generates a tailored resume draft. The user
 must review the output before submitting to any platform.
 
 Tailoring must use baseline profile and structured data as source of truth.
-Future proof point work (#77) should become an additional authoritative source.
+Proof points are available as a managed evidence library and should become an
+additional authoritative source once retrieval is connected to the tailoring
+prompt.
 
 ### 6. Track Applications
 

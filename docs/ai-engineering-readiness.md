@@ -30,7 +30,7 @@ outside typed application code.
 | Area | Target state | Current state | Owner issue |
 |------|--------------|---------------|-------------|
 | Deterministic orchestration | App-owned flow, score routing, review gates, and status transitions | Mostly implemented for evaluate/tailor/beautify/application tracking; one-click URL flow is still separate work | #74 |
-| Explicit input specs | Every LLM call documents required inputs, optional inputs, source of truth, and prompt version | Documented in `docs/ai-workflow/README.md`, `docs/eval-harness.md`, `docs/prompts.md`, and `specs/current-product-spec.md`; proof points are not implemented yet | #77 |
+| Explicit input specs | Every LLM call documents required inputs, optional inputs, source of truth, and prompt version | Documented in `docs/ai-workflow/README.md`, `docs/eval-harness.md`, `docs/prompts.md`, and `specs/current-product-spec.md`; proof point CRUD exists, but retrieval is not connected to tailoring yet | #77 |
 | Explicit output specs | Every LLM output has a schema and fail-closed validation policy | Implemented for evaluate, tailor, structured extraction, and beautify | #113, #126, #127 |
 | Eval harness and regression reporting | Deterministic fixtures run in CI and produce reviewable reports | CI runs evaluate, tailor, extract, and beautify fake-backend harnesses and uploads reports | #113, #124, #126, #127 |
 | Prompt and model lifecycle | Versions, model/backend metadata, prompt source, and replay path are persisted or reportable | Per-step prompt versions, prompt source paths, prompt source hashes, audit metadata, and evaluate prompt replay are implemented | #128 |

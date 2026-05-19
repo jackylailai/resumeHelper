@@ -11,7 +11,6 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.services.llm.fake import FakeLLMClient
 
-
 # ---------------------------------------------------------------------------
 # Database fixture — testcontainers-postgres
 # ---------------------------------------------------------------------------
@@ -26,8 +25,8 @@ def postgres_url() -> Generator[str, None, None]:
 
 @pytest.fixture(scope="session")
 def db_engine(postgres_url: str):  # type: ignore[no-untyped-def]
-    from backend.app.db import Base
     import backend.app.models  # ensure models are registered  # noqa: F401
+    from backend.app.db import Base
 
     engine = create_engine(postgres_url, pool_pre_ping=True)
     Base.metadata.create_all(engine)
@@ -67,9 +66,10 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
     from backend.app.config import get_settings
     get_settings.cache_clear()
 
-    from backend.app.main import create_app
-    from backend.app.db import get_db
     from sqlalchemy.orm import sessionmaker
+
+    from backend.app.db import get_db
+    from backend.app.main import create_app
 
     Session = sessionmaker(bind=db_engine)
 
@@ -91,10 +91,9 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
         yield c
 
     # Truncate all tables after each test so next test starts clean
-    from sqlalchemy import text
     with db_engine.connect() as conn:
         conn.execute(text(
-            "TRUNCATE TABLE llm_audit_logs, scrape_runs, applications, "
+            "TRUNCATE TABLE proof_points, llm_audit_logs, scrape_runs, applications, "
             "generated_resumes, job_listings, job_analyses, baseline_profile "
             "RESTART IDENTITY CASCADE"
         ))
