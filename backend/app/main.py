@@ -21,6 +21,7 @@ from backend.app.api.health import router as health_router
 from backend.app.api.job_listings import router as job_listings_router
 from backend.app.api.opportunities import router as opportunities_router
 from backend.app.api.profile import router as profile_router
+from backend.app.api.proof_points import router as proof_points_router
 from backend.app.api.scrape import router as scrape_router
 from backend.app.config import get_settings
 from backend.app.rate_limit import (
@@ -200,6 +201,7 @@ def create_app() -> FastAPI:
     app.include_router(job_listings_router, prefix="/api")
     app.include_router(opportunities_router, prefix="/api")
     app.include_router(applications_router, prefix="/api")
+    app.include_router(proof_points_router, prefix="/api")
     app.include_router(beautify_router, prefix="/api")
     app.include_router(scrape_router, prefix="/api")
     if settings.environment != "production":
