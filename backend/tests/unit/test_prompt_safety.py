@@ -5,17 +5,18 @@ Covers:
 - wrap_untrusted wraps and escapes in one call
 - escape works on the realistic attack shapes the issue calls out
   (tag breakout, system role override, schema swap)
-- the TRUST_BOUNDARY_CLAUSE is present in the canonical system prompts
+- trust-boundary wording is present in the canonical prompt templates
   so we catch regressions if someone strips it
 """
 
 from __future__ import annotations
 
-from backend.app.services.llm.anthropic import (
-    _BEAUTIFY_SYSTEM_PROMPT,
-    _EXTRACT_SYSTEM_PROMPT,
-    _SYSTEM_PROMPT,
-    _TAILOR_SYSTEM_PROMPT,
+from backend.app.services.llm.prompt_registry import (
+    STEP_BEAUTIFY,
+    STEP_EVALUATE,
+    STEP_EXTRACT,
+    STEP_TAILOR,
+    prompt_template_path,
 )
 from backend.app.services.llm.prompt_safety import (
     TRUST_BOUNDARY_CLAUSE,
@@ -78,12 +79,8 @@ def test_wrap_untrusted_against_realistic_tag_breakout() -> None:
 def test_trust_boundary_clause_is_in_every_system_prompt() -> None:
     marker = "SECURITY BOUNDARY"
     assert marker in TRUST_BOUNDARY_CLAUSE
-    for prompt in (
-        _SYSTEM_PROMPT,
-        _TAILOR_SYSTEM_PROMPT,
-        _BEAUTIFY_SYSTEM_PROMPT,
-        _EXTRACT_SYSTEM_PROMPT,
-    ):
+    for step in (STEP_EVALUATE, STEP_TAILOR, STEP_BEAUTIFY, STEP_EXTRACT):
+        prompt = prompt_template_path(step).read_text(encoding="utf-8")
         assert marker in prompt, (
-            "every system prompt must include the trust-boundary clause"
+            "every canonical prompt template must include the trust-boundary clause"
         )
