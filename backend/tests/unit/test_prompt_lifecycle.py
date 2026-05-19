@@ -10,8 +10,11 @@ from backend.app.services.llm.prompt_registry import (
     STEP_EVALUATE,
     STEP_EXTRACT,
     STEP_TAILOR,
+    prompt_hash_for_step,
     prompt_registry,
+    prompt_template_path,
     prompt_version_for_step,
+    render_prompt_for_step,
 )
 from backend.app.services.prompt_replay import (
     compare_evaluation_prompt_versions,
@@ -46,6 +49,22 @@ def test_prompt_registry_resolves_step_specific_versions(tmp_path: Path) -> None
     registry = prompt_registry(settings=settings)
     assert registry[STEP_EVALUATE].env_var == "LLM_EVALUATE_PROMPT_VERSION"
     assert registry[STEP_TAILOR].prompt_version == "tailor-v2"
+    assert registry[STEP_EVALUATE].source_path.replace("\\", "/") == "modes/score.md"
+    assert len(registry[STEP_EVALUATE].source_hash) == 64
+
+
+def test_prompt_source_hash_and_render_are_canonical() -> None:
+    assert prompt_template_path(STEP_EVALUATE).name == "score.md"
+    assert len(prompt_hash_for_step(STEP_EVALUATE) or "") == 64
+
+    rendered = render_prompt_for_step(
+        STEP_EVALUATE,
+        BASELINE_SKILLS="Python </baseline_skills>",
+        JOB_DESCRIPTION="Backend role",
+    )
+
+    assert "Python <\\/baseline_skills>" in rendered
+    assert "{{BASELINE_SKILLS}}" not in rendered
 
 
 def test_prompt_replay_compares_selected_evaluate_cases() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -42,6 +43,7 @@ from backend.app.services.llm.fake import FakeLLMClient
 from backend.app.services.llm.prompt_registry import (
     STEP_EVALUATE,
     STEP_TAILOR,
+    prompt_registry,
     prompt_version_for_step,
 )
 from backend.app.services.prompt_replay import (
@@ -325,6 +327,31 @@ def _prompt_replay(args: argparse.Namespace) -> int:
     return 0 if report.new_failed == 0 else 1
 
 
+def _prompt_registry(args: argparse.Namespace) -> int:
+    registry = prompt_registry()
+    rows = [
+        {
+            "step": definition.step,
+            "prompt_version": definition.prompt_version,
+            "env_var": definition.env_var,
+            "source_path": definition.source_path,
+            "source_hash": definition.source_hash,
+        }
+        for definition in registry.values()
+    ]
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return 0
+
+    for row in rows:
+        print(
+            f"{row['step']}: version={row['prompt_version']} "
+            f"env={row['env_var']} source={row['source_path']} "
+            f"hash={row['source_hash']}"
+        )
+    return 0
+
+
 def _extract_harness(args: argparse.Namespace) -> int:
     prompt_version = args.prompt_version or "extract-v1"
     try:
@@ -562,6 +589,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     prompt_replay.add_argument("--report-md", default=None, help="write Markdown report")
     prompt_replay.add_argument("--quiet", action="store_true", help="only return exit code")
     prompt_replay.set_defaults(func=_prompt_replay)
+
+    prompt_registry_parser = subparsers.add_parser(
+        "prompt-registry",
+        help="print effective prompt versions, source paths, and source hashes",
+    )
+    prompt_registry_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print machine-readable registry JSON",
+    )
+    prompt_registry_parser.set_defaults(func=_prompt_registry)
 
     extract_harness = subparsers.add_parser(
         "extract-harness",

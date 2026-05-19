@@ -98,6 +98,15 @@ python -m backend.app.cli prompt-replay \
   --report-md artifacts/evals/prompt-replay.md
 ```
 
+To inspect the active prompt source files and hashes, use:
+
+```bash
+python -m backend.app.cli prompt-registry
+```
+
+See [../prompts.md](../prompts.md) for the registry table and comparison
+workflow.
+
 ### Observability And Audit Trail
 
 AI workflow observability means the project can explain what happened after the
@@ -254,6 +263,8 @@ Implemented AI workflow foundations:
 - per-step prompt registry for evaluate, tailor, extraction, and beautify
 - persisted prompt version, backend, and model metadata on scored jobs,
   generated resumes, and beautification rows
+- canonical prompt source paths and SHA-256 source hashes in the active prompt
+  registry
 - prompt replay CLI for comparing evaluate fixture behavior across prompt
   versions
 
@@ -275,7 +286,7 @@ row is intentionally metadata-first:
 - `request_id`
 - workflow step: `evaluate`, `tailor`, `extract`, or `beautify`
 - backend and model
-- prompt version
+- prompt version and prompt source hash
 - input and output hashes
 - latency
 - token counts when the provider returns them

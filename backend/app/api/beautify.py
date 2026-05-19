@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 import uuid
@@ -86,7 +87,11 @@ def beautify_resume(
     )
     started = time.perf_counter()
     try:
-        raw_result = dict(llm.beautify(resume.resume_text, style=body.style))
+        beautify = llm.beautify
+        kwargs: dict[str, object] = {"style": body.style}
+        if "prompt_version" in inspect.signature(beautify).parameters:
+            kwargs["prompt_version"] = prompt_version
+        raw_result = dict(beautify(resume.resume_text, **kwargs))
         raw_result["prompt_version"] = prompt_version
         result = validate_beautify_result(
             raw_result,

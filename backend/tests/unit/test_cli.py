@@ -122,3 +122,14 @@ def test_prompt_replay_cli_writes_json_and_markdown_reports(tmp_path: Path) -> N
     assert payload["new_prompt_version"] == "resume-fit-v2"
     assert payload["total"] == 1
     assert "Prompt Replay Report" in report_md.read_text(encoding="utf-8")
+
+
+def test_prompt_registry_cli_prints_source_hashes(capsys) -> None:  # type: ignore[no-untyped-def]
+    result = cli.main(["prompt-registry", "--json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    evaluate = next(row for row in payload if row["step"] == "evaluate")
+    assert evaluate["prompt_version"] == "resume-fit-v1"
+    assert evaluate["source_path"].replace("\\", "/") == "modes/score.md"
+    assert len(evaluate["source_hash"]) == 64

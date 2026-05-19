@@ -213,6 +213,7 @@ Docker must be running for integration tests that use testcontainers.
 - [Current product spec](specs/current-product-spec.md)
 - [Roadmap](specs/roadmap.md)
 - [AI workflow engineering](docs/ai-workflow/README.md)
+- [Prompt registry](docs/prompts.md)
 - [Historical OpenAPI contract](specs/001-resume-upload-rating/contracts/openapi.yaml)
 - [Eval harness](docs/eval-harness.md)
 - [Scrape scheduling](docs/scheduling.md)

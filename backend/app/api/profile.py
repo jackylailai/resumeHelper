@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import io
 import logging
 import time
@@ -248,8 +249,12 @@ def extract_profile_structured(
     )
     started = time.perf_counter()
     try:
+        extract_structured = llm.extract_structured
+        kwargs: dict[str, object] = {}
+        if "prompt_version" in inspect.signature(extract_structured).parameters:
+            kwargs["prompt_version"] = prompt_version
         extracted = validate_structured_extraction_output(
-            llm.extract_structured(profile.skills_text),
+            extract_structured(profile.skills_text, **kwargs),
             source=llm.__class__.__name__,
         )
     except Exception as exc:

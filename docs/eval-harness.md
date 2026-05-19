@@ -177,6 +177,7 @@ python -m backend.app.cli tailor-harness --backend fake
 python -m backend.app.cli extract-harness --backend fake
 python -m backend.app.cli beautify-harness --backend fake
 python -m backend.app.cli prompt-replay --backend fake --old-prompt-version resume-fit-v1 --new-prompt-version resume-fit-v2
+python -m backend.app.cli prompt-registry
 ```
 
 ```bash
