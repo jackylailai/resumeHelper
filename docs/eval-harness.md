@@ -149,8 +149,10 @@ facts. Each fixture provides:
 - `score`
 - `gaps`
 - optional `structured_data`
+- optional `proof_points`
 - `required_facts`
 - `forbidden_facts`
+- `jd_only_terms`
 
 The deterministic fixture set lives at:
 
@@ -159,18 +161,21 @@ backend/evals/fixtures/tailor_cases.json
 ```
 
 Required facts must appear in `tailored_resume`. Forbidden facts must not appear
-in `tailored_resume`. This is a smoke-level factuality guard: it catches dropped
-key facts and obvious fabrications, while deeper proof-point checks are tracked
-separately.
+in `tailored_resume`. Terms listed in `jd_only_terms` are rejected when they
+appear in the generated resume without matching evidence in the baseline profile
+or `proof_points`. This is a smoke-level factuality guard: it catches dropped key
+facts, obvious fabrications, and common JD-only skill injection.
 
 ### 7. Report Harness
 
-Both CLIs return exit code `1` when any fixture fails and can write JSON or
+Harness CLIs return exit code `1` when any fixture fails and can write JSON or
 Markdown reports for CI artifacts.
 
 ```bash
 python -m backend.app.cli eval-harness --backend fake
 python -m backend.app.cli tailor-harness --backend fake
+python -m backend.app.cli extract-harness --backend fake
+python -m backend.app.cli beautify-harness --backend fake
 ```
 
 ```bash
@@ -183,6 +188,16 @@ python -m backend.app.cli tailor-harness \
   --backend fake \
   --report-json artifacts/evals/tailor.json \
   --report-md artifacts/evals/tailor.md
+
+python -m backend.app.cli extract-harness \
+  --backend fake \
+  --report-json artifacts/evals/extract.json \
+  --report-md artifacts/evals/extract.md
+
+python -m backend.app.cli beautify-harness \
+  --backend fake \
+  --report-json artifacts/evals/beautify.json \
+  --report-md artifacts/evals/beautify.md
 ```
 
 Manual provider runs are supported for smoke checks:

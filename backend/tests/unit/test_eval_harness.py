@@ -9,7 +9,23 @@ from backend.app.services.eval_harness import (
     load_evaluation_fixture_set,
     run_evaluation_harness,
 )
+from backend.app.services.llm import EvaluationResult
 from backend.app.services.llm.fake import FakeLLMClient
+
+
+class _InvalidShapeLLM:
+    def evaluate(
+        self,
+        parsed_text: str,
+        job_description: str,
+        prompt_version: str,
+    ) -> EvaluationResult:
+        return EvaluationResult(
+            score=True,  # type: ignore[arg-type]
+            explanation="x" * 2001,
+            strengths=["ok"],
+            gaps=["gap"] * 21,
+        )
 
 
 def test_default_fake_evaluation_harness_passes() -> None:
@@ -65,3 +81,34 @@ def test_evaluation_harness_reports_score_regressions() -> None:
     assert report.failed == 1
     assert "outside expected range" in report.results[0].failures[0]
     assert "status skip != expected ready_to_submit" in report.results[0].failures
+
+
+def test_evaluation_harness_enforces_bounded_output_contract() -> None:
+    fixture_set = EvaluationHarnessFixtureSet(
+        version=1,
+        name="invalid-contract-test",
+        cases=[
+            EvaluationHarnessCase(
+                id="invalid_shape",
+                profile="Python backend engineer",
+                job_description="Backend role.",
+                expected_status=STATUS_READY_TO_SUBMIT,
+                expected_score_min=85,
+                expected_score_max=100,
+            )
+        ],
+    )
+
+    report = run_evaluation_harness(
+        llm=_InvalidShapeLLM(),
+        fixture_set=fixture_set,
+        fixture_path=Path("inline.json"),
+        backend="fake",
+        prompt_version="eval-harness-test",
+    )
+
+    assert report.failed == 1
+    failures = "\n".join(report.results[0].failures)
+    assert "score" in failures
+    assert "explanation" in failures
+    assert "gaps" in failures
