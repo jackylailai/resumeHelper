@@ -107,6 +107,9 @@ High-priority hardening work is tracked in:
 - [#114: AI engineering production maturity checklist](https://github.com/jackylailai/resumeHelper/issues/114)
 - [#115: README and current product specs refresh](https://github.com/jackylailai/resumeHelper/issues/115)
 
+The current readiness map is maintained in
+[docs/ai-engineering-readiness.md](docs/ai-engineering-readiness.md).
+
 Target practices:
 
 - Explicit input and output specs for every LLM call.
@@ -118,8 +121,8 @@ Target practices:
 - Durable background jobs for long-running work.
 - Cost, latency, quota, and privacy controls.
 
-The first eval harness implementation covers deterministic evaluate-output
-contracts and score routing. See [docs/eval-harness.md](docs/eval-harness.md).
+The deterministic harnesses cover evaluate, tailor, structured extraction, and
+beautify contracts in CI. See [docs/eval-harness.md](docs/eval-harness.md).
 
 See [specs/current-product-spec.md](specs/current-product-spec.md) for the
 current product spec.
@@ -213,6 +216,7 @@ Docker must be running for integration tests that use testcontainers.
 - [Current product spec](specs/current-product-spec.md)
 - [Roadmap](specs/roadmap.md)
 - [AI workflow engineering](docs/ai-workflow/README.md)
+- [AI engineering readiness](docs/ai-engineering-readiness.md)
 - [Prompt registry](docs/prompts.md)
 - [Historical OpenAPI contract](specs/001-resume-upload-rating/contracts/openapi.yaml)
 - [Eval harness](docs/eval-harness.md)

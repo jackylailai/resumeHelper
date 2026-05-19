@@ -317,9 +317,8 @@ Known gaps:
 - Tailoring factuality has a deterministic smoke harness; broader fixture
   coverage is still needed.
 - Long-running work still relies partly on FastAPI BackgroundTasks.
-- CI eval reports currently cover deterministic evaluate and tailor fixtures;
-  extraction and beautify contract fixtures are unit-test covered but not yet
-  surfaced as separate CI report artifacts.
+- CI eval reports cover deterministic evaluate, tailor, structured extraction,
+  and beautify fixtures.
 - Audit logs capture prompt/model metadata for production LLM calls, but there
   is no user-facing audit browser yet.
 

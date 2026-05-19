@@ -271,6 +271,9 @@ Implemented AI workflow foundations:
 For a concise demo-oriented view of what is ready to show, see
 [SHOWCASE.md](SHOWCASE.md).
 
+For the production-readiness owner map, current status, and remaining
+implementation issues, see [../ai-engineering-readiness.md](../ai-engineering-readiness.md).
+
 Known gaps:
 
 - tailoring factuality coverage is still smoke-level and needs broader fixtures
