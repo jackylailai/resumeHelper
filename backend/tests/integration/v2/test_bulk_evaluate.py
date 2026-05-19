@@ -1,7 +1,10 @@
 """Tests for POST /api/evaluate/bulk."""
 from __future__ import annotations
+
 import pytest
 from fastapi.testclient import TestClient
+
+from backend.app.config import get_settings
 
 _JD_A = "Looking for a Python backend engineer with FastAPI and PostgreSQL."
 _JD_B = "Seeking a senior DevOps engineer with Kubernetes and Terraform."
@@ -18,6 +21,9 @@ def test_bulk_evaluate_returns_results(client: TestClient):
     data = r.json()["data"]
     assert data["total"] == 2
     assert data["new"] + data["cached"] == 2
+    assert data["blocked"] == 0
+    assert data["estimated_total_tokens"] > 0
+    assert data["estimated_cost_usd"] > 0
     assert len(data["results"]) == 2
     for result in data["results"]:
         assert 0 <= result["score"] <= 100
@@ -93,3 +99,25 @@ def test_bulk_evaluate_over_limit_returns_422(client: TestClient):
     client.post("/api/profile", json={"skills_text": _PROFILE})
     r = client.post("/api/evaluate/bulk", json={"jd_texts": [_JD_A] * 101})
     assert r.status_code == 422
+
+
+@pytest.mark.integration
+def test_bulk_evaluate_quota_guard_blocks_before_processing(
+    client: TestClient,
+):
+    client.post("/api/profile", json={"skills_text": _PROFILE})
+    settings = get_settings()
+    original_limit = settings.max_bulk_evaluate_items
+    settings.max_bulk_evaluate_items = 1
+    try:
+        r = client.post("/api/evaluate/bulk", json={"jd_texts": [_JD_A, _JD_B]})
+    finally:
+        settings.max_bulk_evaluate_items = original_limit
+
+    assert r.status_code == 429
+    payload = r.json()
+    assert payload["error"]["code"] == "ai_batch_item_limit_exceeded"
+    assert payload["error"]["details"]["workflow"] == "evaluate"
+    assert payload["error"]["details"]["items"] == 2
+    history = client.get("/api/history").json()["data"]
+    assert history == []

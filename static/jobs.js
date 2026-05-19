@@ -310,7 +310,8 @@ async function scoreSelectedListings() {
 
     const data = payload.data;
     batchStatus.textContent = (
-        `Scored ${data.succeeded}/${data.total}; ${data.failed} failed.`
+        `Scored ${data.succeeded}/${data.total}; ${data.failed} failed; ` +
+        `${data.skipped ?? 0} skipped; ${data.blocked ?? 0} blocked.`
     );
     renderBatchResults(data.results ?? []);
     for (const result of data.results ?? []) {

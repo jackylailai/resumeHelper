@@ -33,6 +33,7 @@ class LLMAuditLog(Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     token_count_input: Mapped[int | None] = mapped_column(Integer, nullable=True)
     token_count_output: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_cost_micros: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

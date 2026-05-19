@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.config import get_settings
 from backend.app.models.job_listing import JobListing
 from backend.app.models.scrape_run import ScrapeRun
 from backend.app.services.scrapers import registry as scraper_registry
@@ -160,6 +161,43 @@ def test_scrape_control_blocks_or_replaces_active_runs(
         if run["keyword"] == "backend" and run["status"] == "cancelled"
     ]
     assert len(cancelled_backend) == 2
+
+
+@pytest.mark.integration
+def test_scrape_control_evaluate_quota_blocks_before_start(
+    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+):
+    called = False
+
+    def fake_background(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        "backend.app.api.scrape.run_scrape_control_background",
+        fake_background,
+    )
+    settings = get_settings()
+    original_limit = settings.max_scrape_after_evaluate_items
+    settings.max_scrape_after_evaluate_items = 1
+    try:
+        response = client.post(
+            "/api/scrape/control/start",
+            json={
+                "source": "all",
+                "keyword": "backend",
+                "limit": 2,
+                "evaluate_after_scrape": True,
+                "evaluate_limit": 2,
+            },
+        )
+    finally:
+        settings.max_scrape_after_evaluate_items = original_limit
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "ai_batch_item_limit_exceeded"
+    assert called is False
 
 
 def _fake_scraper_with_descriptions(scraper_source: str, descriptions: list[str]):
@@ -334,7 +372,7 @@ def test_advanced_filter_feed_exhausted_under_limit(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
 ):
-    """If the feed runs out before `limit` matches are found, the run still succeeds with fewer rows."""
+    """If the feed runs out before `limit` matches are found, fewer rows succeed."""
     source = "104"
     descriptions = [
         "kubernetes shop.",  # match
