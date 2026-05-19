@@ -16,140 +16,15 @@ from backend.app.services.llm.contracts import (
     parse_tailor_output,
     validate_beautify_output,
 )
-from backend.app.services.llm.prompt_safety import (
-    TRUST_BOUNDARY_CLAUSE,
-    wrap_untrusted,
+from backend.app.services.llm.prompt_registry import (
+    STEP_BEAUTIFY,
+    STEP_EVALUATE,
+    STEP_EXTRACT,
+    STEP_TAILOR,
+    render_prompt_for_step,
 )
 
 logger = logging.getLogger(__name__)
-
-_SYSTEM_PROMPT = (
-    """\
-You are an expert recruiter and resume evaluator. Analyze the provided resume
-against the job description and return a structured JSON evaluation.
-
-"""
-    + TRUST_BOUNDARY_CLAUSE
-    + """
-Return ONLY valid JSON with this exact schema:
-{
-  "score": <integer 0-100>,
-  "explanation": "<2-3 sentence overall assessment>",
-  "strengths": ["<strength 1>", "<strength 2>", ...],
-  "gaps": ["<gap 1>", "<gap 2>", ...]
-}
-
-Scoring guide:
-- 90-100: Exceptional fit, meets nearly all requirements
-- 70-89: Strong fit, meets most requirements
-- 50-69: Moderate fit, meets some requirements
-- 30-49: Weak fit, significant gaps
-- 0-29: Poor fit, major mismatches
-
-Return ONLY the JSON object, no markdown, no extra text.
-"""
-)
-
-_BEAUTIFY_SYSTEM_PROMPT = (
-    """\
-You are a resume designer. You receive a tailored resume in Markdown and must
-transform it into a single self-contained HTML document with embedded CSS,
-suitable for both browser display and PDF rendering via WeasyPrint.
-
-Hard rules:
-1. Use ONLY content from the source markdown. Do NOT invent, embellish,
-   paraphrase to add facts, or fabricate skills, experience, dates, metrics,
-   or contact details.
-2. Preserve every concrete number, percentage, duration, employment date
-   range, and proper noun verbatim (e.g. "April 2024 - Present", "50,000 QPS",
-   "TOEIC 790", "富邦媒體科技", "騰茲電通"). Do not translate or omit them.
-3. Output a single complete HTML document — `<!DOCTYPE html>` ... `</html>`.
-   Inline all CSS in a single `<style>` block. No external stylesheets, fonts,
-   images, or scripts.
-4. CJK support is mandatory. The `font-family` stack on body and text elements
-   MUST include CJK fallbacks like "Noto Sans CJK SC", "Noto Sans CJK TC",
-   "PingFang SC", "Microsoft YaHei" so Chinese characters render correctly.
-5. Use only WeasyPrint-compatible CSS. Avoid JavaScript, external @font-face,
-   `position: sticky`, fixed pixel widths on top-level containers.
-6. Layout safety: do NOT use label-value grids with fixed-width labels that
-   can overflow when values are long. Prefer `<dl>` blocks, inline labels with
-   `<strong>`, or grid with `minmax(7rem, max-content) 1fr` + label
-   `white-space: nowrap`. Default to single-column body; two-column only for
-   short skill / language lists.
-7. Include each work-experience entry's date range prominently alongside the
-   employer name. Never silently drop dates.
-8. Style preset will be in the user message — `modern` (clean sans-serif,
-   blue accent), `classic` (serif, traditional), or `minimal` (monochrome).
-9. Include only sections actually present in source markdown.
-
-Return ONLY the HTML document. No markdown code fences, no preamble.
-"""
-    + TRUST_BOUNDARY_CLAUSE
-)
-
-_EXTRACT_SYSTEM_PROMPT = (
-    """\
-You receive a candidate's free-form resume / profile text. Extract every
-concrete fact you can find into a structured JSON object. Use only what is
-explicitly in the source — do not invent, paraphrase facts, or add boilerplate.
-If a field has no source, omit it.
-
-Return ONLY a JSON object (no code fences, no preamble) with these top-level
-keys (all optional, omit when source has nothing): personal, summary,
-work_experience, education, languages, certifications, skills,
-personal_qualities.
-Do not include any other top-level keys or nested keys.
-
-Each work_experience entry: {employer, title, location, start_date, end_date,
-is_current, achievements: [...]}. Each education entry: {school, degree, field,
-start_date, end_date}. Each language: {name, level, test, score}.
-
-Rules:
-- Every value comes verbatim from source. Dates, numbers, employer names,
-  school names, certification names — copy as-is.
-- Don't invent fields the source doesn't mention.
-- Don't editorialize titles ("Backend Engineer" stays "Backend Engineer").
-- Don't summarize achievement bullets — output every concrete claim from the
-  source, one per array element.
-- Preserve original language for proper nouns and quotes. You may translate
-  connectors only if it improves clarity.
-"""
-    + TRUST_BOUNDARY_CLAUSE
-)
-
-_TAILOR_SYSTEM_PROMPT = (
-    """\
-You are an expert resume writer. Treat the candidate's baseline profile as the
-source of truth — your job is to rephrase, reorder, and emphasize what is
-already there, never to add or omit hard data.
-
-Hard rules:
-1. Preserve every concrete fact verbatim — names, employers, job titles, dates,
-   year ranges (e.g. "April 2024 - Present", "August 2023 - April 2024"),
-   degrees, schools, certifications, language scores (e.g. "TOEIC 790"), and
-   metrics (e.g. "50,000 QPS", "5 minutes", "10x") must appear unchanged.
-2. Do NOT drop sections present in baseline — Education, Languages,
-   Certifications, Personal Qualities, every work history entry must remain.
-3. Do NOT invent skills, employers, dates, metrics, or contact info.
-4. Do NOT add boilerplate — no "References available upon request", no
-   "Portfolio available upon request", no generic objective statements unless
-   they exist in baseline.
-5. Reframe sentences to match JD language and reorder bullets to surface
-   JD-relevant items, but the underlying facts must come from baseline.
-6. Self-check: every date / metric / certification / degree from baseline must
-   appear at least once in the tailored output before you return.
-
-Return ONLY valid JSON with this exact schema:
-{
-  "tailoring_suggestions": ["<actionable suggestion 1>", "<actionable suggestion 2>", ...],
-  "tailored_resume": "<full markdown resume text, professionally formatted>"
-}
-
-The tailored_resume should be a complete, polished resume in Markdown format.
-Return ONLY the JSON object, no markdown code fences, no extra text.
-"""
-    + TRUST_BOUNDARY_CLAUSE
-)
 
 
 class AnthropicLLMClient:
@@ -164,18 +39,17 @@ class AnthropicLLMClient:
         job_description: str,
         prompt_version: str,
     ) -> EvaluationResult:
-        user_content = (
-            wrap_untrusted(parsed_text, "resume")
-            + "\n\n"
-            + wrap_untrusted(job_description, "job_description")
+        prompt = render_prompt_for_step(
+            STEP_EVALUATE,
+            BASELINE_SKILLS=parsed_text,
+            JOB_DESCRIPTION=job_description,
         )
 
         try:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=1024,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_content}],
+                messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.APIError as exc:
             raise LLMUnavailableError(f"Anthropic API request failed: {exc}") from exc
@@ -204,32 +78,34 @@ class AnthropicLLMClient:
         structured_data: dict | None = None,
     ) -> dict:
         """Generate tailoring suggestions and a tailored resume text."""
-        gaps_text = "\n".join(f"- {g}" for g in gaps) if gaps else "- No specific gaps identified"
+
         structured_block = (
             json.dumps(structured_data, ensure_ascii=False, indent=2)
             if structured_data
-            else "(none — fall back to baseline_resume text below)"
+            else "(none - fall back to baseline_skills text below)"
         )
-        # current_score is an int we generated, not untrusted text — leave
-        # as-is. Every other block is wrapped to neutralise closing-tag
-        # injection in scraped/uploaded content.
-        user_content = (
-            f"<current_score>{score}</current_score>\n\n"
-            + wrap_untrusted(gaps_text, "identified_gaps")
-            + "\n\n"
-            + wrap_untrusted(structured_block, "structured_data")
-            + "\n\n"
-            + wrap_untrusted(baseline_text, "baseline_resume")
-            + "\n\n"
-            + wrap_untrusted(jd_text, "job_description")
+        gaps_text = (
+            "\n".join(f"- {gap}" for gap in gaps)
+            if gaps
+            else "- No specific gaps identified"
+        )
+        prompt = render_prompt_for_step(
+            STEP_TAILOR,
+            BASELINE_SKILLS=baseline_text,
+            JOB_DESCRIPTION=jd_text,
+            STRUCTURED_DATA=structured_block,
+            CURRENT_SCORE=score,
+            IDENTIFIED_GAPS=gaps_text,
         )
 
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=4096,
-            system=_TAILOR_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_content}],
-        )
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except anthropic.APIError as exc:
+            raise LLMUnavailableError(f"Anthropic API request failed during tailor: {exc}") from exc
 
         raw = response.content[0].text.strip()  # type: ignore[index]
         logger.info(
@@ -250,20 +126,21 @@ class AnthropicLLMClient:
         self,
         resume_markdown: str,
         style: str = "modern",
+        prompt_version: str = "beautify-v1",
     ) -> dict:
         """Transform a tailored markdown resume into a styled HTML document."""
-        # style is a controlled enum from the API, not untrusted text.
-        user_content = (
-            f"<style_preset>{style}</style_preset>\n\n"
-            + wrap_untrusted(resume_markdown, "source_markdown")
+
+        prompt = render_prompt_for_step(
+            STEP_BEAUTIFY,
+            RESUME_MARKDOWN=resume_markdown,
+            STYLE=style,
         )
 
         try:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=8192,
-                system=_BEAUTIFY_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_content}],
+                messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.APIError as exc:
             raise LLMUnavailableError(
@@ -284,20 +161,20 @@ class AnthropicLLMClient:
             html,
             source="Anthropic API",
             source_markdown=resume_markdown,
-            prompt_version="beautify-v1",
+            prompt_version=prompt_version,
             token_count_input=response.usage.input_tokens,
             token_count_output=response.usage.output_tokens,
         )
 
-    def extract_structured(self, source_text: str) -> dict:
+    def extract_structured(self, source_text: str, prompt_version: str = "extract-v1") -> dict:
         """Parse a free-form profile text into structured JSON via the SDK."""
-        wrapped = wrap_untrusted(source_text, "source_text")
+
+        prompt = render_prompt_for_step(STEP_EXTRACT, SOURCE_TEXT=source_text)
         try:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=4096,
-                system=_EXTRACT_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": wrapped}],
+                messages=[{"role": "user", "content": prompt}],
             )
         except anthropic.APIError as exc:
             raise LLMUnavailableError(

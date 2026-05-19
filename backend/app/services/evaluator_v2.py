@@ -151,10 +151,15 @@ def evaluate_jd(
 
     jd_h = hashing.jd_hash(jd_text)
 
-    # Cache key is (jd_hash, profile_id)
+    # Cache key is (jd_hash, profile_id, prompt_version). Prompt changes must
+    # produce a fresh score so replay/comparison work is not masked by cache.
     existing = (
         db.query(JobAnalysis)
-        .filter(JobAnalysis.jd_hash == jd_h, JobAnalysis.profile_id == profile_id)
+        .filter(
+            JobAnalysis.jd_hash == jd_h,
+            JobAnalysis.profile_id == profile_id,
+            JobAnalysis.prompt_version == prompt_version,
+        )
         .first()
     )
     if existing:
@@ -222,6 +227,9 @@ def evaluate_jd(
         status=status,
         can_submit=can_submit,
         skip_reason=skip_reason,
+        prompt_version=prompt_version,
+        llm_backend=backend,
+        llm_model=model,
     )
     db.add(job)
     db.commit()

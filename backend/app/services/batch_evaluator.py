@@ -20,6 +20,10 @@ from backend.app.services.ai_guardrails import (
 )
 from backend.app.services.evaluator_v2 import evaluate_jd, get_default_profile, get_profile
 from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
+from backend.app.services.llm.prompt_registry import (
+    STEP_EVALUATE,
+    prompt_version_for_step,
+)
 
 
 @dataclass
@@ -272,7 +276,10 @@ def _evaluate_one_listing(
             db,
             jd_text,
             llm,
-            prompt_version=settings.llm_prompt_version,
+            prompt_version=prompt_version_for_step(
+                STEP_EVALUATE,
+                settings=settings,
+            ),
             threshold=settings.resume_gen_threshold,
             profile_id=profile_id,
         )

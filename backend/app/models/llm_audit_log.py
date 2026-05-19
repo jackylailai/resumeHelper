@@ -28,6 +28,7 @@ class LLMAuditLog(Base):
     backend: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     input_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     output_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -41,6 +41,11 @@ from backend.app.services.llm import (
     LLMInvalidOutputError,
     LLMUnavailableError,
 )
+from backend.app.services.llm.prompt_registry import (
+    STEP_EVALUATE,
+    STEP_TAILOR,
+    prompt_version_for_step,
+)
 from backend.app.services.pdf import (
     generated_resume_pdf_path,
     write_generated_resume_pdf,
@@ -126,6 +131,11 @@ def evaluate(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     settings = get_settings()
+    evaluate_prompt_version = prompt_version_for_step(
+        STEP_EVALUATE,
+        settings=settings,
+    )
+    tailor_prompt_version = prompt_version_for_step(STEP_TAILOR, settings=settings)
     length_error = _jd_length_error(body.jd_text, settings.max_jd_chars)
     if length_error is not None:
         return length_error
@@ -134,7 +144,7 @@ def evaluate(
     try:
         job, cached = evaluate_jd(
             db, body.jd_text, llm,
-            prompt_version=settings.llm_prompt_version,
+            prompt_version=evaluate_prompt_version,
             threshold=settings.resume_gen_threshold,
             profile_id=body.profile_id,
         )
@@ -167,7 +177,7 @@ def evaluate(
             run_tailoring,
             job_analysis_id=job.id,
             llm=llm,
-            prompt_version=settings.llm_prompt_version,
+            prompt_version=tailor_prompt_version,
             session_factory=session_factory,
             request_id=getattr(request.state, "request_id", None),
         )
@@ -183,6 +193,9 @@ def evaluate(
         status=status,
         message=message,
         action=action,
+        prompt_version=job.prompt_version,
+        llm_backend=job.llm_backend,
+        llm_model=job.llm_model,
     )
 
     return success(
@@ -205,6 +218,11 @@ def bulk_evaluate(
         return error("not_found", "baseline_profile not set", status_code=404)
 
     settings = get_settings()
+    evaluate_prompt_version = prompt_version_for_step(
+        STEP_EVALUATE,
+        settings=settings,
+    )
+    tailor_prompt_version = prompt_version_for_step(STEP_TAILOR, settings=settings)
     llm = _get_llm(request)
     results: list[schemas.BulkEvaluateResult] = []
     new_count = 0
@@ -234,7 +252,7 @@ def bulk_evaluate(
         try:
             job, cached = evaluate_jd(
                 db, jd_text, llm,
-                prompt_version=settings.llm_prompt_version,
+                prompt_version=evaluate_prompt_version,
                 threshold=settings.resume_gen_threshold,
             )
         except LLMUnavailableError as exc:
@@ -254,7 +272,7 @@ def bulk_evaluate(
                     run_tailoring,
                     job_analysis_id=job.id,
                     llm=llm,
-                    prompt_version=settings.llm_prompt_version,
+                    prompt_version=tailor_prompt_version,
                     session_factory=session_factory,
                     request_id=getattr(request.state, "request_id", None),
                 )
@@ -289,6 +307,7 @@ def evaluate_by_listings(
 ) -> JSONResponse:
     """Evaluate stored scraper JDs by listing id and link results back to the rows."""
     settings = get_settings()
+    tailor_prompt_version = prompt_version_for_step(STEP_TAILOR, settings=settings)
     llm = _get_llm(request)
     try:
         summary = evaluate_listing_ids(
@@ -305,7 +324,7 @@ def evaluate_by_listings(
                 background_tasks,
                 request,
                 llm,
-                settings.llm_prompt_version,
+                tailor_prompt_version,
             ),
         )
     except LookupError as exc:
@@ -356,6 +375,7 @@ def evaluate_pending_scraped_listings(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     settings = get_settings()
+    tailor_prompt_version = prompt_version_for_step(STEP_TAILOR, settings=settings)
     llm = _get_llm(request)
     try:
         summary = evaluate_pending_listings(
@@ -373,7 +393,7 @@ def evaluate_pending_scraped_listings(
                 background_tasks,
                 request,
                 llm,
-                settings.llm_prompt_version,
+                tailor_prompt_version,
             ),
         )
     except LookupError as exc:

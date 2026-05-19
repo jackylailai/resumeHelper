@@ -72,6 +72,41 @@ The deterministic `fake` backend is the CI gate because it is stable and does
 not require provider credentials. Real LLM backends can be run manually to
 inspect model drift.
 
+### Prompt And Model Lifecycle
+
+Prompt versions are named per workflow step instead of being treated as one
+global value:
+
+- `LLM_EVALUATE_PROMPT_VERSION` for JD scoring
+- `LLM_TAILOR_PROMPT_VERSION` for tailored resume generation
+- `LLM_EXTRACT_PROMPT_VERSION` for structured profile extraction
+- `LLM_BEAUTIFY_PROMPT_VERSION` for HTML beautification
+
+`LLM_PROMPT_VERSION` remains as the backward-compatible default for evaluate.
+Each persisted AI output records the prompt version, backend, and model where
+that metadata is available. This lets a score, tailored resume, or beautified
+document be traced back to the model and prompt contract that produced it.
+
+Prompt or model changes should include a deterministic report. For evaluate
+prompt comparisons, use:
+
+```bash
+python -m backend.app.cli prompt-replay \
+  --backend fake \
+  --old-prompt-version resume-fit-v1 \
+  --new-prompt-version resume-fit-v2 \
+  --report-md artifacts/evals/prompt-replay.md
+```
+
+To inspect the active prompt source files and hashes, use:
+
+```bash
+python -m backend.app.cli prompt-registry
+```
+
+See [../prompts.md](../prompts.md) for the registry table and comparison
+workflow.
+
 ### Observability And Audit Trail
 
 AI workflow observability means the project can explain what happened after the
@@ -225,6 +260,13 @@ Implemented AI workflow foundations:
 - CI gate for deterministic evaluate and tailor fixtures
 - persisted LLM audit logs for evaluate, tailor, structured extraction, and
   beautify calls
+- per-step prompt registry for evaluate, tailor, extraction, and beautify
+- persisted prompt version, backend, and model metadata on scored jobs,
+  generated resumes, and beautification rows
+- canonical prompt source paths and SHA-256 source hashes in the active prompt
+  registry
+- prompt replay CLI for comparing evaluate fixture behavior across prompt
+  versions
 
 For a concise demo-oriented view of what is ready to show, see
 [SHOWCASE.md](SHOWCASE.md).
@@ -233,7 +275,8 @@ Known gaps:
 
 - tailoring factuality coverage is still smoke-level and needs broader fixtures
 - long-running AI work still needs durable job state
-- cost, quota, and privacy guardrails need product-level enforcement
+- prompt replay currently covers evaluate fixtures; tailor, extraction, and
+  beautify replay can be added when those prompts start changing frequently
 
 ## LLM Audit Log
 
@@ -243,7 +286,7 @@ row is intentionally metadata-first:
 - `request_id`
 - workflow step: `evaluate`, `tailor`, `extract`, or `beautify`
 - backend and model
-- prompt version
+- prompt version and prompt source hash
 - input and output hashes
 - latency
 - token counts when the provider returns them
@@ -278,6 +321,8 @@ Recommended implementation order:
 5. **Prompt/model lifecycle**
    Version prompts per workflow step and support replay or comparison across
    versions.
+   Current status: implemented for per-step prompt resolution, output metadata,
+   and evaluate prompt replay.
 
 6. **Durable jobs and cost guardrails**
    Move long-running AI work into persisted jobs with limits, retry, progress,

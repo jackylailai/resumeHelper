@@ -23,6 +23,8 @@ class GeneratedResume(Base):
     resume_text: Mapped[str] = mapped_column(Text, nullable=False)
     pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    llm_backend: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     revision_source: Mapped[str] = mapped_column(
         String(20), nullable=False, default="ai_draft"
     )

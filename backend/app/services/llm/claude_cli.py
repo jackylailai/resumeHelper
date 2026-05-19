@@ -4,7 +4,6 @@ import json
 import logging
 import subprocess
 import time
-from pathlib import Path
 
 from backend.app.services.llm import (
     EvaluationResult,
@@ -16,24 +15,17 @@ from backend.app.services.llm.contracts import (
     parse_tailor_output,
     validate_beautify_output,
 )
-from backend.app.services.llm.prompt_safety import escape_closing_tags
+from backend.app.services.llm.prompt_registry import (
+    STEP_BEAUTIFY,
+    STEP_EVALUATE,
+    STEP_EXTRACT,
+    STEP_TAILOR,
+    render_prompt_for_step,
+)
 
 logger = logging.getLogger(__name__)
 
-_MODES_DIR = Path(__file__).parent.parent.parent.parent.parent / "modes"
 _CLAUDE_BIN = "claude"
-
-
-def _render(template_path: Path, **kwargs: str) -> str:
-    """Render a mode template, escaping any closing-tag literals in the
-    substituted values so untrusted content (JD / baseline / source text)
-    cannot break out of its `<tag>...</tag>` wrapper. See #139 and
-    `prompt_safety.escape_closing_tags`."""
-    text = template_path.read_text()
-    for key, value in kwargs.items():
-        safe_value = escape_closing_tags(value)
-        text = text.replace(f"{{{{{key}}}}}", safe_value)
-    return text
 
 
 class ClaudeCLIClient:
@@ -48,8 +40,8 @@ class ClaudeCLIClient:
         job_description: str,
         prompt_version: str,
     ) -> EvaluationResult:
-        prompt = _render(
-            _MODES_DIR / "score.md",
+        prompt = render_prompt_for_step(
+            STEP_EVALUATE,
             BASELINE_SKILLS=parsed_text,
             JOB_DESCRIPTION=job_description,
         )
@@ -101,11 +93,18 @@ class ClaudeCLIClient:
             if structured_data
             else "(none — fall back to baseline_skills text below)"
         )
-        prompt = _render(
-            _MODES_DIR / "generate.md",
+        gaps_text = (
+            "\n".join(f"- {gap}" for gap in gaps)
+            if gaps
+            else "- No specific gaps identified"
+        )
+        prompt = render_prompt_for_step(
+            STEP_TAILOR,
             BASELINE_SKILLS=baseline_text,
             JOB_DESCRIPTION=jd_text,
             STRUCTURED_DATA=structured_block,
+            CURRENT_SCORE=score,
+            IDENTIFIED_GAPS=gaps_text,
         )
 
         start = time.time()
@@ -144,6 +143,7 @@ class ClaudeCLIClient:
         self,
         resume_markdown: str,
         style: str = "modern",
+        prompt_version: str = "beautify-v1",
     ) -> dict:
         """Transform a tailored markdown resume into a styled, self-contained HTML doc.
 
@@ -152,8 +152,8 @@ class ClaudeCLIClient:
         number / proper noun in the input — so the output content is a strict
         subset of the input markdown, just visually restructured.
         """
-        prompt = _render(
-            _MODES_DIR / "beautify.md",
+        prompt = render_prompt_for_step(
+            STEP_BEAUTIFY,
             RESUME_MARKDOWN=resume_markdown,
             STYLE=style,
         )
@@ -190,15 +190,15 @@ class ClaudeCLIClient:
             html,
             source="claude CLI",
             source_markdown=resume_markdown,
-            prompt_version="beautify-v1",
+            prompt_version=prompt_version,
         )
 
-    def extract_structured(self, source_text: str) -> dict:
+    def extract_structured(self, source_text: str, prompt_version: str = "extract-v1") -> dict:
         """Parse a free-form profile text into a structured JSON dict via the
         `claude` CLI using `modes/extract.md`. Returns the parsed dict; raises
         LLMInvalidOutputError if the CLI does not return valid JSON.
         """
-        prompt = _render(_MODES_DIR / "extract.md", SOURCE_TEXT=source_text)
+        prompt = render_prompt_for_step(STEP_EXTRACT, SOURCE_TEXT=source_text)
 
         start = time.time()
         try:

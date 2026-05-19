@@ -91,3 +91,45 @@ def test_eval_harness_cli_writes_json_and_markdown_reports(tmp_path: Path) -> No
     assert payload["failed"] == 0
     assert payload["results"]
     assert "Eval Harness Report" in report_md.read_text(encoding="utf-8")
+
+
+def test_prompt_replay_cli_writes_json_and_markdown_reports(tmp_path: Path) -> None:
+    report_json = tmp_path / "prompt-replay.json"
+    report_md = tmp_path / "prompt-replay.md"
+
+    result = cli.main(
+        [
+            "prompt-replay",
+            "--backend",
+            "fake",
+            "--old-prompt-version",
+            "resume-fit-v1",
+            "--new-prompt-version",
+            "resume-fit-v2",
+            "--case-id",
+            "high_backend_fit",
+            "--report-json",
+            str(report_json),
+            "--report-md",
+            str(report_md),
+            "--quiet",
+        ]
+    )
+
+    assert result == 0
+    payload = json.loads(report_json.read_text(encoding="utf-8"))
+    assert payload["old_prompt_version"] == "resume-fit-v1"
+    assert payload["new_prompt_version"] == "resume-fit-v2"
+    assert payload["total"] == 1
+    assert "Prompt Replay Report" in report_md.read_text(encoding="utf-8")
+
+
+def test_prompt_registry_cli_prints_source_hashes(capsys) -> None:  # type: ignore[no-untyped-def]
+    result = cli.main(["prompt-registry", "--json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    evaluate = next(row for row in payload if row["step"] == "evaluate")
+    assert evaluate["prompt_version"] == "resume-fit-v1"
+    assert evaluate["source_path"].replace("\\", "/") == "modes/score.md"
+    assert len(evaluate["source_hash"]) == 64

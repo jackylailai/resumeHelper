@@ -80,6 +80,7 @@ class FakeLLMClient:
         self,
         resume_markdown: str,
         style: str = "modern",
+        prompt_version: str = "beautify-fake-v1",
     ) -> dict:
         """Fake beautify returns canned HTML wrapping the markdown for tests."""
         html = (
@@ -95,12 +96,12 @@ class FakeLLMClient:
         )
         return {
             "html_content": html,
-            "prompt_version": "beautify-fake-v1",
+            "prompt_version": prompt_version,
             "token_count_input": 90,
             "token_count_output": 60,
         }
 
-    def extract_structured(self, source_text: str) -> dict:
+    def extract_structured(self, source_text: str, prompt_version: str = "extract-v1") -> dict:
         """Fake structured extraction is deterministic for tests."""
         return {
             "personal": {"name": "Fake Candidate"},

@@ -82,6 +82,7 @@ def record_llm_audit_log(
     model: str | None,
     prompt_version: str | None,
     input_hash: str | None,
+    prompt_hash: str | None = None,
     output_hash: str | None = None,
     latency_ms: int | None = None,
     token_count_input: int | None = None,
@@ -97,6 +98,11 @@ def record_llm_audit_log(
     resume_beautification_id: uuid.UUID | None = None,
 ) -> LLMAuditLog | None:
     settings = get_settings()
+    resolved_prompt_hash = prompt_hash
+    if resolved_prompt_hash is None:
+        from backend.app.services.llm.prompt_registry import prompt_hash_for_step
+
+        resolved_prompt_hash = prompt_hash_for_step(workflow_step)
     resolved_cost_micros = estimated_cost_micros
     if (
         resolved_cost_micros is None
@@ -116,6 +122,7 @@ def record_llm_audit_log(
         backend=backend,
         model=model,
         prompt_version=prompt_version,
+        prompt_hash=resolved_prompt_hash,
         input_hash=input_hash,
         output_hash=output_hash,
         latency_ms=latency_ms,

@@ -23,6 +23,9 @@ class EvaluateOut(BaseModel):
     status: Literal["ready_to_submit", "needs_tailoring", "skip"]
     message: str
     action: Literal["none", "tailoring", "skip"]
+    prompt_version: str | None = None
+    llm_backend: str | None = None
+    llm_model: str | None = None
 
 
 class CallbackIn(BaseModel):
@@ -38,6 +41,8 @@ class BeautificationOut(BaseModel):
     generated_resume_id: uuid.UUID
     style: str
     prompt_version: str | None
+    llm_backend: str | None = None
+    llm_model: str | None = None
     html_url: str | None = None
     pdf_url: str | None = None
     created_at: datetime
@@ -49,6 +54,8 @@ class GeneratedResumeOut(BaseModel):
     resume_text: str
     pdf_url: str | None = None
     prompt_version: str | None
+    llm_backend: str | None = None
+    llm_model: str | None = None
     revision_source: str = "ai_draft"
     exported_at: datetime | None = None
     created_at: datetime
@@ -72,6 +79,9 @@ class HistoryItemOut(BaseModel):
     threshold_met: bool
     status: str | None = None
     can_submit: bool = False
+    prompt_version: str | None = None
+    llm_backend: str | None = None
+    llm_model: str | None = None
     created_at: datetime
 
 
@@ -86,6 +96,9 @@ class HistoryDetailOut(BaseModel):
     status: str | None = None
     can_submit: bool = False
     skip_reason: str | None = None
+    prompt_version: str | None = None
+    llm_backend: str | None = None
+    llm_model: str | None = None
     created_at: datetime
     baseline_profile_text: str | None = None
     generated_resumes: list[GeneratedResumeOut] = []
@@ -99,6 +112,9 @@ class SubmittableResumeOut(BaseModel):
     jd_snippet: str | None
     status: str | None
     can_submit: bool
+    prompt_version: str | None = None
+    llm_backend: str | None = None
+    llm_model: str | None = None
     created_at: datetime
 
 

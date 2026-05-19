@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     llm_backend: str = "claude_cli"
     llm_model: str = "claude-sonnet-4-6"
     llm_prompt_version: str = "resume-fit-v1"
+    llm_evaluate_prompt_version: str = ""
+    llm_tailor_prompt_version: str = "tailor-v1"
+    llm_extract_prompt_version: str = "extract-v1"
+    llm_beautify_prompt_version: str = "beautify-v1"
 
     # Storage
     storage_dir: Path = Path("./backend/storage")

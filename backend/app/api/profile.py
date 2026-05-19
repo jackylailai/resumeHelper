@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import io
 import logging
 import time
@@ -36,7 +37,6 @@ from backend.app.services.evaluator_v2 import (
 from backend.app.services.llm.audit import (
     STATUS_FAILED,
     STATUS_SUCCEEDED,
-    STEP_EXTRACT,
     error_code_for_exception,
     error_message_for_exception,
     llm_metadata,
@@ -44,6 +44,7 @@ from backend.app.services.llm.audit import (
     stable_payload_hash,
 )
 from backend.app.services.llm.contracts import validate_structured_extraction_output
+from backend.app.services.llm.prompt_registry import STEP_EXTRACT, prompt_version_for_step
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -236,7 +237,7 @@ def extract_profile_structured(
             "Active LLM backend does not implement extract_structured().",
             status_code=503,
         )
-    prompt_version = "extract-v1"
+    prompt_version = prompt_version_for_step(STEP_EXTRACT)
     backend, model = llm_metadata(llm)
     input_hash = stable_payload_hash(
         {
@@ -248,8 +249,12 @@ def extract_profile_structured(
     )
     started = time.perf_counter()
     try:
+        extract_structured = llm.extract_structured
+        kwargs: dict[str, object] = {}
+        if "prompt_version" in inspect.signature(extract_structured).parameters:
+            kwargs["prompt_version"] = prompt_version
         extracted = validate_structured_extraction_output(
-            llm.extract_structured(profile.skills_text),
+            extract_structured(profile.skills_text, **kwargs),
             source=llm.__class__.__name__,
         )
     except Exception as exc:

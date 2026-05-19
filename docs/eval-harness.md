@@ -176,6 +176,8 @@ python -m backend.app.cli eval-harness --backend fake
 python -m backend.app.cli tailor-harness --backend fake
 python -m backend.app.cli extract-harness --backend fake
 python -m backend.app.cli beautify-harness --backend fake
+python -m backend.app.cli prompt-replay --backend fake --old-prompt-version resume-fit-v1 --new-prompt-version resume-fit-v2
+python -m backend.app.cli prompt-registry
 ```
 
 ```bash
@@ -198,6 +200,13 @@ python -m backend.app.cli beautify-harness \
   --backend fake \
   --report-json artifacts/evals/beautify.json \
   --report-md artifacts/evals/beautify.md
+
+python -m backend.app.cli prompt-replay \
+  --backend fake \
+  --old-prompt-version resume-fit-v1 \
+  --new-prompt-version resume-fit-v2 \
+  --report-json artifacts/evals/prompt-replay.json \
+  --report-md artifacts/evals/prompt-replay.md
 ```
 
 Manual provider runs are supported for smoke checks:
@@ -241,5 +250,5 @@ included in the automated CI comment before the standard SIT summary.
 The next harness layers should cover:
 
 - proof-point retrieval connecting JD requirements to profile evidence
-- provider/model replay across prompt versions
+- prompt replay for tailor, structured extraction, and beautify fixtures
 - broader factuality fixtures for multi-job work histories and CJK profiles

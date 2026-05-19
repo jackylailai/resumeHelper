@@ -26,6 +26,8 @@ class ResumeBeautification(Base):
     html_content: Mapped[str] = mapped_column(Text, nullable=False)
     pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    llm_backend: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )

@@ -51,6 +51,9 @@ class JobAnalysis(Base):
     status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     can_submit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     skip_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    llm_backend: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )

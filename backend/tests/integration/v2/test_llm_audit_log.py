@@ -35,6 +35,7 @@ def test_evaluate_and_tailor_write_success_audit_logs(
     assert evaluate_log.model == "fake"
     assert evaluate_log.request_id == request_id
     assert evaluate_log.input_hash
+    assert evaluate_log.prompt_hash
     assert evaluate_log.output_hash
     assert evaluate_log.token_count_input == 100
     assert evaluate_log.token_count_output == 50
@@ -44,6 +45,7 @@ def test_evaluate_and_tailor_write_success_audit_logs(
     assert tailor_log.status == "succeeded"
     assert tailor_log.request_id == request_id
     assert tailor_log.input_hash
+    assert tailor_log.prompt_hash
     assert tailor_log.output_hash
     assert tailor_log.token_count_input == 120
     assert tailor_log.token_count_output == 80
@@ -103,4 +105,5 @@ def test_failed_evaluate_writes_failed_audit_log(
     assert row.error_code == "llm_invalid_output"
     assert row.error_message == "LLMInvalidOutputError"
     assert row.input_hash
+    assert row.prompt_hash
     assert row.output_hash is None

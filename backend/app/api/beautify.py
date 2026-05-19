@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 import uuid
@@ -18,7 +19,6 @@ from backend.app.services.llm import LLMUnavailableError
 from backend.app.services.llm.audit import (
     STATUS_FAILED,
     STATUS_SUCCEEDED,
-    STEP_BEAUTIFY,
     error_code_for_exception,
     error_message_for_exception,
     llm_metadata,
@@ -26,6 +26,10 @@ from backend.app.services.llm.audit import (
     stable_payload_hash,
 )
 from backend.app.services.llm.contracts import validate_beautify_result
+from backend.app.services.llm.prompt_registry import (
+    STEP_BEAUTIFY,
+    prompt_version_for_step,
+)
 from backend.app.services.pdf import (
     beautified_html_path,
     beautified_pdf_path,
@@ -71,7 +75,7 @@ def beautify_resume(
         )
 
     backend, model = llm_metadata(llm)
-    prompt_version = "beautify-v1"
+    prompt_version = prompt_version_for_step(STEP_BEAUTIFY)
     input_hash = stable_payload_hash(
         {
             "step": STEP_BEAUTIFY,
@@ -83,8 +87,14 @@ def beautify_resume(
     )
     started = time.perf_counter()
     try:
+        beautify = llm.beautify
+        kwargs: dict[str, object] = {"style": body.style}
+        if "prompt_version" in inspect.signature(beautify).parameters:
+            kwargs["prompt_version"] = prompt_version
+        raw_result = dict(beautify(resume.resume_text, **kwargs))
+        raw_result["prompt_version"] = prompt_version
         result = validate_beautify_result(
-            llm.beautify(resume.resume_text, style=body.style),
+            raw_result,
             source=llm.__class__.__name__,
             source_markdown=resume.resume_text,
         )
@@ -132,6 +142,8 @@ def beautify_resume(
         style=body.style,
         html_content=result["html_content"],
         prompt_version=prompt_version,
+        llm_backend=backend,
+        llm_model=model,
     )
     db.add(beautification)
     db.flush()
