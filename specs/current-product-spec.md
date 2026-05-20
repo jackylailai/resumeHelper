@@ -131,8 +131,10 @@ Important fields:
 - `tags`
 - STAR fields: `situation`, `task`, `action`, `result`
 
-The first implementation exposes CRUD APIs. Tailoring prompt retrieval and
-generated-resume attribution are tracked by #77 follow-up work.
+The first implementation exposes CRUD APIs. Tailoring now selects relevant
+profile/global proof points for needs-tailoring jobs, injects them into the
+tailor prompt as supplemental evidence, and stores selected IDs on
+`GeneratedResume.proof_point_ids`.
 
 ## Main User Flows
 

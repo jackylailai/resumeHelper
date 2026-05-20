@@ -267,6 +267,8 @@ Implemented AI workflow foundations:
   registry
 - prompt replay CLI for comparing evaluate fixture behavior across prompt
   versions
+- proof point CRUD plus relevant proof point selection for tailor prompts
+- generated resume attribution via stored `proof_point_ids`
 
 For a concise demo-oriented view of what is ready to show, see
 [SHOWCASE.md](SHOWCASE.md).
@@ -278,6 +280,7 @@ Known gaps:
 
 - tailoring factuality coverage is still smoke-level and needs broader fixtures
 - long-running AI work still needs durable job state
+- proof point ranking and UI selection controls are still basic
 - prompt replay currently covers evaluate fixtures; tailor, extraction, and
   beautify replay can be added when those prompts start changing frequently
 
@@ -327,7 +330,13 @@ Recommended implementation order:
    Current status: implemented for per-step prompt resolution, output metadata,
    and evaluate prompt replay.
 
-6. **Durable jobs and cost guardrails**
+6. **Proof point evidence source**
+   Store reusable achievements, retrieve relevant profile/global evidence for
+   tailoring, and attribute generated resumes to selected proof point IDs.
+   Current status: CRUD, prompt retrieval, and attribution are implemented;
+   ranking refinements and UI controls remain.
+
+7. **Durable jobs and cost guardrails**
    Move long-running AI work into persisted jobs with limits, retry, progress,
    cancellation, and budget controls.
 

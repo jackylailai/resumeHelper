@@ -30,6 +30,10 @@ from backend.app.services.llm.audit import (
 from backend.app.services.llm.contracts import validate_tailor_output
 from backend.app.services.llm.prompt_registry import STEP_TAILOR, prompt_version_for_step
 from backend.app.services.pdf import write_generated_resume_pdf
+from backend.app.services.proof_points import (
+    format_proof_points_for_prompt,
+    select_relevant_proof_points,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +93,14 @@ def run_tailoring(
 
         baseline_text = baseline.skills_text
         structured_data = baseline.structured_data
+        proof_points = select_relevant_proof_points(
+            db,
+            profile_id=baseline.id,
+            jd_text=job.jd_full_text,
+            gaps=job.gaps or [],
+        )
+        proof_points_text = format_proof_points_for_prompt(proof_points)
+        proof_point_ids = [str(proof_point.id) for proof_point in proof_points]
 
         backend, model = llm_metadata(llm)
         input_hash = stable_payload_hash(
@@ -101,11 +113,19 @@ def run_tailoring(
                 "gaps": job.gaps or [],
                 "score": job.score or 0,
                 "prompt_version": prompt_version,
+                "proof_point_ids": proof_point_ids,
+                "proof_points": proof_points_text,
             }
         )
         started = time.perf_counter()
         try:
-            result = _call_tailor_llm(llm, job, baseline_text, structured_data)
+            result = _call_tailor_llm(
+                llm,
+                job,
+                baseline_text,
+                structured_data,
+                proof_points_text,
+            )
         except Exception as exc:
             latency_ms = int((time.perf_counter() - started) * 1000)
             record_llm_audit_log(
@@ -134,6 +154,7 @@ def run_tailoring(
             prompt_version=prompt_version,
             llm_backend=backend,
             llm_model=model,
+            proof_point_ids=proof_point_ids,
         )
         db.add(resume)
         db.flush()
@@ -182,6 +203,7 @@ def _call_tailor_llm(
     job: JobAnalysis,
     baseline_text: str = "",
     structured_data: dict | None = None,
+    proof_points: str | None = None,
 ) -> dict:
     """Call the LLM to produce tailoring suggestions and a tailored resume.
 
@@ -202,6 +224,8 @@ def _call_tailor_llm(
         sig = inspect.signature(tailor)
         if "structured_data" in sig.parameters:
             kwargs["structured_data"] = structured_data
+        if "proof_points" in sig.parameters:
+            kwargs["proof_points"] = proof_points
         result = tailor(**kwargs)
         return validate_tailor_output(result, source=llm.__class__.__name__)
     raise LLMInvalidOutputError("active LLM client does not implement tailor")

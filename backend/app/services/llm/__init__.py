@@ -41,4 +41,5 @@ class LLMClient(Protocol):
         gaps: list[str],
         score: int,
         structured_data: dict[str, Any] | None = None,
+        proof_points: str | None = None,
     ) -> dict[str, Any]: ...
