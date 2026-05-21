@@ -2,6 +2,8 @@
 // Loaded after app.js; uses shared global resume state from app.js.
 
 const TAILORING_POLL_MS = 2000;
+const EVALUATE_JOB_POLL_MS = 2000;
+const EVALUATE_JOB_ACTIVE_STATUSES = ['queued', 'running', 'retry_wait', 'cancel_requested'];
 
 // ---- Evaluate ----
 async function runEvaluate() {
@@ -15,6 +17,15 @@ async function runEvaluate() {
   hideResult();
   stopPoll();
 
+  if (isAsyncEvaluateEnabled()) {
+    await runAsyncEvaluate(jd);
+    return;
+  }
+
+  await runSyncEvaluate(jd);
+}
+
+async function runSyncEvaluate(jd) {
   let data, cached;
   try {
     const profileId = document.getElementById('profile-select')?.value;
@@ -52,6 +63,174 @@ async function runEvaluate() {
     } else {
       startPoll(data.job_analysis_id);
     }
+  }
+}
+
+async function runAsyncEvaluate(jd) {
+  try {
+    const profileId = document.getElementById('profile-select')?.value;
+    const { response: res, payload: body } = await apiFetch('/api/evaluate/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jd_text: jd, profile_id: profileId ? parseInt(profileId) : null }),
+    });
+    if (!res.ok) {
+      setEvalApiError(res, body);
+      UI.toast.fromApiError(res, body, { title: 'Evaluate job failed' });
+      setEvalBtnDisabled(false);
+      setEvalStatus('');
+      return;
+    }
+
+    const jobId = extractJobId(body);
+    if (!jobId) {
+      setEvalError('Evaluate job response did not include a job id.');
+      UI.toast.error('Evaluate job response did not include a job id.', { title: 'Evaluate job failed' });
+      setEvalBtnDisabled(false);
+      setEvalStatus('');
+      return;
+    }
+
+    setEvalStatus('Evaluate job queued');
+    startEvaluateJobPoll(jobId);
+  } catch (e) {
+    setEvalError('Network error: ' + e.message);
+    UI.toast.error('Network error: ' + e.message, { title: 'Evaluate job failed' });
+    setEvalBtnDisabled(false);
+    setEvalStatus('');
+  }
+}
+
+function isAsyncEvaluateEnabled() {
+  return document.getElementById('eval-async-mode')?.checked === true;
+}
+
+function extractJobId(body) {
+  const data = body?.data || body || {};
+  return data.id || data.job_id || data.evaluate_job_id || data.job?.id || body?.job_id || body?.id || null;
+}
+
+function startEvaluateJobPoll(jobId) {
+  stopPoll();
+  pollTimer = setInterval(() => pollEvaluateJob(jobId), EVALUATE_JOB_POLL_MS);
+  pollEvaluateJob(jobId);
+}
+
+async function pollEvaluateJob(jobId) {
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/jobs/' + encodeURIComponent(jobId));
+    if (!res.ok) {
+      setEvalApiError(res, body);
+      UI.toast.fromApiError(res, body, { title: 'Evaluate job failed' });
+      stopPoll();
+      setEvalBtnDisabled(false);
+      setEvalStatus('');
+      return;
+    }
+
+    const job = body.data || {};
+    const status = job.status || '';
+    if (EVALUATE_JOB_ACTIVE_STATUSES.includes(status)) {
+      setEvalStatus('Evaluate job ' + formatEvaluateJobStatus(status) + formatEvaluateJobProgress(job));
+      return;
+    }
+
+    if (status === 'succeeded') {
+      stopPoll();
+      setEvalStatus('');
+      setEvalBtnDisabled(false);
+      applyEvaluateJobResult(job);
+      return;
+    }
+
+    if (status === 'failed' || status === 'cancelled') {
+      stopPoll();
+      showEvaluateJobFailure(job);
+      setEvalBtnDisabled(false);
+      setEvalStatus('');
+      return;
+    }
+
+    setEvalStatus(status ? 'Evaluate job ' + status : 'Evaluate job running');
+  } catch (e) {
+    stopPoll();
+    setEvalError('Network error: ' + e.message);
+    UI.toast.error('Network error: ' + e.message, { title: 'Evaluate job failed' });
+    setEvalBtnDisabled(false);
+    setEvalStatus('');
+  }
+}
+
+function applyEvaluateJobResult(job) {
+  const payload = normalizeResultPayload(job.result_payload);
+  const data = payload.evaluation || payload;
+  if (!data || Object.keys(data).length === 0) {
+    setEvalError('Evaluate job finished without an evaluation result.');
+    UI.toast.error('Evaluate job finished without an evaluation result.', { title: 'Evaluate job failed' });
+    return;
+  }
+
+  const cached = payload.cached === true || job.meta?.cached === true;
+  renderEvalResult(data, cached);
+  UI.toast.success(
+    `Scored ${data.score}/100 - ${data.status}${cached ? ' (cached)' : ''}`,
+    { title: 'Evaluate' },
+  );
+
+  if (data.status === 'needs_tailoring') {
+    const tailoringStatus = payload.tailoring_status || data.tailoring_status;
+    const tailoringJobId = payload.tailoring_job_id || data.tailoring_job_id;
+    const jobAnalysisId = data.job_analysis_id || payload.job_analysis_id;
+    showTailoringSpinner(tailoringStatus);
+    if (tailoringJobId) {
+      startPoll(tailoringJobId, jobAnalysisId);
+    } else if (jobAnalysisId) {
+      startPoll(jobAnalysisId);
+    }
+  }
+}
+
+function normalizeResultPayload(resultPayload) {
+  if (typeof resultPayload !== 'string') return resultPayload || {};
+  try {
+    return JSON.parse(resultPayload);
+  } catch (_) {
+    return {};
+  }
+}
+
+function formatEvaluateJobStatus(status) {
+  if (status === 'queued') return 'queued';
+  if (status === 'running') return 'running';
+  if (status === 'retry_wait') return 'waiting to retry';
+  if (status === 'cancel_requested') return 'cancelling';
+  return status || 'running';
+}
+
+function formatEvaluateJobProgress(job) {
+  if (job.progress_message) return ' - ' + job.progress_message;
+  if (job.progress_percent != null) return ' - ' + String(job.progress_percent) + '%';
+  if (job.progress_current != null && job.progress_total != null) {
+    return ' - ' + String(job.progress_current) + '/' + String(job.progress_total);
+  }
+  return '';
+}
+
+function showEvaluateJobFailure(job) {
+  const status = job.status || 'failed';
+  const isCancelled = status === 'cancelled';
+  const title = isCancelled ? 'Evaluate job cancelled' : 'Evaluate job failed';
+  const message = job.error_message || job.message || (
+    isCancelled
+      ? 'Evaluate job was cancelled before it finished.'
+      : 'Evaluate job did not finish. Please try again.'
+  );
+  const code = job.error_code ? ' (' + job.error_code + ')' : '';
+  setEvalError(message + code);
+  if (isCancelled) {
+    UI.toast.warning(message, { title });
+  } else {
+    UI.toast.error(message, { title });
   }
 }
 

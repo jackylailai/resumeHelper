@@ -12,10 +12,12 @@ from sqlalchemy.orm import Session
 
 from backend.app.models.ai_job import AIJob
 from backend.app.models.generated_resume import GeneratedResume
+from backend.app.services import hashing
 
 logger = logging.getLogger(__name__)
 
 AI_JOB_KIND_TAILOR = "tailor"
+AI_JOB_KIND_EVALUATE = "evaluate"
 
 AI_JOB_STATUS_QUEUED = "queued"
 AI_JOB_STATUS_RETRY_WAIT = "retry_wait"
@@ -48,6 +50,13 @@ class TailoringJobRef:
 
 
 @dataclass(frozen=True)
+class EvaluateJobRef:
+    id: uuid.UUID
+    status: str
+    created: bool = False
+
+
+@dataclass(frozen=True)
 class ClaimedAIJob:
     id: uuid.UUID
     kind: str
@@ -58,6 +67,88 @@ class ClaimedAIJob:
 
 def tailor_dedupe_key(job_analysis_id: uuid.UUID) -> str:
     return f"{AI_JOB_KIND_TAILOR}:{job_analysis_id}"
+
+
+def evaluate_dedupe_key(
+    *,
+    profile_id: int,
+    prompt_version: str,
+    jd_text: str,
+) -> str:
+    return f"{AI_JOB_KIND_EVALUATE}:{profile_id}:{prompt_version}:{hashing.jd_hash(jd_text)}"
+
+
+def enqueue_evaluate_job(
+    db: Session,
+    *,
+    jd_text: str,
+    profile_id: int,
+    prompt_version: str,
+    tailor_prompt_version: str,
+    request_id: str | None = None,
+) -> EvaluateJobRef:
+    """Create or reuse a durable single-JD evaluate job."""
+    dedupe_key = evaluate_dedupe_key(
+        profile_id=profile_id,
+        prompt_version=prompt_version,
+        jd_text=jd_text,
+    )
+    existing = _find_job_by_dedupe(db, dedupe_key)
+    payload = {
+        "jd_text": jd_text,
+        "profile_id": profile_id,
+        "prompt_version": prompt_version,
+        "tailor_prompt_version": tailor_prompt_version,
+    }
+    if request_id:
+        payload["request_id"] = request_id
+
+    if existing is not None:
+        if existing.status in {AI_JOB_STATUS_FAILED, AI_JOB_STATUS_CANCELLED}:
+            _set_queued_fields(existing, payload=payload)
+            existing.profile_id = profile_id
+            existing.prompt_version = prompt_version
+            existing.request_id = request_id
+            existing.progress_current = 0
+            existing.progress_total = 1
+            db.commit()
+            db.refresh(existing)
+        elif existing.status in {AI_JOB_STATUS_QUEUED, AI_JOB_STATUS_RETRY_WAIT}:
+            _merge_payload(existing, payload)
+            existing.profile_id = profile_id
+            existing.prompt_version = prompt_version
+            if request_id:
+                existing.request_id = request_id
+            existing.updated_at = datetime.now(UTC)
+            db.commit()
+            db.refresh(existing)
+        return _evaluate_ref(existing, created=False)
+
+    job = AIJob(
+        kind=AI_JOB_KIND_EVALUATE,
+        dedupe_key=dedupe_key,
+        profile_id=profile_id,
+        prompt_version=prompt_version,
+        request_id=request_id,
+        progress_total=1,
+    )
+    _set_queued_fields(job, payload=payload)
+    db.add(job)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = _find_job_by_dedupe(db, dedupe_key)
+        if existing is None:
+            raise
+        return _evaluate_ref(existing, created=False)
+    db.refresh(job)
+    logger.info(
+        "evaluate_job_queued ai_job_id=%s profile_id=%s",
+        job.id,
+        profile_id,
+    )
+    return _evaluate_ref(job, created=True)
 
 
 def enqueue_tailoring_job(
@@ -197,9 +288,14 @@ def mark_job_succeeded(
     _set_terminal_fields(job, AI_JOB_STATUS_SUCCEEDED)
     if result is not None:
         job.result_payload = result
+        job_analysis_id = result.get("job_analysis_id")
+        if job_analysis_id:
+            job.job_analysis_id = uuid.UUID(str(job_analysis_id))
         generated_resume_id = result.get("generated_resume_id")
         if generated_resume_id:
             job.generated_resume_id = uuid.UUID(str(generated_resume_id))
+    if job.progress_total is not None:
+        job.progress_current = job.progress_total
     db.commit()
     db.refresh(job)
     return _tailoring_ref(job, created=False)
@@ -276,6 +372,15 @@ def _find_tailoring_job(
             AIJob.kind == AI_JOB_KIND_TAILOR,
             AIJob.dedupe_key == tailor_dedupe_key(job_analysis_id),
         )
+        .order_by(AIJob.created_at.desc())
+        .first()
+    )
+
+
+def _find_job_by_dedupe(db: Session, dedupe_key: str) -> AIJob | None:
+    return (
+        db.query(AIJob)
+        .filter(AIJob.dedupe_key == dedupe_key)
         .order_by(AIJob.created_at.desc())
         .first()
     )
@@ -377,3 +482,7 @@ def _claimed_job(job: AIJob) -> ClaimedAIJob:
 
 def _tailoring_ref(job: AIJob, *, created: bool) -> TailoringJobRef:
     return TailoringJobRef(id=job.id, status=job.status, created=created)
+
+
+def _evaluate_ref(job: AIJob, *, created: bool) -> EvaluateJobRef:
+    return EvaluateJobRef(id=job.id, status=job.status, created=created)

@@ -65,13 +65,16 @@ Important fields:
 
 Stores generated tailored resume content and PDF-related links.
 
-### TailoringJob
+### AIJob
 
-Tracks durable background tailoring work for a `needs_tailoring` analysis.
+Tracks durable background AI work. `kind=tailor` represents tailoring for a
+`needs_tailoring` analysis; `kind=evaluate` represents async single-JD
+evaluation.
 
 Important fields:
 
 - `id`
+- `kind`
 - `job_analysis_id`
 - `status`
 - `result_payload`
@@ -181,6 +184,12 @@ Output:
 - strengths
 - gaps
 - `tailoring_job_id` and `tailoring_status` when tailoring is queued
+
+`POST /api/evaluate` is synchronous by default. Async single-JD evaluation is
+available through `POST /api/evaluate/jobs`; `POST /api/evaluate?async=true` is
+an alias for the same durable job path. Both async entry points create an
+`ai_jobs` row with `kind=evaluate` and return HTTP 202 with the same job
+envelope returned by `GET /api/jobs/{job_id}`.
 
 State routing:
 
@@ -313,16 +322,29 @@ Validation requirements:
 - no invented employer/date/metric/certification/degree/skill
 - key baseline facts are preserved
 
-### Durable Tailoring Job Contract
+### Durable AI Job Contract
 
 `POST /api/evaluate` returns `tailoring_job_id` and `tailoring_status` when a
 `needs_tailoring` analysis queues resume generation. `GET /api/history` and
 `GET /api/history/{job_analysis_id}` also expose the latest tailoring job
 metadata for the analysis.
 
+`POST /api/evaluate/jobs` creates a durable `kind=evaluate` job. `POST
+/api/evaluate?async=true` is an alias. Successful evaluate jobs return
+`result_payload` with:
+
+- `cached`
+- `job_analysis_id`
+- `tailoring_job_id`
+- `tailoring_status`
+- `evaluation` matching the synchronous `EvaluateOut` response shape
+
+If `evaluation.status` is `needs_tailoring`, the evaluate worker may enqueue a
+durable `kind=tailor` job after evaluation completes.
+
 `GET /api/jobs/{job_id}` returns:
 
-- job identity and `job_analysis_id`
+- job identity, `kind`, and `job_analysis_id`
 - `status`: `queued`, `running`, `succeeded`, `failed`, or `cancelled`
 - `result_payload` for successful job metadata
 - `error_code` and `error_message` for failed jobs
@@ -386,8 +408,9 @@ Known gaps:
   fixture checks.
 - Tailoring factuality has a deterministic smoke harness; broader fixture
   coverage is still needed.
-- Durable tailoring job state is specified for #71; backend queue hardening must
-  preserve restart-safe status transitions and progress reporting.
+- Durable AI job state is specified for #71; backend queue hardening must
+  preserve restart-safe status transitions and progress reporting for both
+  tailoring and async single-JD evaluate jobs.
 - CI eval reports cover deterministic evaluate, tailor, structured extraction,
   and beautify fixtures.
 - Audit logs capture prompt/model metadata for production LLM calls, but there

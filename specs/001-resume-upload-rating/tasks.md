@@ -227,6 +227,14 @@ TDD: write tests RED before implementation.
 - [ ] Backend slice: add durable job model/migration, enqueue/update semantics, restart-safe worker behavior, and API implementation without regressing existing history fallback.
 - [ ] Backend tests: response schema coverage for evaluate/history job metadata and `/api/jobs/{job_id}` terminal states.
 
+### P2.5-T23 Async single-JD evaluate jobs (issue #71, remaining slice)
+- [x] Specs/OpenAPI document that POST `/api/evaluate` remains synchronous by default.
+- [x] Specs/OpenAPI document POST `/api/evaluate/jobs` as the durable async single-JD evaluate endpoint returning HTTP 202 with the same job envelope as GET `/api/jobs/{job_id}`.
+- [x] Specs/OpenAPI document POST `/api/evaluate?async=true` as an alias for POST `/api/evaluate/jobs`.
+- [x] Data model documents `ai_jobs.kind=evaluate` and successful evaluate `result_payload` fields: `cached`, `job_analysis_id`, `tailoring_job_id`, `tailoring_status`, and `evaluation` matching `EvaluateOut`.
+- [x] Backend slice: enqueue and process durable `kind=evaluate` jobs while preserving the existing synchronous evaluate code path.
+- [x] Backend tests: async evaluate creation, alias behavior, job result payload schema, and optional follow-on tailoring enqueue when `evaluation.status=needs_tailoring`.
+
 ---
 
 ## Phase 3 — Roadmap (future)
