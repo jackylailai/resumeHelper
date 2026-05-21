@@ -5,12 +5,14 @@ For jobs with status='needs_tailoring' (score 60-84), this task:
 2. Saves the GeneratedResume record to DB
 3. Marks the JobAnalysis as can_submit=True
 """
+
 from __future__ import annotations
 
 import logging
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from backend.app.config import get_settings
@@ -37,10 +39,30 @@ from backend.app.services.proof_points import (
 
 logger = logging.getLogger(__name__)
 
+TAILORING_STATUS_SUCCEEDED = "succeeded"
+TAILORING_STATUS_FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class TailoringResult:
+    job_analysis_id: uuid.UUID
+    status: str
+    generated_resume_id: uuid.UUID | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class TailoringError(RuntimeError):
+    def __init__(self, error_code: str, error_message: str) -> None:
+        super().__init__(error_message)
+        self.error_code = error_code
+        self.error_message = error_message
+
 
 def _get_default_session_factory() -> Any:
     """Return the module-level SessionLocal, imported lazily to allow test override."""
     from backend.app.db import SessionLocal
+
     return SessionLocal
 
 
@@ -50,8 +72,9 @@ def run_tailoring(
     prompt_version: str | None = None,
     session_factory: Callable | None = None,
     request_id: str | None = None,
-) -> None:
-    """BackgroundTasks entrypoint — runs in-process after /api/evaluate response is sent.
+    cancel_requested: Callable[[], bool] | None = None,
+) -> TailoringResult:
+    """Run one tailoring job and return a structured outcome.
 
     Args:
         job_analysis_id: The UUID of the JobAnalysis to tailor.
@@ -68,14 +91,23 @@ def run_tailoring(
         job = db.get(JobAnalysis, job_analysis_id)
         if job is None:
             logger.error("tailor_job_not_found job_id=%s", job_analysis_id)
-            return
+            return _tailoring_failure(
+                job_analysis_id,
+                "job_analysis_not_found",
+                f"job_analysis {job_analysis_id} not found",
+            )
 
         if job.status != STATUS_NEEDS_TAILORING:
             logger.warning(
                 "tailor_skip_wrong_status job_id=%s status=%s",
-                job_analysis_id, job.status,
+                job_analysis_id,
+                job.status,
             )
-            return
+            return _tailoring_failure(
+                job_analysis_id,
+                "invalid_job_status",
+                f"job_analysis {job_analysis_id} status is {job.status}",
+            )
 
         logger.info("tailor_start job_id=%s score=%s", job_analysis_id, job.score)
         if job.profile_id:
@@ -86,10 +118,21 @@ def run_tailoring(
             # marked one profile as default doesn't suddenly get tailored
             # against whatever they uploaded most recently.
             from backend.app.services.evaluator_v2 import get_default_profile
+
             baseline = get_default_profile(db)
         if baseline is None:
             logger.error("tailor_no_baseline job_id=%s", job_analysis_id)
-            return
+            return _tailoring_failure(
+                job_analysis_id,
+                "baseline_profile_not_found",
+                "baseline_profile not set",
+            )
+        if _is_cancelled(job_analysis_id, cancel_requested):
+            return _tailoring_failure(
+                job_analysis_id,
+                "job_cancelled",
+                "tailoring job was cancelled",
+            )
 
         baseline_text = baseline.skills_text
         structured_data = baseline.structured_data
@@ -144,31 +187,63 @@ def run_tailoring(
                 job_analysis_id=job_analysis_id,
             )
             logger.error("tailor_llm_failed job_id=%s error=%s", job_analysis_id, exc)
-            return
+            return _tailoring_failure(
+                job_analysis_id,
+                error_code_for_exception(exc),
+                error_message_for_exception(exc),
+            )
         latency_ms = int((time.perf_counter() - started) * 1000)
+        if _is_cancelled(job_analysis_id, cancel_requested):
+            return _tailoring_failure(
+                job_analysis_id,
+                "job_cancelled",
+                "tailoring job was cancelled",
+            )
 
-        resume = GeneratedResume(
-            job_analysis_id=job_analysis_id,
-            resume_text=result["tailored_resume"],
-            pdf_url=None,
-            prompt_version=prompt_version,
-            llm_backend=backend,
-            llm_model=model,
-            proof_point_ids=proof_point_ids,
-        )
-        db.add(resume)
-        db.flush()
+        try:
+            if _is_cancelled(job_analysis_id, cancel_requested):
+                return _tailoring_failure(
+                    job_analysis_id,
+                    "job_cancelled",
+                    "tailoring job was cancelled",
+                )
+            resume = GeneratedResume(
+                job_analysis_id=job_analysis_id,
+                resume_text=result["tailored_resume"],
+                pdf_url=None,
+                prompt_version=prompt_version,
+                llm_backend=backend,
+                llm_model=model,
+                proof_point_ids=proof_point_ids,
+            )
+            db.add(resume)
+            db.flush()
 
-        write_generated_resume_pdf(
-            get_settings().storage_dir,
-            resume.id,
-            resume.resume_text,
-        )
-        resume.pdf_url = f"/api/generated-resumes/{resume.id}/pdf"
+            write_generated_resume_pdf(
+                get_settings().storage_dir,
+                resume.id,
+                resume.resume_text,
+            )
+            if _is_cancelled(job_analysis_id, cancel_requested):
+                db.rollback()
+                return _tailoring_failure(
+                    job_analysis_id,
+                    "job_cancelled",
+                    "tailoring job was cancelled",
+                )
+            resume.pdf_url = f"/api/generated-resumes/{resume.id}/pdf"
 
-        job.can_submit = True
-        db.commit()
-        db.refresh(resume)
+            job.can_submit = True
+            db.commit()
+            db.refresh(resume)
+        except Exception as exc:
+            db.rollback()
+            logger.exception("tailor_persist_failed job_id=%s", job_analysis_id)
+            return _tailoring_failure(
+                job_analysis_id,
+                "tailor_persist_failed",
+                type(exc).__name__,
+            )
         record_llm_audit_log(
             db,
             workflow_step=STEP_TAILOR,
@@ -194,7 +269,13 @@ def run_tailoring(
 
         logger.info(
             "tailor_complete job_id=%s resume_id=%s",
-            job_analysis_id, resume.id,
+            job_analysis_id,
+            resume.id,
+        )
+        return TailoringResult(
+            job_analysis_id=job_analysis_id,
+            status=TAILORING_STATUS_SUCCEEDED,
+            generated_resume_id=resume.id,
         )
 
 
@@ -229,3 +310,32 @@ def _call_tailor_llm(
         result = tailor(**kwargs)
         return validate_tailor_output(result, source=llm.__class__.__name__)
     raise LLMInvalidOutputError("active LLM client does not implement tailor")
+
+
+def _tailoring_failure(
+    job_analysis_id: uuid.UUID,
+    error_code: str,
+    error_message: str,
+) -> TailoringResult:
+    return TailoringResult(
+        job_analysis_id=job_analysis_id,
+        status=TAILORING_STATUS_FAILED,
+        error_code=error_code,
+        error_message=error_message,
+    )
+
+
+def _is_cancelled(
+    job_analysis_id: uuid.UUID,
+    cancel_requested: Callable[[], bool] | None,
+) -> bool:
+    if cancel_requested is None:
+        return False
+    try:
+        cancelled = cancel_requested()
+    except Exception:
+        logger.exception("tailor_cancel_check_failed job_id=%s", job_analysis_id)
+        return False
+    if cancelled:
+        logger.info("tailor_cancelled job_id=%s", job_analysis_id)
+    return cancelled

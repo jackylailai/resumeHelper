@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from backend.app.services.job_queue import AI_JOB_KIND_TAILOR, AI_JOB_STATUS_SUCCEEDED
+from backend.app.workers.job_queue import run_job_queue_once
+
 
 def test_tailoring_uses_relevant_proof_points(client: TestClient):
     profile = client.post(
@@ -40,15 +43,24 @@ def test_tailoring_uses_relevant_proof_points(client: TestClient):
         "/api/evaluate",
         json={
             "profile_id": profile["id"],
-            "jd_text": (
-                "Backend role needing FastAPI and Redis performance work. "
-                "[[score=72]]"
-            ),
+            "jd_text": ("Backend role needing FastAPI and Redis performance work. " "[[score=72]]"),
         },
     )
 
     assert evaluate_response.status_code == 200
-    job_id = evaluate_response.json()["data"]["job_analysis_id"]
+    data = evaluate_response.json()["data"]
+    assert data["tailoring_job_id"]
+    assert data["tailoring_status"] == "queued"
+    job_id = data["job_analysis_id"]
+
+    worker_result = run_job_queue_once(
+        llm=client.app.state.llm_client,  # type: ignore[union-attr]
+        session_factory=client.app.state.session_factory,  # type: ignore[union-attr]
+        kind=AI_JOB_KIND_TAILOR,
+    )
+    assert worker_result is not None
+    assert worker_result.status == AI_JOB_STATUS_SUCCEEDED
+
     detail_response = client.get(f"/api/history/{job_id}")
 
     assert detail_response.status_code == 200

@@ -44,7 +44,7 @@ Implemented:
 
 | Issue | Theme | Notes |
 |-------|-------|-------|
-| #71 | Durable background job queue | Replace or supplement FastAPI BackgroundTasks for evaluate/tailor flows. Needed for restart safety and progress tracking. |
+| #71 | Durable background job queue | In progress for tailoring: evaluate/history expose `tailoring_job_id` + `tailoring_status`, `/api/jobs/{job_id}` exposes status/result/error/progress, and the frontend polls durable job state before loading history. Backend queue hardening must preserve restart safety. |
 
 ## AI Engineering Maturity Targets
 
@@ -66,7 +66,7 @@ Required capabilities:
 - Factuality checks for tailored resumes.
 - Prompt/model versioning with audit metadata.
 - Observability for latency, token usage, errors, and request IDs.
-- Durable job state for long-running LLM work.
+- Durable job state for long-running LLM work, starting with tailoring jobs.
 - Human review gate before application submission.
 - Cost, quota, and privacy controls.
 

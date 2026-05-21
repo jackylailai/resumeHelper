@@ -219,6 +219,16 @@ TDD: write tests RED before implementation.
 
 ---
 
+### P2.5-T22 Durable tailoring jobs (issue #71, PR1)
+- [x] `static/features/evaluate.js` - when `tailoring_job_id` is present, poll `GET /api/jobs/{job_id}`; on `succeeded`, reload `GET /api/history/{job_analysis_id}`; on `failed`/`cancelled`, show a readable failure state.
+- [x] `static/features/evaluate.js` - preserve the existing history polling fallback when no durable job ID is present.
+- [x] `specs/current-product-spec.md`, `roadmap.md`, and Speckit docs - document durable tailoring job status, result/error/progress contract, and frontend polling behavior.
+- [x] `contracts/openapi.yaml` - adds `GET /api/jobs/{job_id}`, `TailoringJob`, `TailoringJobEnvelope`, and `tailoring_job_id` / `tailoring_status` fields on evaluate/history response schemas.
+- [ ] Backend slice: add durable job model/migration, enqueue/update semantics, restart-safe worker behavior, and API implementation without regressing existing history fallback.
+- [ ] Backend tests: response schema coverage for evaluate/history job metadata and `/api/jobs/{job_id}` terminal states.
+
+---
+
 ## Phase 3 — Roadmap (future)
 
 - Crawler / external job ingestion pipeline (n8n removed; will be re-introduced as a separate service if/when needed — `/api/callback` already accepts external resume delivery)

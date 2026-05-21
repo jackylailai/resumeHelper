@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.models.llm_audit_log import LLMAuditLog
+from backend.app.services.job_queue import AI_JOB_KIND_TAILOR, AI_JOB_STATUS_SUCCEEDED
 from backend.app.services.llm import LLMInvalidOutputError
+from backend.app.workers.job_queue import run_job_queue_once
 
 
 @pytest.mark.integration
@@ -22,6 +24,14 @@ def test_evaluate_and_tailor_write_success_audit_logs(
 
     assert response.status_code == 200
     request_id = response.json()["meta"]["request_id"]
+    worker_result = run_job_queue_once(
+        llm=client.app.state.llm_client,  # type: ignore[union-attr]
+        session_factory=client.app.state.session_factory,  # type: ignore[union-attr]
+        kind=AI_JOB_KIND_TAILOR,
+    )
+    assert worker_result is not None
+    assert worker_result.status == AI_JOB_STATUS_SUCCEEDED
+
     Session = sessionmaker(bind=db_engine)
     with Session() as db:
         rows = db.query(LLMAuditLog).all()

@@ -1,7 +1,7 @@
 # Current Product Specification
 
 **Status**: current main branch reference
-**Updated**: 2026-05-11
+**Updated**: 2026-05-21
 **Scope**: single-user job search workflow with LLM-assisted scoring,
 tailoring, PDF review, scraping, and application tracking
 
@@ -64,6 +64,28 @@ Important fields:
 ### GeneratedResume
 
 Stores generated tailored resume content and PDF-related links.
+
+### TailoringJob
+
+Tracks durable background tailoring work for a `needs_tailoring` analysis.
+
+Important fields:
+
+- `id`
+- `job_analysis_id`
+- `status`
+- `result_payload`
+- `error_code`
+- `error_message`
+- progress fields
+
+Statuses include:
+
+- `queued`
+- `running`
+- `succeeded`
+- `failed`
+- `cancelled`
 
 ### JobListing
 
@@ -158,13 +180,14 @@ Output:
 - explanation
 - strengths
 - gaps
+- `tailoring_job_id` and `tailoring_status` when tailoring is queued
 
 State routing:
 
 | Score | Status | Behavior |
 |-------|--------|----------|
 | 85-100 | `ready_to_submit` | Mark as potentially ready. |
-| 60-84 | `needs_tailoring` | Queue or run tailoring. |
+| 60-84 | `needs_tailoring` | Queue durable tailoring and return job status metadata. |
 | 0-59 | `skip` | Keep result with skip reason. |
 
 The LLM provides the score and explanation. Application code owns the status
@@ -204,6 +227,15 @@ opportunities/application views.
 
 For `needs_tailoring`, the system generates a tailored resume draft. The user
 must review the output before submitting to any platform.
+
+Tailoring is represented as durable job state. Evaluate/history responses expose
+`tailoring_job_id` and `tailoring_status`. The frontend polls
+`GET /api/jobs/{job_id}` until the job reaches `succeeded`, `failed`, or
+`cancelled`. On `succeeded`, the frontend reloads
+`GET /api/history/{job_analysis_id}` to fetch the generated resume. On
+`failed` or `cancelled`, the UI shows the readable job error state and leaves
+the history fallback available for responses that do not include a durable job
+ID.
 
 Tailoring must use baseline profile and structured data as source of truth.
 Proof points are available as a managed evidence library and should become an
@@ -281,6 +313,23 @@ Validation requirements:
 - no invented employer/date/metric/certification/degree/skill
 - key baseline facts are preserved
 
+### Durable Tailoring Job Contract
+
+`POST /api/evaluate` returns `tailoring_job_id` and `tailoring_status` when a
+`needs_tailoring` analysis queues resume generation. `GET /api/history` and
+`GET /api/history/{job_analysis_id}` also expose the latest tailoring job
+metadata for the analysis.
+
+`GET /api/jobs/{job_id}` returns:
+
+- job identity and `job_analysis_id`
+- `status`: `queued`, `running`, `succeeded`, `failed`, or `cancelled`
+- `result_payload` for successful job metadata
+- `error_code` and `error_message` for failed jobs
+- progress fields suitable for simple polling UI text
+
+Clients treat only `succeeded`, `failed`, and `cancelled` as terminal.
+
 ### Structured Extraction Contract
 
 Input spec:
@@ -337,7 +386,8 @@ Known gaps:
   fixture checks.
 - Tailoring factuality has a deterministic smoke harness; broader fixture
   coverage is still needed.
-- Long-running work still relies partly on FastAPI BackgroundTasks.
+- Durable tailoring job state is specified for #71; backend queue hardening must
+  preserve restart-safe status transitions and progress reporting.
 - CI eval reports cover deterministic evaluate, tailor, structured extraction,
   and beautify fixtures.
 - Audit logs capture prompt/model metadata for production LLM calls, but there

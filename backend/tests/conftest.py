@@ -15,6 +15,7 @@ from backend.app.services.llm.fake import FakeLLMClient
 # Database fixture — testcontainers-postgres
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def postgres_url() -> Generator[str, None, None]:
     from testcontainers.postgres import PostgresContainer  # type: ignore[import]
@@ -49,6 +50,7 @@ def db_session(db_engine):  # type: ignore[no-untyped-def]
 # FastAPI TestClient
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fake_llm() -> FakeLLMClient:
     return FakeLLMClient(default_score=72)
@@ -64,6 +66,7 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
 
     # Clear lru_cache so settings are re-read with test env
     from backend.app.config import get_settings
+
     get_settings.cache_clear()
 
     from sqlalchemy.orm import sessionmaker
@@ -92,11 +95,13 @@ def client(db_engine, fake_llm, tmp_path: Path) -> Generator[TestClient, None, N
 
     # Truncate all tables after each test so next test starts clean
     with db_engine.connect() as conn:
-        conn.execute(text(
-            "TRUNCATE TABLE proof_points, llm_audit_logs, scrape_runs, applications, "
-            "generated_resumes, job_listings, job_analyses, baseline_profile "
-            "RESTART IDENTITY CASCADE"
-        ))
+        conn.execute(
+            text(
+                "TRUNCATE TABLE ai_jobs, proof_points, llm_audit_logs, scrape_runs, "
+                "applications, generated_resumes, job_listings, job_analyses, baseline_profile "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
         conn.commit()
 
 
@@ -116,4 +121,5 @@ def sample_jd() -> str:
 def minimal_pdf_bytes() -> bytes:
     """Minimal valid single-page PDF containing the text 'Hello World'."""
     from backend.tests.unit.test_parsing import make_minimal_pdf
+
     return make_minimal_pdf("Hello World")

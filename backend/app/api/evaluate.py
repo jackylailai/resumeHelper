@@ -5,7 +5,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,12 @@ from backend.app.services.ai_guardrails import (
 from backend.app.services.evaluator_v2 import (
     evaluate_jd,
     get_default_profile as get_baseline,
+)
+from backend.app.services.job_queue import (
+    AIJobModelUnavailable,
+    TailoringJobRef,
+    enqueue_tailoring_job,
+    get_tailoring_job_ref,
 )
 from backend.app.services.llm import (
     LLMClient,
@@ -88,29 +94,29 @@ def _jd_length_error(
 
 
 def _queue_tailoring_if_needed(
+    db: Session,
     job: JobAnalysis,
-    cached: bool,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    llm: LLMClient,
     prompt_version: str,
-) -> None:
-    if cached or job.status != STATUS_NEEDS_TAILORING:
-        return
+    request_id: str | None = None,
+) -> TailoringJobRef | None:
+    if job.status != STATUS_NEEDS_TAILORING:
+        return None
 
-    # Lazy import avoids circular dependency: tailor -> db -> main -> evaluate -> tailor
-    from backend.app.workers.tailor import run_tailoring
-
-    session_factory = getattr(request.app.state, "session_factory", None)
-    background_tasks.add_task(
-        run_tailoring,
+    ref = enqueue_tailoring_job(
+        db,
         job_analysis_id=job.id,
-        llm=llm,
         prompt_version=prompt_version,
-        session_factory=session_factory,
-        request_id=getattr(request.state, "request_id", None),
+        request_id=request_id,
     )
-    logger.info("tailor_task_queued job_id=%s score=%s", job.id, job.score)
+    if ref is not None:
+        logger.info(
+            "tailor_job_ensured job_id=%s ai_job_id=%s status=%s score=%s",
+            job.id,
+            ref.id,
+            ref.status,
+            job.score,
+        )
+    return ref
 
 
 def _quota_error(exc: QuotaExceededError) -> JSONResponse:
@@ -123,10 +129,42 @@ def _quota_error(exc: QuotaExceededError) -> JSONResponse:
     )
 
 
+def _listing_result_out(
+    db: Session,
+    result: object,
+) -> schemas.EvaluateByListingsResult:
+    job_analysis_id = getattr(result, "job_analysis_id", None)
+    tailoring_ref = (
+        get_tailoring_job_ref(db, job_analysis_id=job_analysis_id)
+        if job_analysis_id is not None
+        else None
+    )
+    return schemas.EvaluateByListingsResult(
+        listing_id=result.listing_id,
+        job_analysis_id=job_analysis_id,
+        score=result.score,
+        status=result.status,  # type: ignore[arg-type]
+        cached=result.cached,
+        error=result.error,
+        tailoring_job_id=tailoring_ref.id if tailoring_ref is not None else None,
+        tailoring_status=tailoring_ref.status if tailoring_ref is not None else None,
+    )
+
+
+def _add_tailoring_meta(
+    db: Session,
+    item: dict,
+    job_analysis_id: uuid.UUID,
+) -> dict:
+    tailoring_ref = get_tailoring_job_ref(db, job_analysis_id=job_analysis_id)
+    item["tailoring_job_id"] = str(tailoring_ref.id) if tailoring_ref else None
+    item["tailoring_status"] = tailoring_ref.status if tailoring_ref else None
+    return item
+
+
 @router.post("/evaluate")
 def evaluate(
     body: schemas.EvaluateIn,
-    background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -143,7 +181,9 @@ def evaluate(
     llm = _get_llm(request)
     try:
         job, cached = evaluate_jd(
-            db, body.jd_text, llm,
+            db,
+            body.jd_text,
+            llm,
             prompt_version=evaluate_prompt_version,
             threshold=settings.resume_gen_threshold,
             profile_id=body.profile_id,
@@ -167,21 +207,15 @@ def evaluate(
         message = f"Score {job.score}: Low match. Skipping this job. {job.skip_reason or ''}"
         action = "skip"
 
-    # For needs_tailoring, trigger background tailoring (only on fresh evaluations)
-    if status == STATUS_NEEDS_TAILORING and not cached:
-        # Lazy import avoids circular dependency: tailor → db → main → evaluate → tailor
-        from backend.app.workers.tailor import run_tailoring
-        # Use test-injected session factory if present, else default
-        session_factory = getattr(request.app.state, "session_factory", None)
-        background_tasks.add_task(
-            run_tailoring,
-            job_analysis_id=job.id,
-            llm=llm,
-            prompt_version=tailor_prompt_version,
-            session_factory=session_factory,
-            request_id=getattr(request.state, "request_id", None),
+    try:
+        tailoring_ref = _queue_tailoring_if_needed(
+            db,
+            job,
+            tailor_prompt_version,
+            getattr(request.state, "request_id", None),
         )
-        logger.info("tailor_task_queued job_id=%s score=%s", job.id, job.score)
+    except AIJobModelUnavailable as exc:
+        return error("job_queue_unavailable", str(exc), status_code=503)
 
     out = schemas.EvaluateOut(
         job_analysis_id=job.id,
@@ -196,6 +230,8 @@ def evaluate(
         prompt_version=job.prompt_version,
         llm_backend=job.llm_backend,
         llm_model=job.llm_model,
+        tailoring_job_id=tailoring_ref.id if tailoring_ref is not None else None,
+        tailoring_status=tailoring_ref.status if tailoring_ref is not None else None,
     )
 
     return success(
@@ -207,7 +243,6 @@ def evaluate(
 @router.post("/evaluate/bulk")
 def bulk_evaluate(
     body: schemas.BulkEvaluateIn,
-    background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -251,7 +286,9 @@ def bulk_evaluate(
     for jd_text in body.jd_texts:
         try:
             job, cached = evaluate_jd(
-                db, jd_text, llm,
+                db,
+                jd_text,
+                llm,
                 prompt_version=evaluate_prompt_version,
                 threshold=settings.resume_gen_threshold,
             )
@@ -264,26 +301,27 @@ def bulk_evaluate(
             cached_count += 1
         else:
             new_count += 1
-            if job.status == STATUS_NEEDS_TAILORING:
-                # Lazy import avoids circular dependency: tailor → db → main → evaluate → tailor
-                from backend.app.workers.tailor import run_tailoring
-                session_factory = getattr(request.app.state, "session_factory", None)
-                background_tasks.add_task(
-                    run_tailoring,
-                    job_analysis_id=job.id,
-                    llm=llm,
-                    prompt_version=tailor_prompt_version,
-                    session_factory=session_factory,
-                    request_id=getattr(request.state, "request_id", None),
-                )
+        try:
+            tailoring_ref = _queue_tailoring_if_needed(
+                db,
+                job,
+                tailor_prompt_version,
+                getattr(request.state, "request_id", None),
+            )
+        except AIJobModelUnavailable as exc:
+            return error("job_queue_unavailable", str(exc), status_code=503)
 
-        results.append(schemas.BulkEvaluateResult(
-            job_analysis_id=job.id,
-            jd_snippet=job.jd_snippet,
-            score=job.score or 0,
-            status=job.status or STATUS_SKIP,
-            cached=cached,
-        ))
+        results.append(
+            schemas.BulkEvaluateResult(
+                job_analysis_id=job.id,
+                jd_snippet=job.jd_snippet,
+                score=job.score or 0,
+                status=job.status or STATUS_SKIP,
+                cached=cached,
+                tailoring_job_id=tailoring_ref.id if tailoring_ref is not None else None,
+                tailoring_status=tailoring_ref.status if tailoring_ref is not None else None,
+            )
+        )
 
     out = schemas.BulkEvaluateOut(
         total=len(results),
@@ -301,7 +339,6 @@ def bulk_evaluate(
 @router.post("/evaluate/by-listings")
 def evaluate_by_listings(
     body: schemas.EvaluateByListingsIn,
-    background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -318,17 +355,17 @@ def evaluate_by_listings(
             profile_id=body.profile_id,
             workflow=EVALUATE_LISTINGS_WORKFLOW,
             max_items=settings.max_evaluate_listing_items,
-            on_evaluated=lambda job, cached: _queue_tailoring_if_needed(
+            on_evaluated=lambda job, _cached: _queue_tailoring_if_needed(
+                db,
                 job,
-                cached,
-                background_tasks,
-                request,
-                llm,
                 tailor_prompt_version,
+                getattr(request.state, "request_id", None),
             ),
         )
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
+    except AIJobModelUnavailable as exc:
+        return error("job_queue_unavailable", str(exc), status_code=503)
     except QuotaExceededError as exc:
         return _quota_error(exc)
 
@@ -348,21 +385,9 @@ def evaluate_by_listings(
         estimated_total_tokens=summary.estimate.estimated_total_tokens
         if summary.estimate
         else None,
-        estimated_cost_usd=summary.estimate.estimated_cost_usd
-        if summary.estimate
-        else None,
+        estimated_cost_usd=summary.estimate.estimated_cost_usd if summary.estimate else None,
         warnings=summary.warnings,
-        results=[
-            schemas.EvaluateByListingsResult(
-                listing_id=result.listing_id,
-                job_analysis_id=result.job_analysis_id,
-                score=result.score,
-                status=result.status,  # type: ignore[arg-type]
-                cached=result.cached,
-                error=result.error,
-            )
-            for result in summary.results
-        ],
+        results=[_listing_result_out(db, result) for result in summary.results],
     )
     return success(out.model_dump(mode="json"))
 
@@ -370,7 +395,6 @@ def evaluate_by_listings(
 @router.post("/evaluate/pending-listings")
 def evaluate_pending_scraped_listings(
     body: schemas.EvaluatePendingListingsIn,
-    background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
@@ -387,17 +411,17 @@ def evaluate_pending_scraped_listings(
             limit=body.limit,
             workflow=EVALUATE_LISTINGS_WORKFLOW,
             max_items=settings.max_evaluate_pending_items,
-            on_evaluated=lambda job, cached: _queue_tailoring_if_needed(
+            on_evaluated=lambda job, _cached: _queue_tailoring_if_needed(
+                db,
                 job,
-                cached,
-                background_tasks,
-                request,
-                llm,
                 tailor_prompt_version,
+                getattr(request.state, "request_id", None),
             ),
         )
     except LookupError as exc:
         return error("not_found", str(exc), status_code=404)
+    except AIJobModelUnavailable as exc:
+        return error("job_queue_unavailable", str(exc), status_code=503)
     except QuotaExceededError as exc:
         return _quota_error(exc)
 
@@ -417,21 +441,9 @@ def evaluate_pending_scraped_listings(
         estimated_total_tokens=summary.estimate.estimated_total_tokens
         if summary.estimate
         else None,
-        estimated_cost_usd=summary.estimate.estimated_cost_usd
-        if summary.estimate
-        else None,
+        estimated_cost_usd=summary.estimate.estimated_cost_usd if summary.estimate else None,
         warnings=summary.warnings,
-        results=[
-            schemas.EvaluateByListingsResult(
-                listing_id=result.listing_id,
-                job_analysis_id=result.job_analysis_id,
-                score=result.score,
-                status=result.status,  # type: ignore[arg-type]
-                cached=result.cached,
-                error=result.error,
-            )
-            for result in summary.results
-        ],
+        results=[_listing_result_out(db, result) for result in summary.results],
     )
     return success(out.model_dump(mode="json"))
 
@@ -473,7 +485,14 @@ def list_history(
 ) -> JSONResponse:
     """Return job analyses in reverse-chronological order, grouped by status."""
     jobs = db.query(JobAnalysis).order_by(JobAnalysis.created_at.desc()).limit(limit).all()
-    items = [schemas.HistoryItemOut.model_validate(j).model_dump(mode="json") for j in jobs]
+    items = [
+        _add_tailoring_meta(
+            db,
+            schemas.HistoryItemOut.model_validate(j).model_dump(mode="json"),
+            j.id,
+        )
+        for j in jobs
+    ]
 
     grouped: dict[str, list] = {
         STATUS_READY_TO_SUBMIT: [],
@@ -626,7 +645,11 @@ def get_history_item(job_id: uuid.UUID, db: Session = Depends(get_db)) -> JSONRe
         .order_by(GeneratedResume.created_at.desc())
         .all()
     )
-    data = schemas.HistoryDetailOut.model_validate(job).model_dump(mode="json")
+    data = _add_tailoring_meta(
+        db,
+        schemas.HistoryDetailOut.model_validate(job).model_dump(mode="json"),
+        job.id,
+    )
     if job.profile_id:
         profile = db.get(BaselineProfile, job.profile_id)
         data["baseline_profile_text"] = profile.skills_text if profile else None

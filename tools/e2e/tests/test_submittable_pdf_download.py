@@ -1,12 +1,19 @@
-"""needs_tailoring evaluate → background tailoring writes PDF →
-Submittable tab lists it → clicking the PDF link returns a 200 PDF."""
+"""needs_tailoring evaluate -> durable worker writes PDF.
+
+Submittable tab lists it and the PDF link returns a 200 PDF."""
+
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
 import httpx
 from playwright.sync_api import Page, expect
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _wait_for_submittable_with_pdf(base_url: str, timeout: float = 30.0) -> dict:
@@ -23,8 +30,25 @@ def _wait_for_submittable_with_pdf(base_url: str, timeout: float = 30.0) -> dict
     raise AssertionError(f"no submittable row with pdf_url within {timeout}s; last: {last}")
 
 
+def _run_tailoring_worker_once(database_url: str) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "backend.app.workers.job_queue",
+            "--once",
+            "--kind",
+            "tailor",
+        ],
+        check=True,
+        cwd=str(PROJECT_ROOT),
+        env={**os.environ, "DATABASE_URL": database_url, "LLM_BACKEND": "fake"},
+    )
+
+
 def test_submittable_renders_tailored_pdf(
     live_app: str,
+    _e2e_db: str,
     seeded_profile: dict,
     page: Page,
     shots_dir: Path,
@@ -40,7 +64,9 @@ def test_submittable_renders_tailored_pdf(
     r.raise_for_status()
     body = r.json()["data"]
     assert body["status"] == "needs_tailoring", body
+    assert body["tailoring_job_id"], body
 
+    _run_tailoring_worker_once(_e2e_db)
     submittable_row = _wait_for_submittable_with_pdf(live_app)
     pdf_url = submittable_row["pdf_url"]
     assert pdf_url.startswith("/api/generated-resumes/"), pdf_url

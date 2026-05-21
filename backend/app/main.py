@@ -19,6 +19,7 @@ from backend.app.api.envelope import error, reset_request_id, set_request_id
 from backend.app.api.evaluate import router as evaluate_router
 from backend.app.api.health import router as health_router
 from backend.app.api.job_listings import router as job_listings_router
+from backend.app.api.jobs import router as jobs_router
 from backend.app.api.opportunities import router as opportunities_router
 from backend.app.api.profile import router as profile_router
 from backend.app.api.proof_points import router as proof_points_router
@@ -198,6 +199,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api")
     app.include_router(profile_router, prefix="/api")
     app.include_router(evaluate_router, prefix="/api")
+    app.include_router(jobs_router, prefix="/api")
     app.include_router(job_listings_router, prefix="/api")
     app.include_router(opportunities_router, prefix="/api")
     app.include_router(applications_router, prefix="/api")

@@ -19,6 +19,7 @@ tags:
   - name: profile
   - name: evaluate
   - name: history
+  - name: jobs
   - name: job-listings
   - name: applications
 
@@ -302,7 +303,7 @@ paths:
       description: |
         Scores the JD 0–100 and returns one of three statuses:
         - `ready_to_submit` (85+): no tailoring needed
-        - `needs_tailoring` (60–84): background tailoring triggered
+        - `needs_tailoring` (60–84): durable tailoring queued
         - `skip` (<60): poor fit, skip_reason provided
         Duplicate JDs (same content hash) return the cached result.
       requestBody:
@@ -330,7 +331,7 @@ paths:
       description: |
         Evaluates each JD against the baseline. Deduplicates by content hash —
         a JD already in the DB returns `cached: true` without an LLM call.
-        Background tailoring is triggered for each new `needs_tailoring` result.
+        Durable tailoring is triggered for each new `needs_tailoring` result.
       requestBody:
         required: true
         content:
@@ -362,6 +363,28 @@ paths:
       responses:
         "200":
           description: Per-listing evaluation summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluateByListingsEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /api/evaluate/pending-listings:
+    post:
+      tags: [evaluate]
+      summary: Score pending JD Database listings and link successful analyses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluatePendingListingsIn"
+      responses:
+        "200":
+          description: Pending-listing evaluation summary
           content:
             application/json:
               schema:
@@ -422,6 +445,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HistoryDetailEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/jobs/{job_id}:
+    get:
+      tags: [jobs]
+      summary: Get durable tailoring job status
+      description: |
+        Returns the current state for a durable tailoring job created by
+        evaluation. Clients poll this endpoint until `status` is `succeeded`,
+        `failed`, or `cancelled`. On `succeeded`, fetch
+        `/api/history/{job_analysis_id}` for the generated resume.
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Durable job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TailoringJobEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [jobs]
+      summary: Request cancellation for a durable AI job
+      description: |
+        Cancels queued or retry-wait jobs immediately. Running jobs move to
+        `cancel_requested`; workers observe that signal before committing
+        generated output.
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Updated durable job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TailoringJobEnvelope"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -685,6 +753,11 @@ components:
       type: object
       properties:
         job_analysis_id: { type: string, format: uuid }
+        tailoring_job_id: { type: string, format: uuid, nullable: true }
+        tailoring_status:
+          type: string
+          enum: [queued, running, retry_wait, cancel_requested, cancelled, succeeded, failed]
+          nullable: true
         score: { type: integer, minimum: 0, maximum: 100 }
         explanation: { type: string }
         strengths:
@@ -701,6 +774,9 @@ components:
         action:
           type: string
           enum: [none, tailoring, skip]
+        prompt_version: { type: string, nullable: true }
+        llm_backend: { type: string, nullable: true }
+        llm_model: { type: string, nullable: true }
 
     BulkEvaluateIn:
       type: object
@@ -716,6 +792,11 @@ components:
       type: object
       properties:
         job_analysis_id: { type: string, format: uuid }
+        tailoring_job_id: { type: string, format: uuid, nullable: true }
+        tailoring_status:
+          type: string
+          enum: [queued, running, retry_wait, cancel_requested, cancelled, succeeded, failed]
+          nullable: true
         jd_snippet: { type: string }
         score: { type: integer, minimum: 0, maximum: 100 }
         status:
@@ -729,6 +810,12 @@ components:
         total: { type: integer }
         new: { type: integer }
         cached: { type: integer }
+        skipped: { type: integer }
+        blocked: { type: integer }
+        estimated_input_tokens: { type: integer, nullable: true }
+        estimated_output_tokens: { type: integer, nullable: true }
+        estimated_total_tokens: { type: integer, nullable: true }
+        estimated_cost_usd: { type: number, nullable: true }
         results:
           type: array
           items: { $ref: "#/components/schemas/BulkEvaluateResult" }
@@ -744,11 +831,23 @@ components:
           maxItems: 20
           items: { type: string, format: uuid }
 
+    EvaluatePendingListingsIn:
+      type: object
+      properties:
+        profile_id: { type: integer, nullable: true }
+        source: { type: string, nullable: true }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 100 }
+
     EvaluateByListingsResult:
       type: object
       properties:
         listing_id: { type: string, format: uuid }
         job_analysis_id: { type: string, format: uuid, nullable: true }
+        tailoring_job_id: { type: string, format: uuid, nullable: true }
+        tailoring_status:
+          type: string
+          enum: [queued, running, retry_wait, cancel_requested, cancelled, succeeded, failed]
+          nullable: true
         score: { type: integer, minimum: 0, maximum: 100, nullable: true }
         status:
           type: string
@@ -763,6 +862,18 @@ components:
         total: { type: integer }
         succeeded: { type: integer }
         failed: { type: integer }
+        skipped: { type: integer }
+        blocked: { type: integer }
+        tailoring_blocked: { type: integer }
+        estimated_input_tokens: { type: integer, nullable: true }
+        estimated_output_tokens: { type: integer, nullable: true }
+        estimated_total_tokens: { type: integer, nullable: true }
+        estimated_cost_usd: { type: number, nullable: true }
+        warnings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         results:
           type: array
           items: { $ref: "#/components/schemas/EvaluateByListingsResult" }
@@ -780,11 +891,20 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        profile_id: { type: integer, nullable: true }
+        tailoring_job_id: { type: string, format: uuid, nullable: true }
+        tailoring_status:
+          type: string
+          enum: [queued, running, retry_wait, cancel_requested, cancelled, succeeded, failed]
+          nullable: true
         jd_snippet: { type: string, nullable: true }
         score: { type: integer, nullable: true }
         threshold_met: { type: boolean }
         status: { type: string, nullable: true }
         can_submit: { type: boolean }
+        prompt_version: { type: string, nullable: true }
+        llm_backend: { type: string, nullable: true }
+        llm_model: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
 
     GeneratedResume:
@@ -794,9 +914,16 @@ components:
         resume_text: { type: string }
         pdf_url: { type: string, nullable: true }
         prompt_version: { type: string, nullable: true }
+        llm_backend: { type: string, nullable: true }
+        llm_model: { type: string, nullable: true }
         proof_point_ids:
           type: array
           items: { type: string }
+        revision_source: { type: string }
+        exported_at: { type: string, format: date-time, nullable: true }
+        beautifications:
+          type: array
+          items: { $ref: "#/components/schemas/Beautification" }
         created_at: { type: string, format: date-time }
 
     HistoryDetail:
@@ -806,9 +933,63 @@ components:
           properties:
             jd_full_text: { type: string }
             skip_reason: { type: string, nullable: true }
+            baseline_profile_text: { type: string, nullable: true }
             generated_resumes:
               type: array
               items: { $ref: "#/components/schemas/GeneratedResume" }
+
+    Beautification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        generated_resume_id: { type: string, format: uuid }
+        style: { type: string }
+        prompt_version: { type: string, nullable: true }
+        llm_backend: { type: string, nullable: true }
+        llm_model: { type: string, nullable: true }
+        html_url: { type: string, nullable: true }
+        pdf_url: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    TailoringJob:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [tailor, evaluate, evaluate_bulk, evaluate_listing, evaluate_pending_listings]
+        job_analysis_id: { type: string, format: uuid, nullable: true }
+        parent_job_id: { type: string, format: uuid, nullable: true }
+        dedupe_key: { type: string, nullable: true }
+        priority: { type: integer }
+        run_after: { type: string, format: date-time }
+        attempts: { type: integer }
+        max_attempts: { type: integer }
+        locked_by: { type: string, nullable: true }
+        locked_at: { type: string, format: date-time, nullable: true }
+        status:
+          type: string
+          enum: [queued, running, retry_wait, cancel_requested, cancelled, succeeded, failed]
+        profile_id: { type: integer, nullable: true }
+        job_listing_id: { type: string, format: uuid, nullable: true }
+        generated_resume_id: { type: string, format: uuid, nullable: true }
+        prompt_version: { type: string, nullable: true }
+        request_id: { type: string, nullable: true }
+        input_payload:
+          type: object
+          additionalProperties: true
+        result_payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+        error_code: { type: string, nullable: true }
+        error_message: { type: string, nullable: true }
+        progress_current: { type: integer }
+        progress_total: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
 
     SubmittableItem:
       type: object
@@ -1017,6 +1198,13 @@ components:
       type: object
       properties:
         data: { $ref: "#/components/schemas/HistoryDetail" }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    TailoringJobEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/TailoringJob" }
         error: { type: "null" }
         meta: { $ref: "#/components/schemas/Meta" }
 

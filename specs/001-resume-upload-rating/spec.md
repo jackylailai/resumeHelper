@@ -8,7 +8,7 @@
 > implementation deltas where useful for API/model traceability.
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-21 (rev 6)
+**Updated**: 2026-05-21 (rev 7)
 **Status**: Phase 1 (implemented)
 **Authoritative direction**: multi-profile CRUD + profile-scoped evaluation; uploaded PDFs persisted on disk; v1 dead code removed; Python 3.11 floor
 
@@ -23,7 +23,7 @@ three tiers that determine the next action automatically.
 | Score | Status | Action |
 |-------|--------|--------|
 | 85–100 | `ready_to_submit` | Return immediately — no tailoring needed |
-| 60–84 | `needs_tailoring` | Trigger background tailoring via Claude API |
+| 60–84 | `needs_tailoring` | Queue durable tailoring via Claude API |
 | 0–59 | `skip` | Return immediately with a skip reason |
 
 ## User Stories
@@ -68,9 +68,12 @@ JD evaluated against different profiles produces independent results.
 6. **Given** no profile exists, **Then** a 404 with code `not_found` is returned.
 7. **Given** `jd_text` is omitted, **Then** a 422 validation error is returned.
 8. **Given** a score of 85+, **Then** `status` is `ready_to_submit` and no background tailoring is triggered.
-9. **Given** a score of 60–84, **Then** `status` is `needs_tailoring` and a background tailoring task is enqueued using the profile that was used for scoring.
+9. **Given** a score of 60–84, **Then** `status` is `needs_tailoring`, a durable tailoring job is enqueued using the profile that was used for scoring, and the response includes `tailoring_job_id` plus `tailoring_status`.
 10. **Given** relevant proof points exist for the selected profile or globally, **Then** tailoring may use those proof points as supplemental source evidence and the generated resume records the selected proof point IDs.
 11. **Given** a score below 60, **Then** `status` is `skip` and `skip_reason` explains why the job is a poor fit.
+12. **Given** a returned `tailoring_job_id`, **Then** GET `/api/jobs/{job_id}` exposes `status`, `result_payload`, `error_code`, `error_message`, and progress fields.
+13. **Given** a tailoring job succeeds, **Then** the client can fetch GET `/api/history/{job_analysis_id}` to retrieve the generated resume.
+14. **Given** a tailoring job fails or is cancelled, **Then** the job endpoint returns a readable failure state and the frontend shows that state instead of waiting indefinitely.
 
 ---
 
@@ -85,8 +88,8 @@ deduplicates by content hash, and returns a summary.
    includes per-JD results plus totals for `new`, `cached`, and `total`.
 2. **Given** duplicate JD texts in the batch, **Then** only one LLM call is
    made per unique JD — subsequent duplicates return `cached: true`.
-3. **Given** a `needs_tailoring` JD in the batch, **Then** a background
-   tailoring task is triggered exactly once for that JD.
+3. **Given** a `needs_tailoring` JD in the batch, **Then** a durable tailoring
+   job is triggered exactly once for that JD and returned with job metadata.
 
 ---
 
@@ -103,6 +106,9 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
    full JD, score, status, and any generated resumes.
 3. **Given** tailoring has completed for a JD, **Then** it appears in GET
    `/api/submittable` with `can_submit: true` and the resume text attached.
+4. **Given** an evaluation has or had tailoring work, **Then** history list and
+   detail responses expose the latest `tailoring_job_id` and
+   `tailoring_status`.
 
 ---
 
@@ -112,7 +118,7 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **FR-002**: System MUST accept profile creation via raw text (`POST /api/profiles`) or PDF upload (`POST /api/profiles/upload`); NUL bytes are stripped before storage.
 - **FR-003**: System MUST deduplicate JDs by SHA-256 hash of canonicalized text scoped to `(jd_hash, profile_id)`; re-submitting the same JD+profile combination skips the LLM call.
 - **FR-004**: System MUST score each JD 0–100 and classify it into one of three tiers: `ready_to_submit`, `needs_tailoring`, or `skip`.
-- **FR-005**: System MUST trigger background tailoring for `needs_tailoring` jobs using the specific profile used at evaluation time (stored as `profile_id` on `JobAnalysis`).
+- **FR-005**: System MUST trigger durable background tailoring for `needs_tailoring` jobs using the specific profile used at evaluation time (stored as `profile_id` on `JobAnalysis`).
 - **FR-006**: System MUST store generated resumes per job analysis with the LLM prompt version and selected proof point IDs.
 - **FR-007**: System MUST expose history (all evaluations) and a submittable list (can_submit=true with resume attached).
 - **FR-008**: System MUST accept external resume delivery via POST `/api/callback` (e.g., from n8n or a CI pipeline).
@@ -121,12 +127,14 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **FR-011**: PDF generation is out of scope for Phase 1; `pdf_url` is null.
 - **FR-012**: System MUST persist uploaded profile PDFs on local disk and store the absolute path on `baseline_profile.pdf_path`. Path scheme is `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf`. Multiple uploads against the same profile accumulate as separate timestamped files; the latest path is what lives on the row. S3 is deferred to a later phase — column type is plain TEXT so the migration is path-scheme-only.
 - **FR-013** (Phase 2.5): Scrape endpoints (`POST /api/scrape/run`, `POST /api/scrape/control/start`) and the CLI `scrape` command MUST accept an optional `must_contain` list of terms with `match_mode` (`all` | `any`) and `regex` flag. When set, listings whose JD `description` does not match are dropped after `fetch_detail()` and counted on `ScrapeRun.skipped_by_filter`; the pipeline over-fetches up to `min(limit * 3, 200)` candidates from the source to satisfy `limit` matches when possible. Default (`must_contain` unset) preserves prior behaviour.
+- **FR-014**: System MUST expose durable tailoring job status at GET `/api/jobs/{job_id}` with terminal states `succeeded`, `failed`, and `cancelled`; clients MUST reload history after success to fetch generated resumes.
 
 ## Key Entities
 
 - **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `pdf_path` (TEXT, optional — set when created via PDF upload), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
 - **JobAnalysis**: One row per unique `(jd_hash, profile_id)` pair. Stores score, status, strengths, gaps, can_submit, skip_reason, `profile_id` FK (SET NULL on profile delete).
 - **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url`, `prompt_version`, `proof_point_ids`.
+- **TailoringJob**: Durable state for one background tailoring run. Exposes `id`, `job_analysis_id`, `status`, `result_payload`, `error_code`, `error_message`, and progress fields through `/api/jobs/{job_id}`.
 - **ProofPoint**: User-maintained achievement evidence. May be linked to one profile or global; includes title, context, metrics, skills, tags, and STAR fields. Relevant proof points can be selected for tailoring prompts.
 - **JobListing** (Phase 2.5): One row per scraped JD. `source` (`104`/`yourator`/`linkedin`), `source_id` (per-platform job id), `title`, `company`, `location`, `url`, `description` (full JD), `raw_json`, `scraped_at`, `job_analysis_id` FK (SET NULL). Unique on `(source, source_id)`.
 
@@ -134,16 +142,15 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 
 - **SC-001**: Evaluate a JD in under 30 s under normal conditions.
 - **SC-002**: Duplicate JD submission returns cached result in under 1 s.
-- **SC-003**: `needs_tailoring` jobs produce a generated resume in the background without blocking the HTTP response, with selected proof point attribution when proof points were used.
+- **SC-003**: `needs_tailoring` jobs produce a generated resume through durable background state without blocking the HTTP response, with selected proof point attribution when proof points were used.
 - **SC-004**: All evaluated JDs visible in history with correct status.
 - **SC-005**: Submittable list shows only `can_submit=true` jobs with resume text.
 - **SC-006** (Phase 2.5): A single CLI run scrapes ~100 JDs across 104 / Yourator / LinkedIn into `job_listings`, deduped by `(source, source_id)`.
-- **SC-007** (Phase 2.5): Each scraped JobListing produces exactly one JobAnalysis (via the existing three-tier evaluator) and `needs_tailoring` rows trigger background tailoring without manual intervention.
+- **SC-007** (Phase 2.5): Each scraped JobListing produces exactly one JobAnalysis (via the existing three-tier evaluator) and `needs_tailoring` rows trigger durable tailoring without manual intervention.
 
 ## Out of Scope (Phase 1)
 
 - Resume versioning
-- Async job polling (`job_id`)
 - Compare endpoint
 - Multi-user authentication
 - PDF generation (weasyprint not installed)
