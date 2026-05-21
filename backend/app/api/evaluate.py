@@ -10,9 +10,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 import backend.app.schemas.evaluate as schemas
+import backend.app.schemas.jobs as job_schemas
 from backend.app.api.envelope import error, success
 from backend.app.config import get_settings
 from backend.app.db import get_db
+from backend.app.models.ai_job import AIJob
 from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_analysis import (
@@ -35,10 +37,12 @@ from backend.app.services.ai_guardrails import (
 from backend.app.services.evaluator_v2 import (
     evaluate_jd,
     get_default_profile as get_baseline,
+    get_profile,
 )
 from backend.app.services.job_queue import (
     AIJobModelUnavailable,
     TailoringJobRef,
+    enqueue_evaluate_job,
     enqueue_tailoring_job,
     get_tailoring_job_ref,
 )
@@ -162,10 +166,64 @@ def _add_tailoring_meta(
     return item
 
 
+def _ai_job_out(job: AIJob) -> dict:
+    return job_schemas.AIJobOut.model_validate(job).model_dump(mode="json")
+
+
+def _resolve_profile_id(db: Session, profile_id: int | None) -> int:
+    if profile_id is not None:
+        profile = get_profile(db, profile_id)
+        if profile is None:
+            raise LookupError(f"profile {profile_id} not found")
+        return profile.id
+
+    profile = get_baseline(db)
+    if profile is None:
+        raise LookupError("baseline_profile not set")
+    return profile.id
+
+
+def _create_evaluate_job_response(
+    body: schemas.EvaluateIn,
+    request: Request,
+    db: Session,
+) -> JSONResponse:
+    settings = get_settings()
+    evaluate_prompt_version = prompt_version_for_step(
+        STEP_EVALUATE,
+        settings=settings,
+    )
+    tailor_prompt_version = prompt_version_for_step(STEP_TAILOR, settings=settings)
+    length_error = _jd_length_error(body.jd_text, settings.max_jd_chars)
+    if length_error is not None:
+        return length_error
+
+    try:
+        profile_id = _resolve_profile_id(db, body.profile_id)
+        ref = enqueue_evaluate_job(
+            db,
+            jd_text=body.jd_text,
+            profile_id=profile_id,
+            prompt_version=evaluate_prompt_version,
+            tailor_prompt_version=tailor_prompt_version,
+            request_id=getattr(request.state, "request_id", None),
+        )
+    except LookupError as exc:
+        return error("not_found", str(exc), status_code=404)
+    except AIJobModelUnavailable as exc:
+        return error("job_queue_unavailable", str(exc), status_code=503)
+
+    job = db.get(AIJob, ref.id)
+    if job is None:
+        return error("job_queue_unavailable", f"AI job {ref.id} not found", status_code=503)
+    return success(_ai_job_out(job), status_code=202, created=ref.created)
+
+
 @router.post("/evaluate")
 def evaluate(
     body: schemas.EvaluateIn,
     request: Request,
+    async_mode: bool = Query(False, alias="async"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     settings = get_settings()
@@ -177,6 +235,8 @@ def evaluate(
     length_error = _jd_length_error(body.jd_text, settings.max_jd_chars)
     if length_error is not None:
         return length_error
+    if async_mode:
+        return _create_evaluate_job_response(body, request, db)
 
     llm = _get_llm(request)
     try:
@@ -238,6 +298,15 @@ def evaluate(
         out.model_dump(mode="json"),
         cached=cached,
     )
+
+
+@router.post("/evaluate/jobs")
+def create_evaluate_job(
+    body: schemas.EvaluateIn,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    return _create_evaluate_job_response(body, request, db)
 
 
 @router.post("/evaluate/bulk")

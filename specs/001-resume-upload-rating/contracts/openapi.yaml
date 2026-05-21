@@ -312,6 +312,14 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/EvaluateIn"
+      parameters:
+        - in: query
+          name: async
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, aliases POST `/api/evaluate/jobs` and returns HTTP 202 with a durable job envelope.
       responses:
         "200":
           description: Evaluation result (new or cached)
@@ -319,6 +327,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EvaluateEnvelope"
+        "202":
+          description: Async evaluate job accepted when `async=true`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TailoringJobEnvelope"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /api/evaluate/jobs:
+    post:
+      tags: [evaluate]
+      summary: Create an async single-JD evaluate job
+      description: |
+        Creates a durable `ai_jobs` row with `kind=evaluate` and returns HTTP
+        202 using the same job envelope as GET `/api/jobs/{job_id}`. The
+        existing POST `/api/evaluate` path remains synchronous by default;
+        POST `/api/evaluate?async=true` is an alias for this endpoint.
+
+        On success, GET `/api/jobs/{job_id}` returns `result_payload.cached`,
+        `result_payload.job_analysis_id`, `result_payload.tailoring_job_id`,
+        `result_payload.tailoring_status`, and `result_payload.evaluation`.
+        `result_payload.evaluation` follows the synchronous `EvaluateOut`
+        schema. If the evaluation status is `needs_tailoring`, a durable
+        tailoring job may be enqueued after evaluation completes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateIn"
+      responses:
+        "202":
+          description: Async evaluate job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TailoringJobEnvelope"
         "404":
           $ref: "#/components/responses/Error"
         "422":
@@ -451,12 +499,14 @@ paths:
   /api/jobs/{job_id}:
     get:
       tags: [jobs]
-      summary: Get durable tailoring job status
+      summary: Get durable AI job status
       description: |
-        Returns the current state for a durable tailoring job created by
-        evaluation. Clients poll this endpoint until `status` is `succeeded`,
-        `failed`, or `cancelled`. On `succeeded`, fetch
-        `/api/history/{job_analysis_id}` for the generated resume.
+        Returns the current state for a durable AI job. For `kind=tailor`,
+        clients poll until `status` is `succeeded`, `failed`, or `cancelled`;
+        on `succeeded`, fetch `/api/history/{job_analysis_id}` for the
+        generated resume. For `kind=evaluate`, successful `result_payload`
+        includes the completed evaluation and any follow-on tailoring job
+        metadata.
       parameters:
         - in: path
           name: job_id
@@ -951,6 +1001,20 @@ components:
         pdf_url: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
 
+    EvaluateJobResultPayload:
+      type: object
+      required: [cached, job_analysis_id, tailoring_job_id, tailoring_status, evaluation]
+      properties:
+        cached: { type: boolean }
+        job_analysis_id: { type: string, format: uuid }
+        tailoring_job_id: { type: string, format: uuid, nullable: true }
+        tailoring_status:
+          type: string
+          enum: [queued, running, retry_wait, cancel_requested, cancelled, succeeded, failed]
+          nullable: true
+        evaluation:
+          $ref: "#/components/schemas/EvaluateOut"
+
     TailoringJob:
       type: object
       properties:
@@ -982,6 +1046,7 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+          description: For `kind=evaluate`, successful jobs include cached, job_analysis_id, tailoring_job_id, tailoring_status, and evaluation matching EvaluateOut.
         error_code: { type: string, nullable: true }
         error_message: { type: string, nullable: true }
         progress_current: { type: integer }

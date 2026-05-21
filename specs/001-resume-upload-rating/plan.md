@@ -1,6 +1,6 @@
 # Implementation Plan: Resume Scoring & Generation
 
-**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-21 (rev 3)
+**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-21 (rev 4)
 **Scope authority**: `scope-correction.md` — read before making any implementation decision.
 
 ## Summary
@@ -8,11 +8,12 @@
 Single-user FastAPI service that:
 1. Maintains a **library of baseline profiles** (name + skills text); each created via raw text or PDF upload; full CRUD at `/api/profiles`
 2. Accepts a **job description (JD)** and scores the fit (0–100) via LLM against a selected or latest profile
-3. If score falls in the tailoring range, queues a **durable tailoring job** and exposes pollable status through `/api/jobs/{job_id}`
-4. Cache scoped to `(jd_hash, profile_id)` — same JD against different profiles = independent evaluations
-5. Stores all analyses, tailoring jobs, generated resumes, and selected proof point attribution; serves them via a minimal browser UI
+3. POST `/api/evaluate` stays synchronous by default; POST `/api/evaluate/jobs` and POST `/api/evaluate?async=true` enqueue a durable `kind=evaluate` job and return HTTP 202 with the same job envelope exposed by `/api/jobs/{job_id}`
+4. If score falls in the tailoring range, queues a **durable tailoring job** and exposes pollable status through `/api/jobs/{job_id}`
+5. Cache scoped to `(jd_hash, profile_id)` — same JD against different profiles = independent evaluations
+6. Stores all analyses, evaluate jobs, tailoring jobs, generated resumes, and selected proof point attribution; serves them via a minimal browser UI
 
-No multi-user auth. Runs locally on Mac. Durable tailoring is the first long-running job surface.
+No multi-user auth. Runs locally on Mac. Durable `ai_jobs` cover tailoring and async single-JD evaluation.
 
 ## Architecture (Phase 1 — POC)
 

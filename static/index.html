@@ -59,7 +59,13 @@
     <label for="jd-input">Paste Job Description</label>
     <textarea id="jd-input" rows="10" placeholder="Paste the full job description here..."></textarea>
     <div class="mt flex-between">
-      <button class="btn btn-primary" id="eval-btn" onclick="runEvaluate()">Evaluate</button>
+      <div class="flex">
+        <button class="btn btn-primary" id="eval-btn" onclick="runEvaluate()">Evaluate</button>
+        <label class="checkbox-row" style="margin-top:0">
+          <input type="checkbox" id="eval-async-mode">
+          Async job
+        </label>
+      </div>
       <span id="eval-status" class="status-msg"></span>
     </div>
     <div id="eval-error" class="error-msg"></div>

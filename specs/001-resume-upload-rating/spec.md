@@ -8,7 +8,7 @@
 > implementation deltas where useful for API/model traceability.
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-21 (rev 7)
+**Updated**: 2026-05-21 (rev 8)
 **Status**: Phase 1 (implemented)
 **Authoritative direction**: multi-profile CRUD + profile-scoped evaluation; uploaded PDFs persisted on disk; v1 dead code removed; Python 3.11 floor
 
@@ -60,7 +60,7 @@ JD evaluated against different profiles produces independent results.
 
 **Acceptance Scenarios**:
 
-1. **Given** a profile exists and a POST to `/api/evaluate` with `jd_text`, **Then** the response includes `score`, `status`, `strengths`, `gaps`, and a human-readable `message`.
+1. **Given** a profile exists and a POST to `/api/evaluate` with `jd_text`, **Then** the default response is synchronous and includes `score`, `status`, `strengths`, `gaps`, and a human-readable `message`.
 2. **Given** `profile_id` is specified in the request, **Then** that profile is used for evaluation.
 3. **Given** `profile_id` is omitted, **Then** the most recently created profile is used.
 4. **Given** the same JD + same `profile_id` is submitted twice, **Then** the second response has `cached: true` in `meta`.
@@ -74,6 +74,9 @@ JD evaluated against different profiles produces independent results.
 12. **Given** a returned `tailoring_job_id`, **Then** GET `/api/jobs/{job_id}` exposes `status`, `result_payload`, `error_code`, `error_message`, and progress fields.
 13. **Given** a tailoring job succeeds, **Then** the client can fetch GET `/api/history/{job_analysis_id}` to retrieve the generated resume.
 14. **Given** a tailoring job fails or is cancelled, **Then** the job endpoint returns a readable failure state and the frontend shows that state instead of waiting indefinitely.
+15. **Given** a POST to `/api/evaluate/jobs`, **Then** the API creates a durable `ai_jobs` row with `kind=evaluate` and returns HTTP 202 with the same job envelope shape used by GET `/api/jobs/{job_id}`.
+16. **Given** a POST to `/api/evaluate?async=true`, **Then** it behaves as an alias for POST `/api/evaluate/jobs`; omitting `async` or setting it false preserves the synchronous evaluate path.
+17. **Given** an evaluate job succeeds, **Then** GET `/api/jobs/{job_id}` returns `result_payload` with `cached`, `job_analysis_id`, `tailoring_job_id`, `tailoring_status`, and `evaluation`, where `evaluation` follows the synchronous `EvaluateOut` shape.
 
 ---
 
@@ -128,13 +131,15 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **FR-012**: System MUST persist uploaded profile PDFs on local disk and store the absolute path on `baseline_profile.pdf_path`. Path scheme is `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf`. Multiple uploads against the same profile accumulate as separate timestamped files; the latest path is what lives on the row. S3 is deferred to a later phase — column type is plain TEXT so the migration is path-scheme-only.
 - **FR-013** (Phase 2.5): Scrape endpoints (`POST /api/scrape/run`, `POST /api/scrape/control/start`) and the CLI `scrape` command MUST accept an optional `must_contain` list of terms with `match_mode` (`all` | `any`) and `regex` flag. When set, listings whose JD `description` does not match are dropped after `fetch_detail()` and counted on `ScrapeRun.skipped_by_filter`; the pipeline over-fetches up to `min(limit * 3, 200)` candidates from the source to satisfy `limit` matches when possible. Default (`must_contain` unset) preserves prior behaviour.
 - **FR-014**: System MUST expose durable tailoring job status at GET `/api/jobs/{job_id}` with terminal states `succeeded`, `failed`, and `cancelled`; clients MUST reload history after success to fetch generated resumes.
+- **FR-015**: System MUST preserve POST `/api/evaluate` as synchronous by default while supporting durable async single-JD evaluation through POST `/api/evaluate/jobs` and the alias POST `/api/evaluate?async=true`.
+- **FR-016**: Async evaluate jobs MUST persist an `ai_jobs` row with `kind=evaluate`; their successful `result_payload` MUST include `cached`, `job_analysis_id`, `tailoring_job_id`, `tailoring_status`, and `evaluation` matching `EvaluateOut`.
 
 ## Key Entities
 
 - **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `pdf_path` (TEXT, optional — set when created via PDF upload), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
 - **JobAnalysis**: One row per unique `(jd_hash, profile_id)` pair. Stores score, status, strengths, gaps, can_submit, skip_reason, `profile_id` FK (SET NULL on profile delete).
 - **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url`, `prompt_version`, `proof_point_ids`.
-- **TailoringJob**: Durable state for one background tailoring run. Exposes `id`, `job_analysis_id`, `status`, `result_payload`, `error_code`, `error_message`, and progress fields through `/api/jobs/{job_id}`.
+- **AIJob**: Durable state for one background AI workflow step. `kind=tailor` represents tailoring; `kind=evaluate` represents async single-JD evaluation. Exposes `id`, `kind`, `job_analysis_id`, `status`, `result_payload`, `error_code`, `error_message`, and progress fields through `/api/jobs/{job_id}`.
 - **ProofPoint**: User-maintained achievement evidence. May be linked to one profile or global; includes title, context, metrics, skills, tags, and STAR fields. Relevant proof points can be selected for tailoring prompts.
 - **JobListing** (Phase 2.5): One row per scraped JD. `source` (`104`/`yourator`/`linkedin`), `source_id` (per-platform job id), `title`, `company`, `location`, `url`, `description` (full JD), `raw_json`, `scraped_at`, `job_analysis_id` FK (SET NULL). Unique on `(source, source_id)`.
 

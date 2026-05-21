@@ -53,9 +53,9 @@ API responses for evaluate/history include the latest related
 
 ### `ai_jobs`
 
-Stores durable state for AI work. The #71 backend slice uses `kind=tailor` for
-resume tailoring work linked to a job analysis; later slices may use the same
-table for asynchronous evaluation work.
+Stores durable state for AI work. The #71 backend slices use `kind=tailor` for
+resume tailoring work linked to a job analysis and `kind=evaluate` for
+asynchronous single-JD evaluation work.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -77,7 +77,7 @@ table for asynchronous evaluation work.
 | `prompt_version` | VARCHAR(64) NULL | Prompt version used by the job |
 | `request_id` | VARCHAR(64) NULL | API request correlation id |
 | `input_payload` | JSONB NOT NULL | Durable job input metadata |
-| `result_payload` | JSONB NULL | Successful job metadata |
+| `result_payload` | JSONB NULL | Successful job metadata; for `kind=evaluate`, includes `cached`, `job_analysis_id`, `tailoring_job_id`, `tailoring_status`, and `evaluation` matching the synchronous `EvaluateOut` response shape |
 | `error_code` | VARCHAR(64) NULL | Stable failure code |
 | `error_message` | TEXT NULL | Readable failure message |
 | `progress_current` | INTEGER NOT NULL | Completed step count |
@@ -89,10 +89,19 @@ table for asynchronous evaluation work.
 
 Indexes:
 
-- unique `dedupe_key` for idempotent tailoring enqueue.
+- unique `dedupe_key` for idempotent tailoring/evaluate enqueue.
 - `(status, run_after, priority, created_at)` for worker pickup and operational views.
 - `job_analysis_id`, `job_listing_id`, `profile_id`, `request_id`, and
   `generated_resume_id` for linking API responses and diagnostics.
+
+Async evaluate job contract:
+
+- `POST /api/evaluate` remains synchronous by default.
+- `POST /api/evaluate/jobs` creates an `ai_jobs` row with `kind=evaluate` and
+  returns HTTP 202 with the same job envelope shape as GET `/api/jobs/{id}`.
+- `POST /api/evaluate?async=true` is an alias for POST `/api/evaluate/jobs`.
+- If the evaluation result has `status=needs_tailoring`, the evaluate worker may
+  enqueue a durable `kind=tailor` job after persisting the `job_analyses` row.
 
 ### `generated_resumes`
 

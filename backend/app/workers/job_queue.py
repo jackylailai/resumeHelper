@@ -9,18 +9,34 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+import backend.app.schemas.evaluate as evaluate_schemas
+from backend.app.api.envelope import reset_request_id, set_request_id
+from backend.app.config import get_settings
+from backend.app.models.job_analysis import (
+    STATUS_NEEDS_TAILORING,
+    STATUS_READY_TO_SUBMIT,
+    STATUS_SKIP,
+)
+from backend.app.services.evaluator_v2 import evaluate_jd
 from backend.app.services.job_queue import (
+    AI_JOB_KIND_EVALUATE,
     AI_JOB_KIND_TAILOR,
     AI_JOB_STATUS_CANCELLED,
     AI_JOB_STATUS_FAILED,
     AI_JOB_STATUS_SUCCEEDED,
     ClaimedAIJob,
     claim_next_job,
+    enqueue_tailoring_job,
     job_analysis_id_from_claim,
     mark_job_failed,
     mark_job_succeeded,
 )
-from backend.app.services.llm import LLMClient
+from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
+from backend.app.services.llm.audit import (
+    error_code_for_exception,
+    error_message_for_exception,
+)
+from backend.app.services.llm.prompt_registry import STEP_TAILOR, prompt_version_for_step
 from backend.app.workers.tailor import (
     TAILORING_STATUS_SUCCEEDED,
     TailoringError,
@@ -166,7 +182,89 @@ def _execute_claimed_job(
             if tailoring_result.generated_resume_id
             else None,
         }
+    if claimed.kind == AI_JOB_KIND_EVALUATE:
+        return _execute_evaluate_job(
+            claimed,
+            llm=llm,
+            session_factory=session_factory,
+        )
     raise JobExecutionError("unsupported_job_kind", f"unsupported ai_job kind {claimed.kind}")
+
+
+def _execute_evaluate_job(
+    claimed: ClaimedAIJob,
+    *,
+    llm: LLMClient,
+    session_factory: Callable,
+) -> dict[str, Any]:
+    jd_text = _required_string(claimed.input_payload, "jd_text")
+    profile_id = _required_int(claimed.input_payload, "profile_id")
+    prompt_version = _required_string(claimed.input_payload, "prompt_version")
+    request_id = _string_or_none(claimed.input_payload.get("request_id"))
+
+    settings = get_settings()
+    tailor_prompt_version = _string_or_none(
+        claimed.input_payload.get("tailor_prompt_version")
+    ) or prompt_version_for_step(STEP_TAILOR, settings=settings)
+
+    if _is_cancel_requested(session_factory, job_id=claimed.id):
+        raise JobExecutionError("job_cancelled", "evaluate job was cancelled")
+
+    token = set_request_id(request_id) if request_id else None
+    try:
+        with session_factory() as db:
+            job, cached = evaluate_jd(
+                db,
+                jd_text,
+                llm,
+                prompt_version=prompt_version,
+                threshold=settings.resume_gen_threshold,
+                profile_id=profile_id,
+            )
+            if _is_cancel_requested(session_factory, job_id=claimed.id):
+                raise JobExecutionError("job_cancelled", "evaluate job was cancelled")
+
+            status = job.status or STATUS_SKIP
+            message, action = _evaluate_message_and_action(
+                status=status,
+                score=job.score or 0,
+                skip_reason=job.skip_reason,
+            )
+            tailoring_ref = None
+            if status == STATUS_NEEDS_TAILORING:
+                tailoring_ref = enqueue_tailoring_job(
+                    db,
+                    job_analysis_id=job.id,
+                    prompt_version=tailor_prompt_version,
+                    request_id=request_id,
+                )
+
+            evaluation = evaluate_schemas.EvaluateOut(
+                job_analysis_id=job.id,
+                score=job.score or 0,
+                explanation=job.explanation or "",
+                strengths=job.strengths or [],
+                gaps=job.gaps or [],
+                threshold_met=job.threshold_met,
+                status=status,
+                message=message,
+                action=action,
+                prompt_version=job.prompt_version,
+                llm_backend=job.llm_backend,
+                llm_model=job.llm_model,
+                tailoring_job_id=tailoring_ref.id if tailoring_ref is not None else None,
+                tailoring_status=tailoring_ref.status if tailoring_ref is not None else None,
+            ).model_dump(mode="json")
+            return {
+                "cached": cached,
+                "job_analysis_id": str(job.id),
+                "tailoring_job_id": evaluation["tailoring_job_id"],
+                "tailoring_status": evaluation["tailoring_status"],
+                "evaluation": evaluation,
+            }
+    finally:
+        if token is not None:
+            reset_request_id(token)
 
 
 def _execute_tailor_job(
@@ -197,7 +295,23 @@ def _execute_tailor_job(
 def _error_details(exc: Exception) -> tuple[str, str]:
     if isinstance(exc, JobExecutionError | TailoringError):
         return exc.error_code, _truncate_error(exc.error_message)
+    if isinstance(exc, LLMUnavailableError | LLMInvalidOutputError):
+        return error_code_for_exception(exc), _truncate_error(error_message_for_exception(exc))
     return type(exc).__name__, _truncate_error(str(exc) or type(exc).__name__)
+
+
+def _evaluate_message_and_action(
+    *,
+    status: str,
+    score: int,
+    skip_reason: str | None,
+) -> tuple[str, str]:
+    if status == STATUS_READY_TO_SUBMIT:
+        return f"Score {score}: Excellent match. Resume is ready to submit.", "none"
+    if status == STATUS_NEEDS_TAILORING:
+        return f"Score {score}: Good match. Tailoring resume in background.", "tailoring"
+    reason = skip_reason or ""
+    return f"Score {score}: Low match. Skipping this job. {reason}", "skip"
 
 
 def _is_cancel_requested(session_factory: Callable, *, job_id: uuid.UUID) -> bool:
@@ -216,6 +330,23 @@ def _string_or_none(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _required_string(payload: dict[str, Any], key: str) -> str:
+    value = _string_or_none(payload.get(key))
+    if value is None:
+        raise JobExecutionError("invalid_job_payload", f"missing {key}")
+    return value
+
+
+def _required_int(payload: dict[str, Any], key: str) -> int:
+    value = payload.get(key)
+    if isinstance(value, bool) or value is None:
+        raise JobExecutionError("invalid_job_payload", f"missing {key}")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise JobExecutionError("invalid_job_payload", f"invalid {key}") from exc
 
 
 def main(argv: Sequence[str] | None = None) -> int:
