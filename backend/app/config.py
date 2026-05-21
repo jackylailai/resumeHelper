@@ -33,7 +33,6 @@ class Settings(BaseSettings):
 
     # Resume generation
     resume_gen_threshold: int = 60
-    n8n_webhook_url: str = ""
 
     # Limits
     max_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
@@ -70,11 +69,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [
-            origin.strip()
-            for origin in self.cors_allowed_origins.split(",")
-            if origin.strip()
-        ]
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
     @field_validator("storage_dir", mode="after")
     @classmethod

@@ -3,8 +3,8 @@
 # Use this when you suspect cached/stale code is running.
 #
 # Usage:
-#   ./scripts/restart-docker.sh           # rebuild + restart app only (postgres/n8n stay up)
-#   ./scripts/restart-docker.sh --full    # also bring up postgres + n8n first
+#   ./scripts/restart-docker.sh           # rebuild + restart app only (postgres stays up)
+#   ./scripts/restart-docker.sh --full    # also bring up postgres first
 
 set -euo pipefail
 
@@ -22,8 +22,8 @@ sleep 1
 if [[ "${1:-}" == "--full" ]]; then
   DATA_PATH="${RESUMEHELPER_DATA_PATH:-$HOME/resumeHelper_data}"
   mkdir -p "$DATA_PATH"
-  echo "Bringing up postgres + n8n..."
-  RESUMEHELPER_DATA_PATH="$DATA_PATH" "${COMPOSE[@]}" up -d postgres n8n
+  echo "Bringing up postgres..."
+  RESUMEHELPER_DATA_PATH="$DATA_PATH" "${COMPOSE[@]}" up -d postgres
 
   echo "Waiting for postgres..."
   for _ in $(seq 1 30); do

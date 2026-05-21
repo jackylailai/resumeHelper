@@ -1,9 +1,14 @@
 ---
 description: "Scope correction — what to keep, what to cut, what to add"
-status: ACTIVE
+status: SUPERSEDED
 ---
 
 # Scope Correction
+
+> Historical note: this document predates durable `ai_jobs` and is no longer an
+> implementation authority for runtime architecture. Tailoring now runs through
+> backend durable workers, not n8n. `/api/callback` remains as a generic
+> external resume delivery endpoint for optional future integrations.
 
 ## Context
 
