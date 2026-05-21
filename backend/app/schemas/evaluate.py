@@ -56,6 +56,7 @@ class GeneratedResumeOut(BaseModel):
     prompt_version: str | None
     llm_backend: str | None = None
     llm_model: str | None = None
+    proof_point_ids: list[str] = Field(default_factory=list)
     revision_source: str = "ai_draft"
     exported_at: datetime | None = None
     created_at: datetime

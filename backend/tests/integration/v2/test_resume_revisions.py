@@ -29,6 +29,7 @@ def test_create_generated_resume_revision_saves_user_edit(
         job_analysis_id=analysis.id,
         resume_text="AI draft",
         pdf_url="/api/generated-resumes/original/pdf",
+        proof_point_ids=["proof-1"],
     )
     db_session.add(original)
     db_session.commit()
@@ -42,6 +43,7 @@ def test_create_generated_resume_revision_saves_user_edit(
     data = response.json()["data"]
     assert data["id"] != str(original.id)
     assert data["resume_text"] == "User edited draft"
+    assert data["proof_point_ids"] == ["proof-1"]
     assert data["revision_source"] == "user_edited"
     assert data["pdf_url"].endswith("/pdf")
 
@@ -49,6 +51,7 @@ def test_create_generated_resume_revision_saves_user_edit(
     assert saved is not None
     assert saved.job_analysis_id == analysis.id
     assert saved.resume_text == "User edited draft"
+    assert saved.proof_point_ids == ["proof-1"]
     assert saved.revision_source == "user_edited"
 
 

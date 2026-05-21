@@ -81,6 +81,7 @@ class ClaudeCLIClient:
         gaps: list[str],
         score: int,
         structured_data: dict | None = None,
+        proof_points: str | None = None,
     ) -> dict:
         """Generate a tailored resume in Markdown via the `claude` CLI.
 
@@ -105,6 +106,7 @@ class ClaudeCLIClient:
             STRUCTURED_DATA=structured_block,
             CURRENT_SCORE=score,
             IDENTIFIED_GAPS=gaps_text,
+            PROOF_POINTS=proof_points or "(none)",
         )
 
         start = time.time()

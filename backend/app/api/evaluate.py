@@ -593,6 +593,7 @@ def create_generated_resume_revision(
         resume_text=resume_text,
         pdf_url=None,
         prompt_version="user-edited",
+        proof_point_ids=source.proof_point_ids or [],
         revision_source="user_edited",
     )
     db.add(revision)

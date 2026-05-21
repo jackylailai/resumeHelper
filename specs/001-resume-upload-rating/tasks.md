@@ -180,6 +180,14 @@ TDD: write tests RED before implementation.
 - [x] `readme.md` — linked from the Documentation section.
 - [x] `backend/app/services/scrapers/__init__.py` — added a one-line comment pointing to `docs/scrapers.md` so readers find the doc from code too.
 
+### P2.5-T21 Proof point tailoring evidence (issue #77)
+- [x] `alembic/versions/0020_generated_resume_proof_points.py` adds `generated_resumes.proof_point_ids`.
+- [x] `services/proof_points.py` selects relevant profile/global proof points and formats compact prompt evidence.
+- [x] `workers/tailor.py` injects selected proof point evidence into tailoring prompts and stores selected IDs.
+- [x] `schemas/evaluate.py` / OpenAPI expose `GeneratedResume.proof_point_ids`.
+- [x] Unit and integration coverage added for ranking, prompt formatting, revision preservation, and tailoring attribution.
+- [x] Current product docs and Speckit files document proof point attribution.
+
 ### P2.5-T15 · Container becomes the default dev mode ✅
 - [x] `CLAUDE.md` — flips the host-vs-container table; container w/ `CLAUDE_CODE_OAUTH_TOKEN` is now the recommended dev setup. Host mode kept as a fallback for uvicorn reload-driven debugging.
 - [x] `.env.example` — adds `CLAUDE_CODE_OAUTH_TOKEN` slot and removes the obsolete "Docker app runs do not inherit the host login" note.

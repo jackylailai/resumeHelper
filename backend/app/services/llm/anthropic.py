@@ -76,6 +76,7 @@ class AnthropicLLMClient:
         gaps: list[str],
         score: int,
         structured_data: dict | None = None,
+        proof_points: str | None = None,
     ) -> dict:
         """Generate tailoring suggestions and a tailored resume text."""
 
@@ -96,6 +97,7 @@ class AnthropicLLMClient:
             STRUCTURED_DATA=structured_block,
             CURRENT_SCORE=score,
             IDENTIFIED_GAPS=gaps_text,
+            PROOF_POINTS=proof_points or "(none)",
         )
 
         try:

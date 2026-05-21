@@ -794,6 +794,9 @@ components:
         resume_text: { type: string }
         pdf_url: { type: string, nullable: true }
         prompt_version: { type: string, nullable: true }
+        proof_point_ids:
+          type: array
+          items: { type: string }
         created_at: { type: string, format: date-time }
 
     HistoryDetail:

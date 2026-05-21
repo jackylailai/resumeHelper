@@ -30,12 +30,12 @@ outside typed application code.
 | Area | Target state | Current state | Owner issue |
 |------|--------------|---------------|-------------|
 | Deterministic orchestration | App-owned flow, score routing, review gates, and status transitions | Mostly implemented for evaluate/tailor/beautify/application tracking; one-click URL flow is still separate work | #74 |
-| Explicit input specs | Every LLM call documents required inputs, optional inputs, source of truth, and prompt version | Documented in `docs/ai-workflow/README.md`, `docs/eval-harness.md`, `docs/prompts.md`, and `specs/current-product-spec.md`; proof point CRUD exists, but retrieval is not connected to tailoring yet | #77 |
+| Explicit input specs | Every LLM call documents required inputs, optional inputs, source of truth, and prompt version | Documented in `docs/ai-workflow/README.md`, `docs/eval-harness.md`, `docs/prompts.md`, and `specs/current-product-spec.md`; proof point retrieval is connected to tailoring and generated resumes store selected proof point IDs | #77 |
 | Explicit output specs | Every LLM output has a schema and fail-closed validation policy | Implemented for evaluate, tailor, structured extraction, and beautify | #113, #126, #127 |
 | Eval harness and regression reporting | Deterministic fixtures run in CI and produce reviewable reports | CI runs evaluate, tailor, extract, and beautify fake-backend harnesses and uploads reports | #113, #124, #126, #127 |
 | Prompt and model lifecycle | Versions, model/backend metadata, prompt source, and replay path are persisted or reportable | Per-step prompt versions, prompt source paths, prompt source hashes, audit metadata, and evaluate prompt replay are implemented | #128 |
 | Observability and audit trail | Every LLM call records request ID, workflow step, model/backend, prompt metadata, hashes, latency, tokens, result status, and typed error | Metadata-first `llm_audit_logs` are implemented; no dedicated audit browser yet | #125, #128 |
-| Factuality and safety guardrails | Tailored resumes preserve source facts; beautify cannot add scripts/external resources; prompt injection is neutralized | Prompt trust boundaries, output contracts, and smoke-level factuality harnesses are implemented; broader proof-point/source-fact coverage remains | #139, #126, #127, #77 |
+| Factuality and safety guardrails | Tailored resumes preserve source facts; beautify cannot add scripts/external resources; prompt injection is neutralized | Prompt trust boundaries, output contracts, smoke-level factuality harnesses, and proof-point prompt attribution are implemented; broader source-fact coverage remains | #139, #126, #127, #77 |
 | Durable jobs and reliability | Long-running AI work is persisted with queued/running/succeeded/failed/cancelled states, retry/backoff, and restart behavior | Scrape runs are persisted; evaluate/tailor still need durable job state beyond FastAPI background tasks | #71 |
 | Cost, quota, and latency controls | Batch workflows have limits, budget preflight, token/cost capture, and provider-call guardrails | Batch quota and privacy guardrails are implemented; token/cost capture exists when provider metadata is available | #129 |
 | Security and privacy | Secrets stay out of repo/UI/logs; outbound fetches are constrained; sensitive content is not duplicated into logs by default | SSRF controls, rate limits, surface hardening, provider-call guardrails, and metadata-first audit logs are implemented | #137, #138, #140 |
@@ -59,8 +59,7 @@ deterministic AI harnesses on every PR.
 Recommended next implementation order:
 
 1. #71: move evaluate/tailor into durable job state.
-2. #77: add proof point and achievement library as an authoritative tailoring
-   evidence source.
+2. #77: finish proof point library UX and ranking refinements.
 3. #74: build one-click job URL -> scored tailored PDF workflow.
 4. #38: continue crawler/evaluator scale-out work as needed.
 

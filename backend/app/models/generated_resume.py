@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db import Base
@@ -25,6 +26,9 @@ class GeneratedResume(Base):
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     llm_backend: Mapped[str | None] = mapped_column(String(32), nullable=True)
     llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    proof_point_ids: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
     revision_source: Mapped[str] = mapped_column(
         String(20), nullable=False, default="ai_draft"
     )

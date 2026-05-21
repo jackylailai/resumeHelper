@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -190,13 +191,16 @@ def _run_tailor_case(
         tailor = getattr(llm, "tailor", None)
         if tailor is None:
             raise LLMInvalidOutputError("active LLM client does not implement tailor")
-        raw_result = tailor(
-            baseline_text=case.baseline_text,
-            jd_text=case.job_description,
-            gaps=case.gaps,
-            score=case.score,
-            structured_data=case.structured_data,
-        )
+        kwargs: dict[str, Any] = {
+            "baseline_text": case.baseline_text,
+            "jd_text": case.job_description,
+            "gaps": case.gaps,
+            "score": case.score,
+            "structured_data": case.structured_data,
+        }
+        if "proof_points" in inspect.signature(tailor).parameters:
+            kwargs["proof_points"] = "\n".join(case.proof_points) or "(none)"
+        raw_result = tailor(**kwargs)
         result = validate_tailor_output(raw_result, source=llm.__class__.__name__)
     except Exception as exc:
         return TailorHarnessCaseResult(

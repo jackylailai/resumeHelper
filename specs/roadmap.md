@@ -38,7 +38,7 @@ Implemented:
 | Issue | Theme | Notes |
 |-------|-------|-------|
 | #74 | One-click job URL to scored tailored PDF | Product-mainline flow: paste URL, fetch JD, score, tailor, produce PDF for review. |
-| #77 | Proof point and achievement library | Gives tailoring stronger source material and reduces hallucination risk. |
+| #77 | Proof point and achievement library | CRUD exists and tailoring now uses selected evidence; ranking refinements and UI controls remain. |
 
 ## Architecture Work
 

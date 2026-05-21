@@ -60,8 +60,12 @@ class FakeLLMClient:
         gaps: list[str],
         score: int,
         structured_data: dict | None = None,
+        proof_points: str | None = None,
     ) -> dict:
         """Fake tailoring returns deterministic output for tests."""
+        proof_points_block = ""
+        if proof_points and proof_points.strip() != "(none)":
+            proof_points_block = f"\n\n## Proof Points\n\n{proof_points.strip()}\n"
         return {
             "tailoring_suggestions": [
                 "Keep source facts unchanged while emphasizing relevant evidence",
@@ -71,6 +75,7 @@ class FakeLLMClient:
                 f"# Tailored Resume (fake)\n\n"
                 f"**Score before tailoring:** {score}\n\n"
                 f"## Source Profile\n\n{baseline_text.strip()}\n"
+                f"{proof_points_block}"
             ),
             "token_count_input": 120,
             "token_count_output": 80,

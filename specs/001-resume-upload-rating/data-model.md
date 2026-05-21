@@ -61,7 +61,29 @@ Stores generated tailored resume content and PDF-related links.
 | `html_url` | TEXT NULL | Beautified HTML artifact when present |
 | `latest_revision_id` | UUID NULL | Latest resume revision when present |
 | `prompt_version` | VARCHAR(64) NULL | Prompt version tag |
+| `proof_point_ids` | JSONB NOT NULL | Selected proof point UUID strings used as tailoring evidence |
 | `created_at` | TIMESTAMPTZ NOT NULL | |
+
+### `proof_points`
+
+Stores reusable achievement evidence for tailoring. Rows can be profile-scoped
+or global (`profile_id` is NULL).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID PK | |
+| `profile_id` | INTEGER FK NULL | `baseline_profile.id`, SET NULL on profile delete |
+| `title` | VARCHAR(255) NOT NULL | Short achievement label |
+| `context` | TEXT NULL | Project or role context |
+| `metrics` | TEXT NULL | Quantified evidence |
+| `skills` | JSONB NOT NULL | Skill terms |
+| `tags` | JSONB NOT NULL | User tags |
+| `situation` | TEXT NULL | STAR situation |
+| `task` | TEXT NULL | STAR task |
+| `action` | TEXT NULL | STAR action |
+| `result` | TEXT NULL | STAR result |
+| `created_at` | TIMESTAMPTZ NOT NULL | |
+| `updated_at` | TIMESTAMPTZ NOT NULL | |
 
 ### `job_listings`
 
@@ -154,6 +176,8 @@ Implementation: `backend/app/services/hashing.py:jd_hash()`.
 | `0011` | `0011_scrape_runs.py` | Scrape run tracking |
 | `0012` | `0012_generated_resume_revisions.py` | Resume revisions |
 | `0013` | `0013_scrape_run_cancellation.py` | Scrape cancellation state |
+| `0019` | `0019_proof_points.py` | Proof point library |
+| `0020` | `0020_generated_resume_proof_points.py` | Generated resume proof point attribution |
 
 ---
 
