@@ -36,6 +36,7 @@ from backend.app.services.extract_harness import (
     write_extract_report_json,
     write_extract_report_markdown,
 )
+from backend.app.services.job_queue import enqueue_tailoring_job
 from backend.app.services.llm import LLMClient, LLMUnavailableError
 from backend.app.services.llm.audit import llm_metadata
 from backend.app.services.llm.factory import create_llm_client
@@ -59,7 +60,6 @@ from backend.app.services.tailor_harness import (
     write_tailor_report_json,
     write_tailor_report_markdown,
 )
-from backend.app.workers.tailor import run_tailoring
 
 
 def _source_help() -> str:
@@ -100,9 +100,7 @@ async def _scrape(args: argparse.Namespace) -> int:
     if args.evaluate:
         return _evaluate_listings(
             argparse.Namespace(
-                source=None
-                if args.source in {"all", "all_with_linkedin"}
-                else args.source,
+                source=None if args.source in {"all", "all_with_linkedin"} else args.source,
                 profile_id=args.profile_id,
                 limit=args.evaluate_limit,
                 no_tailor=args.no_tailor,
@@ -147,18 +145,19 @@ def _evaluate_listings(args: argparse.Namespace) -> int:
     if not args.quiet:
         _print_eval_summary(args.source, summary)
     if not args.no_tailor and summary.tailoring_job_ids:
-        for job_id in summary.tailoring_job_ids:
-            run_tailoring(
-                job_analysis_id=job_id,
-                llm=llm,
-                prompt_version=prompt_version_for_step(
-                    STEP_TAILOR,
-                    settings=settings,
-                ),
-                session_factory=SessionLocal,
-            )
+        with SessionLocal() as db:
+            for job_id in summary.tailoring_job_ids:
+                enqueue_tailoring_job(
+                    db,
+                    job_analysis_id=job_id,
+                    prompt_version=prompt_version_for_step(
+                        STEP_TAILOR,
+                        settings=settings,
+                    ),
+                )
         if not args.quiet:
-            print(f"tailored={len(summary.tailoring_job_ids)}")
+            print(f"tailoring_queued={len(summary.tailoring_job_ids)}")
+            print("run `python -m backend.app.workers.job_queue --kind tailor` to process jobs")
     return 0 if summary.failed == 0 else 1
 
 
@@ -221,10 +220,7 @@ def _eval_harness(args: argparse.Namespace) -> int:
         )
         for result in report.results:
             outcome = "PASS" if result.passed else "FAIL"
-            print(
-                f"  {result.id}: {outcome} "
-                f"score={result.score} status={result.status}"
-            )
+            print(f"  {result.id}: {outcome} " f"score={result.score} status={result.status}")
             for failure in result.failures:
                 print(f"    - {failure}")
 

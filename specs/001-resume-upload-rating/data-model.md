@@ -48,6 +48,52 @@ Stores the result of scoring one JD against one profile.
 
 Unique constraint: `(jd_hash, profile_id)`.
 
+API responses for evaluate/history include the latest related
+`tailoring_job_id` and `tailoring_status` when tailoring has been queued.
+
+### `ai_jobs`
+
+Stores durable state for AI work. The #71 backend slice uses `kind=tailor` for
+resume tailoring work linked to a job analysis; later slices may use the same
+table for asynchronous evaluation work.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID PK | Public job ID returned to clients |
+| `kind` | VARCHAR(40) | `tailor`, `evaluate`, `evaluate_bulk`, `evaluate_listing`, `evaluate_pending_listings` |
+| `status` | VARCHAR(20) | `queued`, `running`, `retry_wait`, `cancel_requested`, `cancelled`, `succeeded`, `failed` |
+| `parent_job_id` | UUID FK NULL | Optional parent `ai_jobs.id` for future batch jobs |
+| `dedupe_key` | VARCHAR(255) NULL UNIQUE | Idempotency key, e.g. `tailor:{job_analysis_id}` |
+| `priority` | INTEGER NOT NULL | Higher priority is claimed first |
+| `run_after` | TIMESTAMPTZ NOT NULL | Earliest claim time for queue/retry |
+| `attempts` | INTEGER NOT NULL | Worker attempts so far |
+| `max_attempts` | INTEGER NOT NULL | Retry ceiling |
+| `locked_by` | VARCHAR(128) NULL | Worker identifier when claimed |
+| `locked_at` | TIMESTAMPTZ NULL | Claim timestamp |
+| `job_analysis_id` | UUID FK NULL | Parent `job_analyses.id`, SET NULL |
+| `profile_id` | INTEGER FK NULL | Related profile when applicable |
+| `job_listing_id` | UUID FK NULL | Related listing when applicable |
+| `generated_resume_id` | UUID FK NULL | Output resume for successful tailoring |
+| `prompt_version` | VARCHAR(64) NULL | Prompt version used by the job |
+| `request_id` | VARCHAR(64) NULL | API request correlation id |
+| `input_payload` | JSONB NOT NULL | Durable job input metadata |
+| `result_payload` | JSONB NULL | Successful job metadata |
+| `error_code` | VARCHAR(64) NULL | Stable failure code |
+| `error_message` | TEXT NULL | Readable failure message |
+| `progress_current` | INTEGER NOT NULL | Completed step count |
+| `progress_total` | INTEGER NULL | Optional total steps |
+| `created_at` | TIMESTAMPTZ NOT NULL | |
+| `updated_at` | TIMESTAMPTZ NOT NULL | |
+| `started_at` | TIMESTAMPTZ NULL | |
+| `finished_at` | TIMESTAMPTZ NULL | |
+
+Indexes:
+
+- unique `dedupe_key` for idempotent tailoring enqueue.
+- `(status, run_after, priority, created_at)` for worker pickup and operational views.
+- `job_analysis_id`, `job_listing_id`, `profile_id`, `request_id`, and
+  `generated_resume_id` for linking API responses and diagnostics.
+
 ### `generated_resumes`
 
 Stores generated tailored resume content and PDF-related links.
@@ -178,6 +224,7 @@ Implementation: `backend/app/services/hashing.py:jd_hash()`.
 | `0013` | `0013_scrape_run_cancellation.py` | Scrape cancellation state |
 | `0019` | `0019_proof_points.py` | Proof point library |
 | `0020` | `0020_generated_resume_proof_points.py` | Generated resume proof point attribution |
+| `0021` | `0021_ai_jobs.py` | Durable AI job queue state |
 
 ---
 

@@ -1,3 +1,4 @@
+from backend.app.models.ai_job import AIJob
 from backend.app.models.application import Application
 from backend.app.models.baseline_profile import BaselineProfile
 from backend.app.models.generated_resume import GeneratedResume
@@ -9,6 +10,7 @@ from backend.app.models.resume_beautification import ResumeBeautification
 from backend.app.models.scrape_run import ScrapeRun
 
 __all__ = [
+    "AIJob",
     "Application",
     "BaselineProfile",
     "GeneratedResume",

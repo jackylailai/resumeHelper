@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from backend.app.config import get_settings
 from backend.app.models.generated_resume import GeneratedResume
 from backend.app.models.job_listing import JobListing
+from backend.app.services.job_queue import AI_JOB_KIND_TAILOR, AI_JOB_STATUS_SUCCEEDED
+from backend.app.workers.job_queue import run_job_queue_once
 
 
 @pytest.mark.integration
@@ -67,12 +69,24 @@ def test_evaluate_pending_listings_scores_pending_rows(
     result = data["results"][0]
     assert result["listing_id"] == str(target.id)
     assert result["job_analysis_id"]
+    assert result["tailoring_job_id"]
+    assert result["tailoring_status"] == "queued"
 
     db_session.expire_all()
     analysis_id = db_session.get(JobListing, target.id).job_analysis_id
     assert analysis_id is not None
     assert db_session.get(JobListing, other_source.id).job_analysis_id is None
     assert db_session.get(JobListing, empty_description.id).job_analysis_id is None
+
+    worker_result = run_job_queue_once(
+        llm=client.app.state.llm_client,  # type: ignore[union-attr]
+        session_factory=client.app.state.session_factory,  # type: ignore[union-attr]
+        kind=AI_JOB_KIND_TAILOR,
+    )
+    assert worker_result is not None
+    assert worker_result.status == AI_JOB_STATUS_SUCCEEDED
+
+    db_session.expire_all()
     assert (
         db_session.query(GeneratedResume)
         .filter(GeneratedResume.job_analysis_id == analysis_id)

@@ -1,6 +1,8 @@
 // Evaluate flow and tailoring polling.
 // Loaded after app.js; uses shared global resume state from app.js.
 
+const TAILORING_POLL_MS = 2000;
+
 // ---- Evaluate ----
 async function runEvaluate() {
   const jd = document.getElementById('jd-input').value.trim();
@@ -44,8 +46,12 @@ async function runEvaluate() {
   );
 
   if (data.status === 'needs_tailoring') {
-    showTailoringSpinner();
-    startPoll(data.job_analysis_id);
+    showTailoringSpinner(data.tailoring_status);
+    if (data.tailoring_job_id) {
+      startPoll(data.tailoring_job_id, data.job_analysis_id);
+    } else {
+      startPoll(data.job_analysis_id);
+    }
   }
 }
 
@@ -78,9 +84,15 @@ function renderResultActions(data) {
     return;
   }
   if (data.status === 'needs_tailoring') {
+    const statusText = data.tailoring_status
+      ? ' Current status: ' + escHtml(formatTailoringStatus(data.tailoring_status)) + '.'
+      : '';
+    const summary = data.tailoring_job_id
+      ? 'Resume generation is running as a durable job. Review the gaps while it finishes.'
+      : 'Review the gaps below while the tailored resume is generated.';
     el.innerHTML = '<div class="next-action next-tailoring">'
       + '<strong>Tailoring queued</strong>'
-      + '<span>Review the gaps below while the tailored resume is generated.</span>'
+      + '<span>' + summary + statusText + '</span>'
       + '</div>';
     return;
   }
@@ -112,34 +124,144 @@ function statusPillClass(status) {
 }
 
 // ---- Polling for tailoring ----
-function startPoll(jobId) {
-  pollTimer = setInterval(async () => {
-    try {
-      const { response: res, payload: body } = await apiFetch('/api/history/' + jobId);
-      if (!res.ok) return;
-      const job = body.data;
-      if (job.can_submit && job.generated_resumes && job.generated_resumes.length > 0) {
+function startPoll(tailoringJobId, jobAnalysisId) {
+  stopPoll();
+  if (jobAnalysisId) {
+    pollTimer = setInterval(() => pollTailoringJob(tailoringJobId, jobAnalysisId), TAILORING_POLL_MS);
+    pollTailoringJob(tailoringJobId, jobAnalysisId);
+    return;
+  }
+  pollTimer = setInterval(() => pollTailoringHistory(tailoringJobId), TAILORING_POLL_MS);
+  pollTailoringHistory(tailoringJobId);
+}
+
+async function pollTailoringJob(tailoringJobId, jobAnalysisId) {
+  try {
+    const { response: res, payload: body } = await apiFetch('/api/jobs/' + encodeURIComponent(tailoringJobId));
+    if (!res.ok) return;
+
+    const job = body.data || {};
+    const status = job.status || job.tailoring_status || '';
+    updateTailoringProgress(job);
+
+    if (status === 'succeeded') {
+      const resolvedAnalysisId = jobAnalysisId || job.job_analysis_id || job.result_payload?.job_analysis_id;
+      if (resolvedAnalysisId && await loadTailoredResumeFromHistory(resolvedAnalysisId)) {
         stopPoll();
-        const resume = job.generated_resumes[0];
-        currentResumeVersions = job.generated_resumes || [];
-        currentBaselineText = job.baseline_profile_text || null;
-        currentResumeId = resume.id;
-        currentResumeText = resume.resume_text;
-        currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
-        currentBeautifications = resume.beautifications || [];
-        currentJdText = job.jd_full_text || currentJdText;
-        document.getElementById('tailoring-spinner').style.display = 'none';
-        document.getElementById('tailoring-done').style.display = 'flex';
       }
-    } catch (_) {}
-  }, 2000);
+      return;
+    }
+
+    if (status === 'failed' || status === 'cancelled') {
+      stopPoll();
+      showTailoringFailure(job);
+    }
+  } catch (_) {}
+}
+
+async function pollTailoringHistory(jobAnalysisId) {
+  try {
+    if (await loadTailoredResumeFromHistory(jobAnalysisId)) {
+      stopPoll();
+    }
+  } catch (_) {}
+}
+
+async function loadTailoredResumeFromHistory(jobAnalysisId) {
+  const { response: res, payload: body } = await apiFetch('/api/history/' + encodeURIComponent(jobAnalysisId));
+  if (!res.ok) return false;
+  return applyTailoringHistory(body.data || {});
+}
+
+function applyTailoringHistory(job) {
+  const tailoringStatus = job.tailoring_status || '';
+  if (tailoringStatus === 'failed' || tailoringStatus === 'cancelled') {
+    showTailoringFailure(job);
+    return true;
+  }
+
+  if (!(job.can_submit && job.generated_resumes && job.generated_resumes.length > 0)) {
+    updateTailoringProgress(job);
+    return false;
+  }
+
+  const resume = job.generated_resumes[0];
+  currentResumeVersions = job.generated_resumes || [];
+  currentBaselineText = job.baseline_profile_text || null;
+  currentResumeId = resume.id;
+  currentResumeText = resume.resume_text;
+  currentResumePdfUrl = resume.pdf_url || '/api/generated-resumes/' + resume.id + '/pdf';
+  currentBeautifications = resume.beautifications || [];
+  currentJdText = job.jd_full_text || currentJdText;
+  document.getElementById('tailoring-spinner').style.display = 'none';
+  document.getElementById('tailoring-done').style.display = 'flex';
+  return true;
 }
 
 function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
-function showTailoringSpinner() {
+function showTailoringSpinner(status) {
   document.getElementById('tailoring-spinner').style.display = 'flex';
   document.getElementById('tailoring-done').style.display = 'none';
+  updateTailoringProgress({ status: status || 'queued' });
+}
+
+function updateTailoringProgress(job) {
+  const spinner = document.getElementById('tailoring-spinner');
+  if (!spinner) return;
+  const label = spinner.querySelector('span:last-child');
+  if (!label) return;
+
+  const status = formatTailoringStatus(job.status || job.tailoring_status || 'running');
+  const progress = formatTailoringProgress(job);
+  label.textContent = 'Tailoring ' + status + (progress ? ' - ' + progress : '') + ' - polling every 2s...';
+}
+
+function formatTailoringProgress(job) {
+  if (job.progress_message) return job.progress_message;
+  if (job.progress_percent != null) return String(job.progress_percent) + '%';
+  if (job.progress_current != null && job.progress_total != null) {
+    return String(job.progress_current) + '/' + String(job.progress_total);
+  }
+  return '';
+}
+
+function formatTailoringStatus(status) {
+  if (status === 'queued') return 'queued';
+  if (status === 'running') return 'in progress';
+  if (status === 'succeeded') return 'succeeded';
+  if (status === 'failed') return 'failed';
+  if (status === 'cancelled') return 'cancelled';
+  return status || 'in progress';
+}
+
+function showTailoringFailure(job) {
+  const status = job.status || job.tailoring_status || 'failed';
+  const isCancelled = status === 'cancelled';
+  const title = isCancelled ? 'Tailoring cancelled' : 'Tailoring failed';
+  const message = job.error_message || job.message || (
+    isCancelled
+      ? 'Resume tailoring was cancelled before a draft was generated.'
+      : 'Resume tailoring did not finish. Check the job status or try evaluating again.'
+  );
+  const code = job.error_code ? ' (' + job.error_code + ')' : '';
+
+  document.getElementById('tailoring-spinner').style.display = 'none';
+  document.getElementById('tailoring-done').style.display = 'none';
+
+  const el = document.getElementById('result-actions');
+  if (el) {
+    el.innerHTML = '<div class="next-action next-skip">'
+      + '<strong>' + escHtml(title) + '</strong>'
+      + '<span>' + escHtml(message + code) + '</span>'
+      + '</div>';
+  }
+
+  if (isCancelled) {
+    UI.toast.warning(message, { title });
+  } else {
+    UI.toast.error(message, { title });
+  }
 }

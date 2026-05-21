@@ -20,6 +20,7 @@ from backend.app.schemas.scrape import (
 )
 from backend.app.services.ai_guardrails import SCRAPE_AFTER_EVALUATE_WORKFLOW
 from backend.app.services.batch_evaluator import evaluate_pending_listings
+from backend.app.services.job_queue import enqueue_tailoring_job
 from backend.app.services.llm.prompt_registry import (
     STEP_TAILOR,
     prompt_version_for_step,
@@ -31,7 +32,6 @@ from backend.app.services.scrapers.pipeline import (
     run_scrape_background,
 )
 from backend.app.services.scrapers.registry import resolve_sources
-from backend.app.workers.tailor import run_tailoring
 
 router = APIRouter()
 
@@ -88,9 +88,7 @@ def run_scrape(
         [run.id for run in runs],
         _session_factory(request),
     )
-    out = ScrapeRunCreatedOut(
-        runs=[ScrapeRunOut.model_validate(run) for run in runs]
-    )
+    out = ScrapeRunCreatedOut(runs=[ScrapeRunOut.model_validate(run) for run in runs])
     return success(out.model_dump(mode="json"), status_code=202)
 
 
@@ -169,9 +167,7 @@ def start_scrape_control(
         body.profile_id,
         None if body.source in {"all", "all_with_linkedin"} else body.source,
     )
-    out = ScrapeRunCreatedOut(
-        runs=[ScrapeRunOut.model_validate(run) for run in runs]
-    )
+    out = ScrapeRunCreatedOut(runs=[ScrapeRunOut.model_validate(run) for run in runs])
     return success(
         out.model_dump(mode="json"),
         active_status=_control_status_out(db).model_dump(mode="json"),
@@ -186,8 +182,7 @@ def stop_scrape_control(db: Session = Depends(get_db)) -> JSONResponse:
     return success(
         status.model_dump(mode="json"),
         cancelled_runs=[
-            ScrapeRunOut.model_validate(run).model_dump(mode="json")
-            for run in cancelled
+            ScrapeRunOut.model_validate(run).model_dump(mode="json") for run in cancelled
         ],
     )
 
@@ -198,9 +193,7 @@ def scrape_status(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     runs = _recent_runs(db, limit)
-    out = ScrapeStatusOut(
-        recent_runs=[ScrapeRunOut.model_validate(run) for run in runs]
-    )
+    out = ScrapeStatusOut(recent_runs=[ScrapeRunOut.model_validate(run) for run in runs])
     return success(out.model_dump(mode="json"))
 
 
@@ -256,14 +249,13 @@ def run_scrape_control_background(
             return
 
         for job_id in summary.tailoring_job_ids:
-            run_tailoring(
+            enqueue_tailoring_job(
+                db,
                 job_analysis_id=job_id,
-                llm=llm,
                 prompt_version=prompt_version_for_step(
                     STEP_TAILOR,
                     settings=settings,
                 ),
-                session_factory=session_factory,
             )
 
 

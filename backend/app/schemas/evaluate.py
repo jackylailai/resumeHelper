@@ -26,6 +26,8 @@ class EvaluateOut(BaseModel):
     prompt_version: str | None = None
     llm_backend: str | None = None
     llm_model: str | None = None
+    tailoring_job_id: uuid.UUID | None = None
+    tailoring_status: str | None = None
 
 
 class CallbackIn(BaseModel):
@@ -83,6 +85,8 @@ class HistoryItemOut(BaseModel):
     prompt_version: str | None = None
     llm_backend: str | None = None
     llm_model: str | None = None
+    tailoring_job_id: uuid.UUID | None = None
+    tailoring_status: str | None = None
     created_at: datetime
 
 
@@ -100,6 +104,8 @@ class HistoryDetailOut(BaseModel):
     prompt_version: str | None = None
     llm_backend: str | None = None
     llm_model: str | None = None
+    tailoring_job_id: uuid.UUID | None = None
+    tailoring_status: str | None = None
     created_at: datetime
     baseline_profile_text: str | None = None
     generated_resumes: list[GeneratedResumeOut] = []
@@ -129,6 +135,8 @@ class BulkEvaluateResult(BaseModel):
     score: int
     status: Literal["ready_to_submit", "needs_tailoring", "skip"]
     cached: bool
+    tailoring_job_id: uuid.UUID | None = None
+    tailoring_status: str | None = None
 
 
 class BulkEvaluateOut(BaseModel):
@@ -162,6 +170,8 @@ class EvaluateByListingsResult(BaseModel):
     status: Literal["ready_to_submit", "needs_tailoring", "skip"] | None = None
     cached: bool = False
     error: str | None = None
+    tailoring_job_id: uuid.UUID | None = None
+    tailoring_status: str | None = None
 
 
 class EvaluateByListingsOut(BaseModel):
