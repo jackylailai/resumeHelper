@@ -449,8 +449,11 @@ def evaluate_pending_scraped_listings(
 
 
 @router.post("/callback")
-def n8n_callback(body: schemas.CallbackIn, db: Session = Depends(get_db)) -> JSONResponse:
-    """Callback endpoint — accepts external tailoring results (e.g. from n8n or other pipeline)."""
+def external_resume_callback(
+    body: schemas.CallbackIn,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Accept generated resume delivery from an external pipeline."""
     job = db.get(JobAnalysis, body.job_analysis_id)
     if job is None:
         return error("not_found", f"job_analysis {body.job_analysis_id} not found", status_code=404)

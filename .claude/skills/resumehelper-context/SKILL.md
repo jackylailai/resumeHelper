@@ -22,7 +22,7 @@ Evaluates JDs against a baseline resume profile and scores three ways:
 
 | To... | Look at |
 |---|---|
-| Start the stack (host FastAPI + docker pg/n8n) | `scripts/start.sh` |
+| Start the stack (host FastAPI + docker postgres) | `scripts/start.sh` |
 | Start everything in docker (force-rebuild image) | `scripts/restart-docker.sh --full` |
 | Restart only FastAPI | `scripts/restart-app.sh` |
 | Run unit + integration tests | `scripts/test.sh` (auto-bootstraps py3.11+ venv) |
@@ -70,7 +70,7 @@ FastAPI + PostgreSQL (SQLAlchemy 2.x, Alembic) + Anthropic Claude (SDK or CLI) +
 ./scripts/test.sh --recreate               # rebuild .venv
 
 # Local stack
-./scripts/start.sh                         # postgres + n8n (docker) + FastAPI (host)
+./scripts/start.sh                         # postgres (docker) + FastAPI (host)
 ./scripts/restart-app.sh                   # FastAPI only (kills lingering uvicorn, clears __pycache__)
 ./scripts/restart-docker.sh --full         # everything via docker, --no-cache rebuild
 
@@ -102,7 +102,7 @@ FastAPI + PostgreSQL (SQLAlchemy 2.x, Alembic) + Anthropic Claude (SDK or CLI) +
 - **#51 — long-JD evaluate blowup.** Quick JSON-fix landed in #53 so the front end no longer breaks on errors. **Still TODO**: server-side resume *summarisation* (compute once when profile is saved, store on `BaselineProfile`, feed summary instead of raw `skills_text` to `evaluate()`) so long inputs don't hit context limits. Was selected as the strategic fix.
 - **Job-listing data**: 36 rows seeded via `scrape_jobs.py` (104: 25 with "後端工程師"; yourator: 11 across "後端工程師" + "後端"). Yourator's API ignores keyword; substring filter is client-side, so wider keywords yield more rows.
 - **No real e2e against live LLM** has been run on the seeded data yet — pending.
-- **`weasyprint` not installed**; `pdf_url` is null from the BackgroundTask path. To set it manually, POST `/api/callback`.
+- Tailoring now runs through durable `ai_jobs`; `/api/callback` remains only for external resume delivery.
 - **v1 endpoints removed** in migration 0002. Only v2 (profile + evaluate + history) remains.
 
 ## Token-saving tips for future sessions

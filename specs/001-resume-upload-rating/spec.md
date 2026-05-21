@@ -121,7 +121,7 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **FR-005**: System MUST trigger durable background tailoring for `needs_tailoring` jobs using the specific profile used at evaluation time (stored as `profile_id` on `JobAnalysis`).
 - **FR-006**: System MUST store generated resumes per job analysis with the LLM prompt version and selected proof point IDs.
 - **FR-007**: System MUST expose history (all evaluations) and a submittable list (can_submit=true with resume attached).
-- **FR-008**: System MUST accept external resume delivery via POST `/api/callback` (e.g., from n8n or a CI pipeline).
+- **FR-008**: System MUST accept external resume delivery via POST `/api/callback` for optional import or CI pipelines.
 - **FR-009**: System MUST accept bulk JD evaluation (list of texts) in a single request, deduplicated and summarized.
 - **FR-010**: No authentication or multi-user support required. Single-user tool.
 - **FR-011**: PDF generation is out of scope for Phase 1; `pdf_url` is null.
@@ -154,4 +154,4 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - Compare endpoint
 - Multi-user authentication
 - PDF generation (weasyprint not installed)
-- Real crawler / n8n ingestion (stubs exist for callback)
+- Real crawler / external ingestion services beyond the generic callback contract

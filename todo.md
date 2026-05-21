@@ -1,5 +1,12 @@
 # TODO: Resume Evaluation & Tailoring System
 
+> Historical note: this planning draft predates durable `ai_jobs`. n8n is no
+> longer an active runtime dependency; resume tailoring is handled by the
+> backend durable worker. `/api/callback` is retained only as a generic external
+> resume delivery endpoint. Existing local Docker n8n volumes are not removed by
+> this repository change; export any old workflows manually before deleting
+> those volumes.
+
 **Status**: Planning Phase  
 **Updated**: 2026-05-05  
 **Owner**: Next Agent

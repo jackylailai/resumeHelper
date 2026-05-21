@@ -399,8 +399,8 @@ paths:
       tags: [evaluate]
       summary: Deliver a generated resume from an external pipeline
       description: |
-        Accepts a generated resume (e.g., from n8n or a CI pipeline) and stores
-        it. Sets can_submit=true on the parent JobAnalysis.
+        Accepts a generated resume from an external pipeline and stores it.
+        Sets can_submit=true on the parent JobAnalysis.
       requestBody:
         required: true
         content:

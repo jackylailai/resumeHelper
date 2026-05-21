@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start the full local stack: postgres + n8n (docker) + FastAPI (host).
+# Start the full local stack: postgres (docker) + FastAPI (host).
 # Idempotent — safe to re-run. Does NOT remove volumes.
 # For app-only restarts (after editing backend code), use scripts/restart-app.sh.
 
@@ -14,7 +14,7 @@ mkdir -p "$DATA_PATH"
 
 cd "$PROJECT_ROOT"
 
-echo "Starting docker services (postgres, n8n)..."
+echo "Starting docker services (postgres)..."
 RESUMEHELPER_DATA_PATH="$DATA_PATH" docker-compose up -d
 
 echo "Waiting for postgres to be ready..."
@@ -32,5 +32,4 @@ docker-compose ps
 echo
 echo "FastAPI:    http://localhost:8000"
 echo "Swagger:    http://localhost:8000/docs"
-echo "n8n:        http://localhost:5678"
 echo "Postgres:   localhost:5432"
