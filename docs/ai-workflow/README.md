@@ -4,13 +4,28 @@ Resume Helper is designed as a deterministic AI workflow system, not a generic
 chatbot. The application owns the job-search flow, persists state, validates LLM
 outputs, and keeps human review in front of real-world submission.
 
+## Showoff Summary
+
+The short version: Resume Helper uses LLMs, but it does not hand the product to
+an LLM. Every AI step is wrapped by application-owned contracts, durable state,
+audit metadata, and user review.
+
+| Layer | Show this | Why it matters |
+|-------|-----------|----------------|
+| Product workflow | Profile -> JD score -> tailored resume -> application tracker. | The system solves a full job-search loop, not a single prompt. |
+| Contracts | Evaluate/tailor/extract/beautify outputs are validated before persistence. | Bad model output fails closed. |
+| Durable jobs | Async evaluate and tailoring jobs are stored in `ai_jobs`. | Long-running work survives refreshes and exposes failure states. |
+| Observability | `llm_audit_logs` stores prompt/model/hash/token/error metadata. | AI behavior can be explained after the fact without duplicating raw JD/resume text. |
+| Guardrails | Quotas, provider-call switches, prompt-injection boundaries, SSRF guard, and rate limits. | Batch automation has cost, privacy, and abuse backstops. |
+| Human review | Generated resumes are drafts the user reviews before applying. | The product prepares materials; it does not auto-submit. |
+
 ## Workflow Model
 
 ```text
 baseline profile + job description
-  -> evaluate fit
-  -> route by score
-  -> optionally tailor resume
+  -> evaluate fit (sync by default, async job when selected)
+  -> route by score in application code
+  -> optionally queue durable tailoring
   -> optionally beautify and render PDF
   -> human review
   -> application tracking
@@ -19,6 +34,27 @@ baseline profile + job description
 The LLM is used as a bounded step inside this workflow. It can score, explain,
 extract, rewrite, and format content, but application code decides state
 transitions such as `ready_to_submit`, `needs_tailoring`, and `skip`.
+
+### State Routing
+
+| Score | State | System behavior |
+|-------|-------|-----------------|
+| 85-100 | `ready_to_submit` | Store the analysis and make it visible as submittable. |
+| 60-84 | `needs_tailoring` | Store the analysis and queue a durable `tailor` job. |
+| 0-59 | `skip` | Store the analysis with a skip reason; do not generate a resume. |
+
+### Durable Job Surface
+
+The durable job queue is the reliability boundary for long-running AI work:
+
+| Job kind | Created by | Polling endpoint | Success payload |
+|----------|------------|------------------|-----------------|
+| `evaluate` | `POST /api/evaluate/jobs` or `POST /api/evaluate?async=true` | `GET /api/jobs/{job_id}` | `cached`, `job_analysis_id`, `tailoring_job_id`, `tailoring_status`, and `evaluation` matching `EvaluateOut`. |
+| `tailor` | Sync or async evaluation when score routes to `needs_tailoring` | `GET /api/jobs/{job_id}` | `job_analysis_id` and `generated_resume_id`. |
+
+`POST /api/evaluate` remains synchronous by default for the simple demo path.
+The async evaluate path exists to show queued/running/failed/succeeded states
+and to keep long-running LLM work from being tied to one HTTP request.
 
 ## Core AI Engineering Concepts
 
@@ -269,6 +305,12 @@ Implemented AI workflow foundations:
   versions
 - proof point CRUD plus relevant proof point selection for tailor prompts
 - generated resume attribution via stored `proof_point_ids`
+- durable `ai_jobs` state for async single-JD evaluation and tailoring
+- `/api/jobs/{job_id}` polling, retry/error fields, cancellation, and progress
+  fields for durable jobs
+- optional async evaluate UI path that preserves the default sync evaluate flow
+- quota/cost/privacy guardrails for batch AI workflows
+- SSRF guard, prompt-injection trust boundary, and route-level rate limiting
 
 For a concise demo-oriented view of what is ready to show, see
 [SHOWCASE.md](SHOWCASE.md).
@@ -279,10 +321,10 @@ implementation issues, see [../ai-engineering-readiness.md](../ai-engineering-re
 Known gaps:
 
 - tailoring factuality coverage is still smoke-level and needs broader fixtures
-- long-running AI work still needs durable job state
 - proof point ranking and UI selection controls are still basic
 - prompt replay currently covers evaluate fixtures; tailor, extraction, and
   beautify replay can be added when those prompts start changing frequently
+- no dedicated UI yet for browsing `llm_audit_logs` or all durable AI jobs
 
 ## LLM Audit Log
 
@@ -303,9 +345,9 @@ The audit table does not store full resume or JD text by default. The hashes are
 enough to correlate repeated inputs and outputs without turning the audit trail
 into another sensitive content store.
 
-## Roadmap
+## Foundation Progress
 
-Recommended implementation order:
+The original AI engineering implementation order now reads as a progress map:
 
 1. **CI eval harness**
    Run deterministic eval fixtures on every AI-related PR and upload JSON /
@@ -337,8 +379,10 @@ Recommended implementation order:
    ranking refinements and UI controls remain.
 
 7. **Durable jobs and cost guardrails**
-   Move long-running AI work into persisted jobs with limits, retry, progress,
+   Persist long-running evaluate/tailor work with retry, progress,
    cancellation, and budget controls.
+   Current status: implemented for async single-JD evaluate and tailoring;
+   broader batch job fan-out can build on the same `ai_jobs` surface.
 
 ## Issue Map
 

@@ -1,38 +1,39 @@
-# Pages — what each tab is for
+# Pages - what each screen is for
 
-The app's left sidebar is grouped into three sections by purpose. New users
-land on **Evaluate**; everything else is reachable from the sidebar.
+The app's left sidebar is grouped by workflow stage. New users land on
+**Evaluate**; stored data, scraping, and application tracking are one click
+away.
 
-## EVALUATE — score one JD, see results
-
-| Page | URL | What it does |
-|---|---|---|
-| **Evaluate** | `/` | Paste a single JD. The LLM scores it against your selected baseline profile and routes the result into one of three tiers (`ready_to_submit` / `needs_tailoring` / `skip`). For `needs_tailoring`, a tailored resume draft is generated in the background. |
-| **History** | `/` (tab) | Every evaluation you've ever run, newest first. Re-open any score to see the explanation, strengths, gaps, and tailored resume if one was generated. |
-| **Submittable** | `/` (tab) | Just the JDs that scored `ready_to_submit` (85+). The shortlist of "you can apply with your baseline as-is". |
-
-## DATA — the JDs and the resumes the evaluator works against
+## Evaluate - score one JD, see results
 
 | Page | URL | What it does |
-|---|---|---|
-| **JD Database** | `/jobs.html` | Every stored JD — anything scraped or pasted-to-store. Filter by source / status, page through results, bulk-score a selection against the current profile, bulk-delete stale rows. |
-| **Profile** | `/` (tab) | Your baseline resume(s). Upload a PDF or paste skills text. The evaluator scores JDs against the *default* profile unless you pick another. |
-| **Applications** | `/applications.html` | Kanban tracker for JDs you've decided to apply to: planned / applied / interviewing / offer / rejected / archived. Add a JD here from its detail page on `/jobs.html`. |
+|------|-----|--------------|
+| **Evaluate** | `/` | Paste a single JD. The default path scores synchronously; the optional async mode queues a durable evaluate job and polls status. Results route to `ready_to_submit`, `needs_tailoring`, or `skip`. |
+| **History** | `/` (tab) | Every evaluation, newest first. Re-open a score to see explanation, strengths, gaps, tailoring status, and generated resume history. |
+| **Submittable** | `/` (tab) | JDs that are ready to act on: high-score baseline matches and tailored drafts that passed the review gate. |
 
-## PIPELINE — scheduled scraping
+## Data - JDs and profiles the evaluator works against
 
 | Page | URL | What it does |
-|---|---|---|
-| **Scrapes** | `/scrapes.html` | Schedule a scrape against 104 / Yourator / LinkedIn (or all). Pick a keyword, optional filters, and a row limit; runs land in the JD Database. The lower table shows past runs with stats (inserted / updated / skipped / failed / filtered). |
+|------|-----|--------------|
+| **JD Database** | `/jobs.html` | Stored JDs from scraping or paste-to-store. Filter by source/status, inspect details, bulk-score rows, and move promising jobs to Applications. |
+| **Profile** | `/` (tab) | Baseline resume profiles. Upload a PDF or paste skills text, then mark the default profile used by evaluation. |
+| **Applications** | `/applications.html` | Tracker for jobs you decided to act on: planned, applied, interviewing, offer, rejected, or archived. |
+
+## Pipeline - scheduled scraping
+
+| Page | URL | What it does |
+|------|-----|--------------|
+| **Scrapes** | `/scrapes.html` | Schedule ingestion from 104, Yourator, LinkedIn, or all sources. Runs land in the JD Database with inserted/updated/skipped/failed/filtered counts. |
 
 ## Why this grouping
 
-- **Evaluate is per-JD, now.** You're paying for one LLM call and getting one
-  result. History and Submittable are just views over those results.
-- **Data is everything the evaluator reads from or writes to.** Profiles,
-  stored JDs, application status — long-lived state.
-- **Pipeline is scheduled batch work.** Scrapes pulls dozens of JDs at a
-  time into Data, separate from any specific evaluation.
+- **Evaluate is the immediate decision point.** It answers whether one JD is a
+  match and whether resume work is needed.
+- **Data is the source of truth.** Profiles, stored JDs, analyses, generated
+  resumes, and application status are long-lived product state.
+- **Pipeline is batch intake.** Scrapes bring in many JDs at a time before a
+  user chooses what to score or pursue.
 
-See [`docs/quickstart.md`](quickstart.md) for the end-to-end first-evaluation
-flow, and [`docs/scrapers.md`](scrapers.md) for how each platform is scraped.
+See [`docs/quickstart.md`](quickstart.md) for the first-evaluation flow and
+[`docs/scrapers.md`](scrapers.md) for per-platform scraper mechanics.
