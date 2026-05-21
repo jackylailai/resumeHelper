@@ -10,7 +10,7 @@ Single-user FastAPI service that:
 2. Accepts a **job description (JD)** and scores the fit (0–100) via LLM against a selected or latest profile
 3. If score ≥ `RESUME_GEN_THRESHOLD`, triggers a **FastAPI BackgroundTask** to generate a tailored resume via Anthropic API directly (n8n removed)
 4. Cache scoped to `(jd_hash, profile_id)` — same JD against different profiles = independent evaluations
-5. Stores all analyses and generated resumes; serves them via a minimal browser UI
+5. Stores all analyses, generated resumes, and selected proof point attribution; serves them via a minimal browser UI
 
 No resume versioning. No async job queue (Phase 1). No auth. Runs locally on Mac.
 
@@ -32,9 +32,10 @@ FastAPI (uvicorn, single process)
   ├── POST   /api/callback          → external resume delivery (e.g. CI pipeline)
   ├── GET    /api/history           → list past job_analyses
   ├── GET    /api/history/{id}      → one analysis + all generated_resumes
+  ├── GET/POST/PATCH/DELETE /api/proof-points → achievement evidence library
   └── GET    /api/health
   │
-  ├── PostgreSQL  (3 tables: baseline_profile, job_analyses, generated_resumes)
+  ├── PostgreSQL  (baseline_profile, job_analyses, generated_resumes, proof_points)
   └── Anthropic API (tailoring via BackgroundTask — no n8n)
 ```
 
@@ -55,6 +56,7 @@ Switching is a one-line config change — `LLMClient` Protocol isolates this.
 - **LLM (scoring)**: local `claude` CLI → `ClaudeCLIClient`
 - **LLM (generation)**: Anthropic SDK directly via FastAPI BackgroundTask in `workers/tailor.py` (n8n removed in #19)
 - **PDF storage**: uploaded PDFs persisted under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf`; absolute path stored on `baseline_profile.pdf_path` (#35; S3 deferred)
+- **Proof point evidence**: `proof_points` stores profile-scoped/global achievement evidence; `workers/tailor.py` selects relevant rows for needs-tailoring prompts and stores selected IDs on `GeneratedResume.proof_point_ids`.
 - **Job-board crawlers (Phase 2.5)**: per-source scrapers under `services/scrapers/` implement `BaseScraper`; outputs land in `job_listings`; a separate batch evaluator feeds `evaluator_v2` to keep crawl and scoring decoupled. No headless browser — only public JSON / guest HTML endpoints; failures in one source must not block the others.
 - **Prompt files**: `modes/score.md`, `modes/generate.md`
 - **Testing**: pytest; `FakeLLMClient` for unit tests; testcontainers-postgres for integration

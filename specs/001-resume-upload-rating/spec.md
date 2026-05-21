@@ -8,7 +8,7 @@
 > implementation deltas where useful for API/model traceability.
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-11 (rev 5)
+**Updated**: 2026-05-21 (rev 6)
 **Status**: Phase 1 (implemented)
 **Authoritative direction**: multi-profile CRUD + profile-scoped evaluation; uploaded PDFs persisted on disk; v1 dead code removed; Python 3.11 floor
 
@@ -69,7 +69,8 @@ JD evaluated against different profiles produces independent results.
 7. **Given** `jd_text` is omitted, **Then** a 422 validation error is returned.
 8. **Given** a score of 85+, **Then** `status` is `ready_to_submit` and no background tailoring is triggered.
 9. **Given** a score of 60–84, **Then** `status` is `needs_tailoring` and a background tailoring task is enqueued using the profile that was used for scoring.
-10. **Given** a score below 60, **Then** `status` is `skip` and `skip_reason` explains why the job is a poor fit.
+10. **Given** relevant proof points exist for the selected profile or globally, **Then** tailoring may use those proof points as supplemental source evidence and the generated resume records the selected proof point IDs.
+11. **Given** a score below 60, **Then** `status` is `skip` and `skip_reason` explains why the job is a poor fit.
 
 ---
 
@@ -112,7 +113,7 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 - **FR-003**: System MUST deduplicate JDs by SHA-256 hash of canonicalized text scoped to `(jd_hash, profile_id)`; re-submitting the same JD+profile combination skips the LLM call.
 - **FR-004**: System MUST score each JD 0–100 and classify it into one of three tiers: `ready_to_submit`, `needs_tailoring`, or `skip`.
 - **FR-005**: System MUST trigger background tailoring for `needs_tailoring` jobs using the specific profile used at evaluation time (stored as `profile_id` on `JobAnalysis`).
-- **FR-006**: System MUST store generated resumes per job analysis with the LLM prompt version.
+- **FR-006**: System MUST store generated resumes per job analysis with the LLM prompt version and selected proof point IDs.
 - **FR-007**: System MUST expose history (all evaluations) and a submittable list (can_submit=true with resume attached).
 - **FR-008**: System MUST accept external resume delivery via POST `/api/callback` (e.g., from n8n or a CI pipeline).
 - **FR-009**: System MUST accept bulk JD evaluation (list of texts) in a single request, deduplicated and summarized.
@@ -125,14 +126,15 @@ A user reviews all evaluated JDs and sees which ones are ready to submit
 
 - **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `pdf_path` (TEXT, optional — set when created via PDF upload), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
 - **JobAnalysis**: One row per unique `(jd_hash, profile_id)` pair. Stores score, status, strengths, gaps, can_submit, skip_reason, `profile_id` FK (SET NULL on profile delete).
-- **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url` (null), `prompt_version`.
+- **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url`, `prompt_version`, `proof_point_ids`.
+- **ProofPoint**: User-maintained achievement evidence. May be linked to one profile or global; includes title, context, metrics, skills, tags, and STAR fields. Relevant proof points can be selected for tailoring prompts.
 - **JobListing** (Phase 2.5): One row per scraped JD. `source` (`104`/`yourator`/`linkedin`), `source_id` (per-platform job id), `title`, `company`, `location`, `url`, `description` (full JD), `raw_json`, `scraped_at`, `job_analysis_id` FK (SET NULL). Unique on `(source, source_id)`.
 
 ## Success Criteria
 
 - **SC-001**: Evaluate a JD in under 30 s under normal conditions.
 - **SC-002**: Duplicate JD submission returns cached result in under 1 s.
-- **SC-003**: `needs_tailoring` jobs produce a generated resume in the background without blocking the HTTP response.
+- **SC-003**: `needs_tailoring` jobs produce a generated resume in the background without blocking the HTTP response, with selected proof point attribution when proof points were used.
 - **SC-004**: All evaluated JDs visible in history with correct status.
 - **SC-005**: Submittable list shows only `can_submit=true` jobs with resume text.
 - **SC-006** (Phase 2.5): A single CLI run scrapes ~100 JDs across 104 / Yourator / LinkedIn into `job_listings`, deduped by `(source, source_id)`.
