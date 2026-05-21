@@ -1,18 +1,42 @@
 # Resume Helper
 
-Resume Helper is a single-user AI workflow tool for job search execution. It
-helps you collect job descriptions, score them against baseline profiles,
-generate reviewable tailored resumes, and track application decisions.
+Resume Helper is a single-user AI workflow product for job search execution. It
+turns raw job descriptions into scored opportunities, reviewable resume drafts,
+and trackable application decisions.
 
-The product is intentionally workflow-first rather than chatbot-first. LLMs are
-used inside bounded steps with explicit inputs, expected outputs, and
-application-owned state transitions.
+The project is intentionally workflow-first rather than chatbot-first. LLMs are
+bounded providers inside explicit steps; the application owns persistence,
+status transitions, validation, retry/cancel behavior, and the human review
+gate before submission.
 
-## Current Workflow
+## Showoff Summary
+
+```text
+profile library + JD database
+  -> sync or async JD evaluation
+  -> deterministic score routing
+  -> durable tailoring job when useful
+  -> generated Markdown / HTML / PDF for review
+  -> opportunities, submittable list, and application tracker
+```
+
+What is worth showing:
+
+| Moment | What the user sees | What the system proves |
+|--------|--------------------|------------------------|
+| Add profile | Upload or paste a baseline resume profile. | Profiles are persisted and selected explicitly. |
+| Score JD | A 0-100 score, explanation, strengths, and gaps. | LLM output is schema-validated before it affects state. |
+| Choose async | Evaluation can run as a durable job and be polled. | Long-running AI work has queued/running/succeeded/failed/cancelled states. |
+| Tailor resume | Mid-score jobs queue a resume generation job. | Resume generation is observable, retryable, and not lost on restart. |
+| Review draft | The user opens Markdown, beautified HTML, and PDF output. | The product keeps a human approval boundary. |
+| Track application | Promising listings move into the application tracker. | The AI workflow ends in explicit user action, not auto-submit. |
+
+## Product Workflow
 
 1. Save one or more baseline profiles.
 2. Paste a JD, bulk-evaluate JDs, or scrape listings into the JD database.
-3. Score each JD against a selected baseline profile.
+3. Score each JD against a selected baseline profile. Single JD evaluation is
+   synchronous by default, with an optional durable async mode.
 4. Route the result by score:
 
 | Score | Status | Behavior |
@@ -28,9 +52,10 @@ application-owned state transitions.
 ## Implemented Product Areas
 
 - Baseline profile CRUD and PDF upload.
-- Single JD evaluation.
+- Single JD evaluation, synchronous by default with optional async job mode.
 - Bulk JD evaluation.
 - Three-tier scoring and status routing.
+- Durable AI jobs for async evaluate and background tailoring.
 - Generated resume drafts and beautified PDF/HTML output.
 - JD database with source listings.
 - Scrapers for 104, Yourator, and LinkedIn guest listings.
@@ -38,13 +63,15 @@ application-owned state transitions.
 - Cron wrapper for scheduled scrape + evaluate jobs.
 - Job opportunities / recommended application surface.
 - Application tracker with status and follow-up fields.
+- Metadata-first LLM audit logs, prompt versions, and deterministic harnesses.
+- Batch cost/quota/privacy guardrails.
 - Production-style JSON error envelopes with request IDs.
 
 ## Main Pages
 
 | Page | Purpose |
 |------|---------|
-| `/` | Evaluate JDs, review history, profiles, and submittable results. |
+| `/` | Evaluate JDs, optionally queue async scoring, review history, profiles, and submittable results. |
 | `/jobs.html` | Browse stored JDs, filter listings, inspect source links, and score selected rows. |
 | `/scrapes.html` | Run and monitor source ingestion for 104, Yourator, and LinkedIn. |
 | `/applications.html` | Track jobs you intend to act on after reviewing Opportunities or Submittable. |
@@ -61,9 +88,9 @@ The current LLM flow is:
 
 ```text
 baseline profile + JD
-  -> evaluate LLM call
+  -> evaluate LLM call or durable evaluate job
   -> application-owned score routing
-  -> optional tailoring LLM call
+  -> optional durable tailoring job
   -> optional beautify/PDF generation
   -> human review
 ```
@@ -163,6 +190,20 @@ Open:
 - http://localhost:8000/scrapes.html
 - http://localhost:8000/applications.html
 
+## Demo Script
+
+Use this path when showing the project end to end:
+
+1. Open `/`, confirm System Status is ready, and select a profile.
+2. Paste a JD and run the default synchronous evaluation.
+3. Re-run with **Async job** checked to show durable job polling.
+4. Use a mid-score JD to queue tailoring, then open the generated resume modal.
+5. Beautify the resume and download the PDF.
+6. Open `/jobs.html`, inspect a stored listing, and add it to Applications.
+7. Open `/applications.html` and move the job through status/follow-up fields.
+8. Point to CI harness reports and `llm_audit_logs` as the engineering proof
+   behind the workflow.
+
 ## Scrape Scheduling
 
 The Scrapes page includes controls to:
@@ -216,6 +257,7 @@ Docker must be running for integration tests that use testcontainers.
 - [Current product spec](specs/current-product-spec.md)
 - [Roadmap](specs/roadmap.md)
 - [AI workflow engineering](docs/ai-workflow/README.md)
+- [AI workflow showcase](docs/ai-workflow/SHOWCASE.md)
 - [AI engineering readiness](docs/ai-engineering-readiness.md)
 - [Prompt registry](docs/prompts.md)
 - [Historical OpenAPI contract](specs/001-resume-upload-rating/contracts/openapi.yaml)
