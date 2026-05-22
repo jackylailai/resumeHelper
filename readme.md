@@ -29,18 +29,21 @@ For a screen-by-screen map of buttons, API calls, and screenshot callouts, see
 
 ---
 
-## User Flow
+## User Walkthrough
 
-| Step | Screen | User action | What the app does |
-|------|--------|-------------|-------------------|
-| 1 | Profile | Add a profile from text or PDF, then mark one profile as default | Saves resume skills text through `/api/profiles` |
-| 2 | Evaluate | Pick a profile, paste a JD, click **Evaluate** | Scores the JD through `/api/evaluate` and routes it to ready, tailoring, or skip |
-| 3 | JD Database | Search listings, select rows, click **Score selected** | Scores stored listings through `/api/evaluate/by-listings` |
-| 4 | Submittable | Click **View** or **PDF** | Reviews generated resume text or downloads `/api/generated-resumes/{id}/pdf` |
-| 5 | Applications | Click **Track Application**, then update status or follow-up date | Creates or updates tracker rows through `/api/applications` |
-| 6 | History | Click **Refresh** or **View** | Shows past evaluations and full analysis details |
+1. Open the UI and go to **Profile**.
+2. Click **+ Add Profile**, paste skills text or preview a PDF, then click
+   **Save Profile**.
+3. Go to **Evaluate**, choose the profile, paste a JD, and click **Evaluate**.
+4. If the score needs tailoring, open **Submittable** and use **View** or
+   **PDF** after generation finishes.
+5. For stored jobs, open **JD Database**, select listings, and click
+   **Score selected**.
+6. Open a scored listing, click **Track Application**, then manage it from
+   **Applications** with status and follow-up dates.
+7. Use **History** to review previous evaluations.
 
-Annotated screenshots and button-level behavior are maintained in
+The complete step-by-step guide with annotated screenshots is in
 [docs/ui-flow.md](docs/ui-flow.md).
 
 ---
