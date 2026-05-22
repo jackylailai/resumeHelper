@@ -11,8 +11,8 @@ Source artifact used for this snapshot:
 | Field | Value |
 |---|---|
 | Artifact | `e2e-screenshots` |
-| Artifact ID | `7130756636` |
-| Created | `2026-05-21T08:22:50Z` |
+| Artifact ID | `7153541674` |
+| Created | `2026-05-22T05:41:14Z` |
 | Raw local path | `docs/assets/e2e-screenshots/` |
 | Annotated local path | `docs/assets/ui-flow/` |
 
@@ -21,6 +21,9 @@ Refresh the raw screenshots with:
 ```bash
 python scripts/download_e2e_screenshots.py
 ```
+
+If local Git credentials are not available to the script, set `GH_TOKEN` or
+`GITHUB_TOKEN` first.
 
 ## End-to-End Flow
 
@@ -122,25 +125,25 @@ Other JD Database actions:
 
 ## Applications
 
-The current checked-in screenshot artifact predates the Applications E2E flow.
-The guide maps the behavior here, and `test_application_tracker_flow.py` now
-captures tracker screenshots when the remote E2E workflow is rerun.
+![Annotated Applications screen](assets/ui-flow/applications-updated.annotated.png)
+
+| # | UI element | Trigger | Result |
+|---|---|---|---|
+| 1 | Search/filter/sort form | `GET /api/applications` with `q`, `status`, `sort_by`, `sort_dir`, `limit`, and `offset` | Reloads the application tracker table |
+| 2 | Applications table | Response from `/api/applications` | Shows company, title, score, PDF link, status, and follow-up date |
+| 3 | Status dropdown | `PATCH /api/applications/{id}` | Updates status to `planned`, `applied`, `interviewing`, `rejected`, `offer`, or `archived` |
+| 4 | Follow-up date input | `PATCH /api/applications/{id}` | Updates `follow_up_date` |
+
+Other Applications actions:
 
 | UI element | Trigger | Result |
 |---|---|---|
-| Search/filter/sort form | `GET /api/applications` with `q`, `status`, `sort_by`, `sort_dir`, `limit`, and `offset` | Reloads the application tracker table |
-| Status dropdown in a row | `PATCH /api/applications/{id}` | Updates status to `planned`, `applied`, `interviewing`, `rejected`, `offer`, or `archived` |
-| Follow-up date input | `PATCH /api/applications/{id}` | Updates `follow_up_date` |
 | PDF link | Opens stored `pdf_url` | Downloads or opens the generated resume PDF for that tracked opportunity |
 | Previous / Next | `GET /api/applications` with changed `offset` | Pages through tracked applications |
 
-Recommended next E2E coverage:
-
-1. Score a JD Database listing.
-2. Click `Track Application`.
-3. Open `/applications.html`.
-4. Change status and follow-up date.
-5. Capture screenshots for the tracker list and inline update states.
+The screenshot comes from `test_application_tracker_flow.py`, which scores a
+JD Database listing, tracks it as an application, opens `/applications.html`,
+then updates status and follow-up date.
 
 ## Screenshot Maintenance
 
