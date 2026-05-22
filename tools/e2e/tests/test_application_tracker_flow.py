@@ -39,7 +39,7 @@ def test_application_tracker_from_scored_listing(
 
     page.goto(f"{live_app}/applications.html", wait_until="networkidle")
     expect(page.locator("#applications-body tr")).to_have_count(1, timeout=10_000)
-    expect(page.locator("#applications-body")).to_contain_text("BetaIO")
+    expect(page.locator("#applications-body")).to_contain_text("Planned")
     page.screenshot(path=str(shots_dir / "02-applications-list.png"), full_page=True)
 
     page.locator("#applications-body select").first.select_option("applied")

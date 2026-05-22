@@ -15,8 +15,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
 from io import BytesIO
@@ -34,6 +36,10 @@ def _github_token() -> str | None:
         if value:
             return value
 
+    powershell_token = _github_token_from_powershell()
+    if powershell_token:
+        return powershell_token
+
     try:
         proc = subprocess.run(
             ["git", "credential", "fill"],
@@ -44,12 +50,38 @@ def _github_token() -> str | None:
             cwd=PROJECT_ROOT,
         )
     except (OSError, subprocess.CalledProcessError):
-        return None
+        return _github_token_from_powershell()
 
     for line in proc.stdout.splitlines():
         if line.startswith("password="):
             return line.split("=", 1)[1]
-    return None
+    return _github_token_from_powershell()
+
+
+def _github_token_from_powershell() -> str | None:
+    if os.name != "nt":
+        return None
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if not powershell:
+        return None
+    script = (
+        "$credText = \"protocol=https`nhost=github.com`n`n\" | "
+        "git credential fill;"
+        "foreach ($line in $credText) { "
+        "if ($line -match '^password=(.*)$') { $matches[1]; break } "
+        "}"
+    )
+    try:
+        proc = subprocess.run(
+            [powershell, "-NoProfile", "-Command", script],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    token = proc.stdout.strip()
+    return token or None
 
 
 def _request_json(url: str, token: str | None) -> dict[str, Any]:
@@ -58,8 +90,17 @@ def _request_json(url: str, token: str | None) -> dict[str, Any]:
         headers=_headers(token),
         method="GET",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = response.read().decode("utf-8")
+        return json.loads(payload)
+    except (OSError, json.JSONDecodeError):
+        if os.name == "nt":
+            try:
+                return _request_json_with_powershell(url, token)
+            except (OSError, subprocess.CalledProcessError):
+                pass
+        return json.loads(_request_bytes_fallback(url, token).decode("utf-8"))
 
 
 def _request_bytes(url: str, token: str | None) -> bytes:
@@ -68,8 +109,122 @@ def _request_bytes(url: str, token: str | None) -> bytes:
         headers=_headers(token),
         method="GET",
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return response.read()
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return response.read()
+    except OSError:
+        return _request_bytes_fallback(url, token)
+
+
+def _request_bytes_fallback(url: str, token: str | None) -> bytes:
+    if os.name == "nt":
+        try:
+            return _request_bytes_with_powershell(url, token)
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    return _request_bytes_with_curl(url, token)
+
+
+def _request_bytes_with_powershell(url: str, token: str | None) -> bytes:
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if not powershell:
+        raise RuntimeError("PowerShell is not available")
+
+    with tempfile.NamedTemporaryFile(delete=False) as fh:
+        out_path = Path(fh.name)
+    script = (
+        "$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8;"
+        "$headers = @{"
+        "Accept='application/vnd.github+json';"
+        "'X-GitHub-Api-Version'='2022-11-28';"
+        "'User-Agent'='resumeHelper-e2e-screenshot-downloader'"
+        "};"
+        "if ($env:GH_DOWNLOAD_TOKEN) { "
+        "$headers.Authorization = 'Bearer ' + $env:GH_DOWNLOAD_TOKEN "
+        "};"
+        "Invoke-WebRequest -Method Get -Uri $env:GH_DOWNLOAD_URL "
+        "-Headers $headers -OutFile $env:GH_DOWNLOAD_OUT"
+    )
+    env = {
+        **os.environ,
+        "GH_DOWNLOAD_URL": url,
+        "GH_DOWNLOAD_OUT": str(out_path),
+        "GH_DOWNLOAD_TOKEN": token or "",
+    }
+    try:
+        subprocess.run(
+            [powershell, "-NoProfile", "-Command", script],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
+        return out_path.read_bytes()
+    finally:
+        out_path.unlink(missing_ok=True)
+
+
+def _request_json_with_powershell(url: str, token: str | None) -> dict[str, Any]:
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh")
+    if not powershell:
+        raise RuntimeError("PowerShell is not available")
+
+    with tempfile.NamedTemporaryFile(delete=False) as fh:
+        out_path = Path(fh.name)
+    script = (
+        "$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8;"
+        "$headers = @{"
+        "Accept='application/vnd.github+json';"
+        "'X-GitHub-Api-Version'='2022-11-28';"
+        "'User-Agent'='resumeHelper-e2e-screenshot-downloader'"
+        "};"
+        "if ($env:GH_DOWNLOAD_TOKEN) { "
+        "$headers.Authorization = 'Bearer ' + $env:GH_DOWNLOAD_TOKEN "
+        "};"
+        "$result = Invoke-RestMethod -Method Get -Uri $env:GH_DOWNLOAD_URL "
+        "-Headers $headers;"
+        "$result | ConvertTo-Json -Depth 20 | "
+        "Set-Content -Encoding UTF8 -LiteralPath $env:GH_DOWNLOAD_OUT"
+    )
+    env = {
+        **os.environ,
+        "GH_DOWNLOAD_URL": url,
+        "GH_DOWNLOAD_OUT": str(out_path),
+        "GH_DOWNLOAD_TOKEN": token or "",
+    }
+    try:
+        subprocess.run(
+            [powershell, "-NoProfile", "-Command", script],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
+        return json.loads(out_path.read_text(encoding="utf-8-sig"))
+    finally:
+        out_path.unlink(missing_ok=True)
+
+
+def _request_bytes_with_curl(url: str, token: str | None) -> bytes:
+    curl = shutil.which("curl.exe") or shutil.which("curl")
+    if not curl:
+        raise RuntimeError("curl is required after urllib download failed")
+
+    args = [
+        curl,
+        "-L",
+        "-k",
+        "-sS",
+        "-H",
+        "Accept: application/vnd.github+json",
+        "-H",
+        "X-GitHub-Api-Version: 2022-11-28",
+        "-H",
+        "User-Agent: resumeHelper-e2e-screenshot-downloader",
+    ]
+    if token:
+        args.extend(["-H", f"Authorization: Bearer {token}"])
+    args.append(url)
+    proc = subprocess.run(args, capture_output=True, check=True)
+    return proc.stdout
 
 
 def _headers(token: str | None) -> dict[str, str]:

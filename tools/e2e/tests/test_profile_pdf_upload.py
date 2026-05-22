@@ -28,6 +28,13 @@ def test_profile_pdf_upload_appears_in_list(
     page.set_input_files("#new-profile-pdf", str(pdf))
     page.screenshot(path=str(shots_dir / "02-add-form.png"), full_page=True)
 
+    page.click("text=Preview Text")
+    page.wait_for_function(
+        "() => document.querySelector('#new-profile-skills')"
+        ".value.includes('E2E Engineer')",
+        timeout=15_000,
+    )
+
     page.click("text=Save Profile")
 
     expect(page.locator("#profiles-list")).to_contain_text("E2E Engineer", timeout=15_000)
