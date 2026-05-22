@@ -26,6 +26,17 @@ python scripts/download_e2e_screenshots.py
 If local Git credentials are not available to the script, set `GH_TOKEN` or
 `GITHUB_TOKEN` first.
 
+## Page Overview
+
+| Page | What it means | Use it when | Main output |
+|---|---|---|---|
+| **Profile** | Your resume baseline library | You are setting up the app, switching resume versions, or updating skills text | One or more saved profiles, with one default profile |
+| **Evaluate** | Single-job scoring workspace | You have one JD pasted from a job board, email, or recruiter message | Score, fit status, strengths, gaps, and optional tailoring job |
+| **JD Database** | Stored job listing workbench | You already have scraped/imported listings and want to search, inspect, or score many jobs | Scored listings linked to analyses, ready for tracking |
+| **Submittable** | Generated resume review queue | A scored job produced a tailored resume and you need to inspect or download it | Resume text modal and generated PDF download |
+| **Applications** | Job application tracker | A scored listing is worth pursuing and needs status/follow-up management | Planned/applied/interviewing/rejected/offer/archived tracker rows |
+| **History** | Evaluation audit log | You need to revisit old scores, explanations, or generated resume details | Grouped list of previous evaluations |
+
 ## Start Here
 
 ```text

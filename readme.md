@@ -29,6 +29,19 @@ For a screen-by-screen map of buttons, API calls, and screenshot callouts, see
 
 ---
 
+## Pages
+
+| Page | Purpose |
+|------|---------|
+| **Profile** | Save resume baselines and choose the default profile |
+| **Evaluate** | Paste one JD and get a fit score, status, strengths, and gaps |
+| **JD Database** | Search stored listings and batch-score selected jobs |
+| **Submittable** | Review generated resumes and download PDFs |
+| **Applications** | Track opportunities, statuses, and follow-up dates |
+| **History** | Reopen previous evaluations and generated resume details |
+
+---
+
 ## User Walkthrough
 
 1. Open the UI and go to **Profile**.
