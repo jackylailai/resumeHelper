@@ -18,10 +18,13 @@ const pasteResult = document.getElementById("paste-result");
 const prevPage = document.getElementById("prev-page");
 const nextPage = document.getElementById("next-page");
 const pageRange = document.getElementById("page-range");
+const trackApplication = document.getElementById("track-application");
+const trackStatus = document.getElementById("track-status");
 const UI = window.ResumeHelper;
 
 const PAGE_SIZE = 20;
 let selectedListingId = null;
+let selectedListing = null;
 let currentListings = [];
 let selectedListingIds = new Set();
 let failedBatchListingIds = new Set();
@@ -67,6 +70,10 @@ nextPage.addEventListener("click", async () => {
     }
 });
 
+trackApplication.addEventListener("click", async () => {
+    await createTrackedApplication();
+});
+
 window.addEventListener("DOMContentLoaded", () => {
     loadProfiles();
     loadListings();
@@ -83,7 +90,7 @@ async function loadProfiles() {
 
     if (!response.ok) {
         appendOption(profileSelect, "", "Could not load profiles");
-        batchStatus.textContent = formatError(response, payload);
+        setApiError(batchStatus, response, payload);
         return;
     }
 
@@ -123,7 +130,7 @@ async function loadListings() {
 
     const { response, payload } = await safeApiFetch(`/api/job-listings?${params}`);
     if (!response.ok) {
-        listStatus.textContent = formatError(response, payload);
+        setApiError(listStatus, response, payload);
         currentListings = [];
         pagination.total = 0;
         updatePaginationControls({ rangeStart: 0, rangeEnd: 0 });
@@ -283,7 +290,7 @@ async function scoreSelectedListings() {
 
     scoreSelected.disabled = false;
     if (!response.ok) {
-        batchStatus.textContent = formatError(response, payload);
+        setApiError(batchStatus, response, payload);
         return;
     }
 
@@ -373,7 +380,7 @@ async function scorePastedJd() {
 
     scorePasted.disabled = false;
     if (!response.ok) {
-        pasteStatus.textContent = formatError(response, payload);
+        setApiError(pasteStatus, response, payload);
         return;
     }
 
@@ -410,6 +417,8 @@ function listingLabelText(listing) {
 
 async function loadDetail(id) {
     selectedListingId = id;
+    selectedListing = null;
+    trackStatus.textContent = "";
     for (const row of document.querySelectorAll(".job-row")) {
         row.classList.toggle("selected", row.dataset.id === id);
     }
@@ -418,11 +427,12 @@ async function loadDetail(id) {
     if (!response.ok) {
         detailEmpty.hidden = false;
         detail.hidden = true;
-        detailEmpty.textContent = formatError(response, payload);
+        setApiError(detailEmpty, response, payload);
         return;
     }
 
     const listing = payload.data;
+    selectedListing = listing;
     detailEmpty.hidden = true;
     detail.hidden = false;
 
@@ -445,6 +455,34 @@ async function loadDetail(id) {
     const link = document.getElementById("detail-url");
     link.href = listing.url;
     link.hidden = !listing.url;
+    trackApplication.disabled = !listing.job_analysis_id;
+    if (!listing.job_analysis_id) {
+        trackStatus.textContent = "Score this listing before tracking it.";
+    }
+}
+
+async function createTrackedApplication() {
+    if (!selectedListing || !selectedListing.job_analysis_id) {
+        trackStatus.textContent = "Score this listing before tracking it.";
+        return;
+    }
+    trackApplication.disabled = true;
+    trackStatus.textContent = "Adding to tracker...";
+    const { response, payload } = await safeApiFetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            job_listing_id: selectedListing.id,
+            job_analysis_id: selectedListing.job_analysis_id,
+            status: "planned",
+        }),
+    });
+    trackApplication.disabled = false;
+    if (!response.ok) {
+        trackStatus.textContent = formatError(response, payload);
+        return;
+    }
+    trackStatus.textContent = payload.meta?.existing ? "Already tracked." : "Added to tracker.";
 }
 
 function listingStatusText(listing) {
@@ -468,4 +506,8 @@ async function safeApiFetch(url, options) {
 
 function formatError(response, payload) {
     return UI.formatApiError(response, payload, { includeStatus: true });
+}
+
+function setApiError(element, response, payload) {
+    element.innerHTML = UI.apiErrorBanner(response, payload, { includeStatus: true });
 }

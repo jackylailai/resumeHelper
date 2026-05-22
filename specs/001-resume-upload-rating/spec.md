@@ -1,140 +1,162 @@
 # Feature Specification: Resume Fit Evaluator
 
 **Feature Branch**: `001-resume-upload-rating`
-**Updated**: 2026-05-07 (rev 4)
-**Status**: Phase 1 (implemented)
-**Authoritative direction**: multi-profile CRUD + profile-scoped evaluation; uploaded PDFs persisted on disk; v1 dead code removed; Python 3.11 floor
+**Updated**: 2026-05-11 (rev 5)
+**Status**: Phase 2.5 implementation in progress
+**Authoritative direction**: multi-profile CRUD with default profile, profile-scoped evaluation, JD Database, application tracker, generated PDF download, and production readiness checks.
 
 ## Overview
 
-A single-user tool that evaluates job descriptions against a saved baseline
-resume profile and scores them on a 0–100 scale. Jobs are classified into
-three tiers that determine the next action automatically.
+A single-user tool that evaluates job descriptions against saved resume
+profiles, scores them on a 0-100 scale, generates tailored resumes for good
+matches, and tracks the application pipeline from planned through offer.
 
 ## Three-Tier Scoring Logic
 
 | Score | Status | Action |
 |-------|--------|--------|
-| 85–100 | `ready_to_submit` | Return immediately — no tailoring needed |
-| 60–84 | `needs_tailoring` | Trigger background tailoring via Claude API |
-| 0–59 | `skip` | Return immediately with a skip reason |
+| 85-100 | `ready_to_submit` | Return immediately; no tailoring needed |
+| 60-84 | `needs_tailoring` | Trigger background tailoring |
+| 0-59 | `skip` | Return immediately with a skip reason |
 
 ## User Stories
 
-### Story 1 — Manage Baseline Profiles (P1)
+### Story 1 - Manage Baseline Profiles
 
-A user maintains a library of resume profiles (e.g., one per job family). Each
-profile has a name and skills text extracted from a PDF. Profiles can be created,
-listed, updated, and deleted. The legacy `/api/profile` singular endpoint is
-preserved for backward compatibility.
-
-**Acceptance Scenarios**:
-
-1. **Given** a POST to `/api/profiles` with `skills_text` (and optional `name`), **Then** a new profile row is created and returned.
-2. **Given** a GET to `/api/profiles`, **Then** all profiles are returned as a list (empty list if none).
-3. **Given** a GET to `/api/profiles/{id}` for a valid ID, **Then** that profile is returned.
-4. **Given** a GET to `/api/profiles/{id}` for a non-existent ID, **Then** a 404 is returned.
-5. **Given** a PUT to `/api/profiles/{id}`, **Then** the profile's `skills_text` and/or `name` are updated.
-6. **Given** a DELETE to `/api/profiles/{id}`, **Then** the profile is removed; a subsequent GET returns 404.
-7. **Given** a POST to `/api/profiles/upload` with a PDF file (multipart) and optional `name`, **Then** text is extracted server-side (via pypdf), NUL bytes stripped, and a new profile is created.
-8. **Given** `skills_text` contains NUL (`\x00`) bytes, **Then** they are silently stripped before persistence — no 500 crash.
-9. **Given** a POST to the legacy `/api/profile`, **Then** a new profile row is created (same as `/api/profiles`).
-10. **Given** a GET to the legacy `/api/profile`, **Then** the most recently created profile is returned.
-11. **Given** a POST to `/api/profiles/upload`, **Then** the original PDF bytes are written to `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf` and the absolute path is returned on the response as `pdf_path` and saved on `baseline_profile.pdf_path`.
-
----
-
-### Story 2 — Evaluate a Job Description (P1)
-
-A user submits a job description and optionally selects which profile to
-evaluate against. The system scores it and classifies the result into one
-of three tiers. The cache is scoped to `(jd_hash, profile_id)` so the same
-JD evaluated against different profiles produces independent results.
+A user maintains a library of resume profiles, such as one per job family. Each
+profile has optional `name`, `skills_text`, persisted PDF path when created from
+upload, and `is_default`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a profile exists and a POST to `/api/evaluate` with `jd_text`, **Then** the response includes `score`, `status`, `strengths`, `gaps`, and a human-readable `message`.
-2. **Given** `profile_id` is specified in the request, **Then** that profile is used for evaluation.
-3. **Given** `profile_id` is omitted, **Then** the most recently created profile is used.
-4. **Given** the same JD + same `profile_id` is submitted twice, **Then** the second response has `cached: true` in `meta`.
-5. **Given** the same JD is submitted with two different `profile_id` values, **Then** each produces an independent result — the second is NOT a cache hit.
-6. **Given** no profile exists, **Then** a 404 with code `not_found` is returned.
-7. **Given** `jd_text` is omitted, **Then** a 422 validation error is returned.
-8. **Given** a score of 85+, **Then** `status` is `ready_to_submit` and no background tailoring is triggered.
-9. **Given** a score of 60–84, **Then** `status` is `needs_tailoring` and a background tailoring task is enqueued using the profile that was used for scoring.
-10. **Given** a score below 60, **Then** `status` is `skip` and `skip_reason` explains why the job is a poor fit.
+1. `POST /api/profiles` with `skills_text`, optional `name`, and optional `is_default` creates a profile.
+2. `GET /api/profiles` returns all profiles ordered with the default first.
+3. `PUT /api/profiles/{id}` updates `skills_text`, `name`, and/or `is_default`.
+4. Setting one profile as default clears the default flag from the others.
+5. Creating the first profile makes it default automatically.
+6. Deleting the default profile promotes the newest remaining profile.
+7. `POST /api/profiles/upload/preview` extracts PDF text without creating a profile.
+8. `POST /api/profiles/upload` accepts PDF plus optional reviewed `skills_text`, persists original bytes under `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf`, and saves `pdf_path`.
+9. `GET /api/profiles/{id}/delete-impact` reports related job analysis and generated resume counts before delete.
+10. Legacy `/api/profile` endpoints remain for compatibility and use the default profile fallback.
 
----
+### Story 2 - Evaluate a Job Description
 
-### Story 3 — Bulk Evaluate Multiple JDs (P2)
-
-A user submits multiple JDs in one request. The system evaluates each,
-deduplicates by content hash, and returns a summary.
-
-**Acceptance Scenarios**:
-
-1. **Given** a list of JD texts, **Then** each is scored and the response
-   includes per-JD results plus totals for `new`, `cached`, and `total`.
-2. **Given** duplicate JD texts in the batch, **Then** only one LLM call is
-   made per unique JD — subsequent duplicates return `cached: true`.
-3. **Given** a `needs_tailoring` JD in the batch, **Then** a background
-   tailoring task is triggered exactly once for that JD.
-
----
-
-### Story 4 — View History and Submittable Resumes (P1)
-
-A user reviews all evaluated JDs and sees which ones are ready to submit
-(with generated resumes attached).
+A user submits a job description and optionally selects a profile. The cache is
+scoped to `(jd_hash, profile_id)` so the same JD can be evaluated independently
+against different profiles.
 
 **Acceptance Scenarios**:
 
-1. **Given** one or more evaluations exist, **Then** GET `/api/history` returns
-   all job analyses in reverse-chronological order, grouped by status.
-2. **Given** a job analysis ID, **Then** GET `/api/history/{id}` returns the
-   full JD, score, status, and any generated resumes.
-3. **Given** tailoring has completed for a JD, **Then** it appears in GET
-   `/api/submittable` with `can_submit: true` and the resume text attached.
+1. `POST /api/evaluate` returns `score`, `status`, `strengths`, `gaps`, `message`, and `action`.
+2. If `profile_id` is provided, that profile is used.
+3. If `profile_id` is omitted, the default profile is used, falling back to latest profile.
+4. Same JD + same profile returns `meta.cached=true` on repeat submission.
+5. Same JD + different profile is not a cache hit.
+6. No usable profile returns `404 not_found`.
+7. Oversized JD text returns `400 jd_too_long`.
+8. LLM unavailable/invalid output maps to `503 llm_unavailable` or `502 llm_invalid_output`.
 
----
+### Story 3 - Bulk and Stored Listing Evaluation
+
+A user scores several JDs at once or scores selected rows from the JD Database.
+
+**Acceptance Scenarios**:
+
+1. `POST /api/evaluate/bulk` accepts 1-100 JD texts and returns totals for `new`, `cached`, and `total`.
+2. Duplicate JD texts in the same batch dedupe by content hash.
+3. `POST /api/evaluate/by-listings` accepts up to 20 `job_listing_ids`, evaluates valid listings, links each successful `JobListing.job_analysis_id`, and returns per-row errors for invalid/missing listings.
+4. `needs_tailoring` results queue background tailoring once for fresh evaluations.
+
+### Story 4 - View History, Submittable Resumes, and PDFs
+
+A user reviews scored JDs and generated resumes.
+
+**Acceptance Scenarios**:
+
+1. `GET /api/history` returns job analyses in reverse chronological order and grouped status metadata.
+2. `GET /api/history/{id}` returns full JD text and generated resumes.
+3. `GET /api/submittable` returns `can_submit=true` analyses with latest resume metadata.
+4. `GET /api/generated-resumes/{id}/pdf` generates a local PDF on demand when missing and returns it as a file response.
+5. `POST /api/callback` stores externally delivered resume text and preserves caller-supplied `pdf_url`; if absent, it generates a local PDF URL.
+
+### Story 5 - Browse JD Database
+
+A user browses stored scraped job listings before scoring.
+
+**Acceptance Scenarios**:
+
+1. `GET /api/job-listings` supports search, source filter, analyzed/status filter, sorting, pagination, and score-aware rows.
+2. `GET /api/job-listings/{id}` returns the full description and raw JSON.
+3. The UI can select a page of listings, score selected rows, score a pasted JD, and refresh row status.
+4. A scored listing can be added to the application tracker.
+
+### Story 6 - Track Applications
+
+A user tracks applications created from scored listings or linked analyses.
+
+**Acceptance Scenarios**:
+
+1. `POST /api/applications` requires at least one of `job_listing_id`, `job_analysis_id`, or `generated_resume_id`.
+2. Creating an application hydrates company/title/source URL/score/PDF URL from linked records when available.
+3. Duplicate creates for the same listing or analysis return the existing row with `meta.existing=true` and update supplied status/follow-up/notes.
+4. `GET /api/applications` supports `q`, `status`, `sort_by`, `sort_dir`, `limit`, and `offset`.
+5. `PATCH /api/applications/{id}` updates `status`, `follow_up_date`, and/or `notes`.
+6. Allowed statuses are `planned`, `applied`, `interviewing`, `rejected`, `offer`, and `archived`.
+
+### Story 7 - Operability and Guardrails
+
+The app remains locally friendly but can run behind a production reverse proxy.
+
+**Acceptance Scenarios**:
+
+1. `GET /api/health` returns checks, counts, liveness, readiness, `can_evaluate`, and next actions.
+2. `GET /api/health/live` returns process liveness.
+3. `GET /api/health/ready` returns HTTP 503 when DB or required LLM config is not ready.
+4. Production config rejects wildcard CORS.
+5. Optional write auth protects non-GET `/api/*` routes with bearer token or basic auth.
+6. Every response carries `X-Request-ID`; error envelopes include request context for debugging.
 
 ## Functional Requirements
 
-- **FR-001**: System MUST support multiple baseline profiles with full CRUD (`GET/POST/PUT/DELETE /api/profiles`); legacy `/api/profile` singular endpoints preserved for backward compatibility.
-- **FR-002**: System MUST accept profile creation via raw text (`POST /api/profiles`) or PDF upload (`POST /api/profiles/upload`); NUL bytes are stripped before storage.
-- **FR-003**: System MUST deduplicate JDs by SHA-256 hash of canonicalized text scoped to `(jd_hash, profile_id)`; re-submitting the same JD+profile combination skips the LLM call.
-- **FR-004**: System MUST score each JD 0–100 and classify it into one of three tiers: `ready_to_submit`, `needs_tailoring`, or `skip`.
-- **FR-005**: System MUST trigger background tailoring for `needs_tailoring` jobs using the specific profile used at evaluation time (stored as `profile_id` on `JobAnalysis`).
-- **FR-006**: System MUST store generated resumes per job analysis with the LLM prompt version.
-- **FR-007**: System MUST expose history (all evaluations) and a submittable list (can_submit=true with resume attached).
-- **FR-008**: System MUST accept external resume delivery via POST `/api/callback` (e.g., from n8n or a CI pipeline).
-- **FR-009**: System MUST accept bulk JD evaluation (list of texts) in a single request, deduplicated and summarized.
-- **FR-010**: No authentication or multi-user support required. Single-user tool.
-- **FR-011**: PDF generation is out of scope for Phase 1; `pdf_url` is null.
-- **FR-012**: System MUST persist uploaded profile PDFs on local disk and store the absolute path on `baseline_profile.pdf_path`. Path scheme is `${STORAGE_DIR}/profiles/<profile_id>/<utc-timestamp>.pdf`. Multiple uploads against the same profile accumulate as separate timestamped files; the latest path is what lives on the row. S3 is deferred to a later phase — column type is plain TEXT so the migration is path-scheme-only.
+- **FR-001**: System MUST support multiple baseline profiles with full CRUD and one default profile.
+- **FR-002**: System MUST support profile creation from raw text, PDF preview, and PDF upload with optional reviewed text override.
+- **FR-003**: System MUST deduplicate evaluations by SHA-256 hash of canonicalized JD text scoped to `(jd_hash, profile_id)`.
+- **FR-004**: System MUST score each JD 0-100 and classify it as `ready_to_submit`, `needs_tailoring`, or `skip`.
+- **FR-005**: System MUST trigger background tailoring for fresh `needs_tailoring` jobs using the profile tied to the analysis.
+- **FR-006**: System MUST store generated resumes per job analysis with prompt version and PDF URL.
+- **FR-007**: System MUST expose history, submittable list, and generated PDF download.
+- **FR-008**: System MUST accept external resume delivery via `POST /api/callback`.
+- **FR-009**: System MUST accept bulk JD evaluation and stored listing evaluation.
+- **FR-010**: System MUST expose stored JD listings with filters, pagination, and analysis status.
+- **FR-011**: System MUST expose an application tracker with create/list/update behavior.
+- **FR-012**: System MUST expose liveness/readiness health checks.
+- **FR-013**: System MUST reject wildcard CORS in production mode.
+- **FR-014**: System MAY protect write operations with management auth.
+- **FR-015**: Multi-user accounts, async job polling, and resume version comparison remain out of scope.
 
 ## Key Entities
 
-- **BaselineProfile**: Many rows. `id`, `name` (optional), `skills_text` (TEXT), `pdf_path` (TEXT, optional — set when created via PDF upload), `created_at`, `updated_at`. Created via POST; no upsert — each call creates a new row.
-- **JobAnalysis**: One row per unique `(jd_hash, profile_id)` pair. Stores score, status, strengths, gaps, can_submit, skip_reason, `profile_id` FK (SET NULL on profile delete).
-- **GeneratedResume**: Many per JobAnalysis. `resume_text`, `pdf_url` (null), `prompt_version`.
-- **JobListing** (Phase 2.5): One row per scraped JD. `source` (`104`/`yourator`/`linkedin`), `source_id` (per-platform job id), `title`, `company`, `location`, `url`, `description` (full JD), `raw_json`, `scraped_at`, `job_analysis_id` FK (SET NULL). Unique on `(source, source_id)`.
+- **BaselineProfile**: `id`, `name`, `skills_text`, `pdf_path`, `is_default`, `created_at`, `updated_at`.
+- **JobAnalysis**: one row per `(jd_hash, profile_id)` pair. Stores JD text, score, status, strengths, gaps, skip reason, `can_submit`, and `profile_id` FK.
+- **GeneratedResume**: many per JobAnalysis. Stores resume text, prompt version, and generated or external PDF URL.
+- **JobListing**: one row per scraped JD. Unique by `(source, source_id)` and optionally linked to `job_analysis_id`.
+- **Application**: tracked opportunity linked to a listing, analysis, and/or generated resume; stores status, follow-up date, notes, and timestamps.
 
 ## Success Criteria
 
-- **SC-001**: Evaluate a JD in under 30 s under normal conditions.
-- **SC-002**: Duplicate JD submission returns cached result in under 1 s.
-- **SC-003**: `needs_tailoring` jobs produce a generated resume in the background without blocking the HTTP response.
-- **SC-004**: All evaluated JDs visible in history with correct status.
-- **SC-005**: Submittable list shows only `can_submit=true` jobs with resume text.
-- **SC-006** (Phase 2.5): A single CLI run scrapes ~100 JDs across 104 / Yourator / LinkedIn into `job_listings`, deduped by `(source, source_id)`.
-- **SC-007** (Phase 2.5): Each scraped JobListing produces exactly one JobAnalysis (via the existing three-tier evaluator) and `needs_tailoring` rows trigger background tailoring without manual intervention.
+- **SC-001**: Evaluate a single JD in under 30 seconds under normal LLM conditions.
+- **SC-002**: Duplicate JD+profile submission returns cached result in under 1 second.
+- **SC-003**: `needs_tailoring` jobs produce a generated resume without blocking the HTTP response.
+- **SC-004**: History and submittable views show correct status and latest resume/PDF metadata.
+- **SC-005**: JD Database batch scoring links successful listings to analyses and reports row-level failures.
+- **SC-006**: Application tracker can create, filter, sort, and update tracked opportunities.
+- **SC-007**: Readiness endpoint reports dependency/config failure with HTTP 503.
 
-## Out of Scope (Phase 1)
+## Out of Scope
 
-- Resume versioning
-- Async job polling (`job_id`)
-- Compare endpoint
-- Multi-user authentication
-- PDF generation (weasyprint not installed)
-- Real crawler / n8n ingestion (stubs exist for callback)
+- Multi-user authentication/account model
+- Celery/Redis async queue and job polling API
+- Resume version comparison UI
+- LinkedIn scraper completion
+- Cloud blob storage for PDFs

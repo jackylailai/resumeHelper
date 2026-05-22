@@ -1,18 +1,19 @@
 # Implementation Plan: Resume Scoring & Generation
 
-**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-06 (rev 2)
-**Scope authority**: `scope-correction.md` — read before making any implementation decision.
+**Branch**: `001-resume-upload-rating` | **Updated**: 2026-05-11 (rev 3)
+**Scope authority**: `spec.md`; `scope-correction.md` is retained as historical context.
 
 ## Summary
 
 Single-user FastAPI service that:
-1. Maintains a **library of baseline profiles** (name + skills text); each created via raw text or PDF upload; full CRUD at `/api/profiles`
-2. Accepts a **job description (JD)** and scores the fit (0–100) via LLM against a selected or latest profile
-3. If score ≥ `RESUME_GEN_THRESHOLD`, triggers a **FastAPI BackgroundTask** to generate a tailored resume via Anthropic API directly (n8n removed)
-4. Cache scoped to `(jd_hash, profile_id)` — same JD against different profiles = independent evaluations
-5. Stores all analyses and generated resumes; serves them via a minimal browser UI
+1. Maintains a **library of baseline profiles** with one default profile.
+2. Accepts direct JD text or stored JD Database rows and scores fit (0-100) via LLM against a selected/default profile.
+3. If score is in the tailoring band, triggers a **FastAPI BackgroundTask** to generate a tailored resume.
+4. Cache scoped to `(jd_hash, profile_id)` so the same JD against different profiles is evaluated independently.
+5. Stores analyses, generated resumes/PDF URLs, scraped listings, and tracked applications.
+6. Exposes health/readiness checks and optional write-operation auth for non-local deployments.
 
-No resume versioning. No async job queue (Phase 1). No auth. Runs locally on Mac.
+No resume versioning. No async job queue. Single-user by default.
 
 ## Architecture (Phase 1 — POC)
 
@@ -22,20 +23,33 @@ Browser
 FastAPI (uvicorn, single process)
   ├── GET    /api/profiles          → list all baseline profiles
   ├── POST   /api/profiles          → create profile (text)
+  ├── POST   /api/profiles/upload/preview → extract PDF text without persisting
   ├── POST   /api/profiles/upload   → create profile (PDF, pypdf extraction)
   ├── GET    /api/profiles/{id}     → get one profile
   ├── PUT    /api/profiles/{id}     → update profile
+  ├── GET    /api/profiles/{id}/delete-impact → profile delete impact counts
   ├── DELETE /api/profiles/{id}     → delete profile
   ├── POST   /api/profile           → legacy: create profile (backward compat)
-  ├── GET    /api/profile           → legacy: return latest profile
-  ├── POST   /api/evaluate          → score JD against selected/latest profile; if threshold → BackgroundTask
+  ├── GET    /api/profile           → legacy: return default/latest profile
+  ├── POST   /api/evaluate          → score JD against selected/default profile; if needed → BackgroundTask
+  ├── POST   /api/evaluate/bulk     → score multiple pasted JDs
+  ├── POST   /api/evaluate/by-listings → score stored job_listings
   ├── POST   /api/callback          → external resume delivery (e.g. CI pipeline)
   ├── GET    /api/history           → list past job_analyses
   ├── GET    /api/history/{id}      → one analysis + all generated_resumes
-  └── GET    /api/health
+  ├── GET    /api/submittable       → analyses with latest generated resume
+  ├── GET    /api/generated-resumes/{id}/pdf → generated PDF download
+  ├── GET    /api/job-listings      → browse stored scraped JDs
+  ├── GET    /api/job-listings/{id} → listing detail
+  ├── GET    /api/applications      → list application tracker rows
+  ├── POST   /api/applications      → create/update tracked application
+  ├── PATCH  /api/applications/{id} → update tracker status/follow-up/notes
+  ├── GET    /api/health
+  ├── GET    /api/health/live
+  └── GET    /api/health/ready
   │
-  ├── PostgreSQL  (3 tables: baseline_profile, job_analyses, generated_resumes)
-  └── Anthropic API (tailoring via BackgroundTask — no n8n)
+  ├── PostgreSQL  (baseline_profile, job_analyses, generated_resumes, job_listings, applications)
+  └── LLM backend selected by LLM_BACKEND
 ```
 
 ## LLM Strategy
@@ -55,11 +69,14 @@ Switching is a one-line config change — `LLMClient` Protocol isolates this.
 - **LLM (scoring)**: local `claude` CLI → `ClaudeCLIClient`
 - **LLM (generation)**: Anthropic SDK directly via FastAPI BackgroundTask in `workers/tailor.py` (n8n removed in #19)
 - **PDF storage**: uploaded PDFs persisted under `${STORAGE_DIR}/profiles/<id>/<utc-ts>.pdf`; absolute path stored on `baseline_profile.pdf_path` (#35; S3 deferred)
+- **Generated PDFs**: generated resume PDFs are written on demand under `${STORAGE_DIR}/generated/` and served from `/api/generated-resumes/{id}/pdf`
 - **Job-board crawlers (Phase 2.5)**: per-source scrapers under `services/scrapers/` implement `BaseScraper`; outputs land in `job_listings`; a separate batch evaluator feeds `evaluator_v2` to keep crawl and scoring decoupled. No headless browser — only public JSON / guest HTML endpoints; failures in one source must not block the others.
+- **Application tracker**: `applications` links listings/analyses/generated resumes and stores status, follow-up date, notes.
+- **Production guard**: `ENVIRONMENT=production` rejects wildcard CORS; optional management auth protects write operations.
 - **Prompt files**: `modes/score.md`, `modes/generate.md`
 - **Testing**: pytest; `FakeLLMClient` for unit tests; testcontainers-postgres for integration
 - **Lint/Type**: ruff (hard gate, target py311, `UP` enabled) + mypy (soft gate, `continue-on-error`)
-- **Target**: local Mac only (Phase 1)
+- **Target**: local development first; can run behind a reverse proxy with explicit CORS and management auth.
 
 ## Roadmap
 
@@ -77,5 +94,5 @@ See `specs/roadmap.md` for full Phase 1 → 3 plan:
 | **IV. UX Envelope** | ✅ | All responses: `{data, error, meta}` |
 | **V. Performance** | ✅ | Sync reads ≤200ms; cached JD eval ≤500ms; LLM ≤30s |
 | **No Redis (Phase 1)** | ✅ waiver | Single user; jd_hash dedup in DB; Redis added in Phase 3 |
-| **No auth** | ✅ waiver | Single user, local only |
+| **Write auth** | ✅ | Optional management auth for non-local deployments; no user accounts |
 | **BackgroundTasks** | ✅ | Tailoring uses FastAPI BackgroundTask → Anthropic API directly; scoring is synchronous |

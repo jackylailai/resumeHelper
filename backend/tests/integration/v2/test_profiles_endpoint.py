@@ -25,6 +25,10 @@ def test_create_profile(client: TestClient):
     assert d["skills_text"] == "Python, Docker"
     assert d["name"] == "Backend"
     assert d["id"] is not None
+    assert d["is_default"] is True
+    assert d["created_at"] is not None
+    assert d["updated_at"] is not None
+    assert d["pdf_path"] is None
 
 
 @pytest.mark.integration
@@ -61,11 +65,42 @@ def test_update_profile(client: TestClient):
 
 
 @pytest.mark.integration
+def test_set_default_profile(client: TestClient):
+    p1 = client.post("/api/profiles", json={"skills_text": "Python", "name": "P1"}).json()["data"]
+    p2 = client.post("/api/profiles", json={"skills_text": "Java", "name": "P2"}).json()["data"]
+    assert p1["is_default"] is True
+    assert p2["is_default"] is False
+
+    r = client.put(f"/api/profiles/{p2['id']}", json={"is_default": True})
+    assert r.status_code == 200
+    profiles = client.get("/api/profiles").json()["data"]
+    defaults = [p for p in profiles if p["is_default"]]
+    assert len(defaults) == 1
+    assert defaults[0]["id"] == p2["id"]
+
+
+@pytest.mark.integration
 def test_delete_profile(client: TestClient):
     created = client.post("/api/profiles", json={"skills_text": "To be deleted"}).json()["data"]
     r = client.delete(f"/api/profiles/{created['id']}")
     assert r.status_code == 200
     assert client.get(f"/api/profiles/{created['id']}").status_code == 404
+
+
+@pytest.mark.integration
+def test_profile_delete_impact_counts_related_history(client: TestClient):
+    profile = client.post("/api/profiles", json={"skills_text": "Python"}).json()["data"]
+    evaluate = client.post(
+        "/api/evaluate",
+        json={"jd_text": "Python backend role [[score=86]]", "profile_id": profile["id"]},
+    )
+    assert evaluate.status_code == 200
+
+    r = client.get(f"/api/profiles/{profile['id']}/delete-impact")
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["job_analyses_count"] == 1
+    assert d["generated_resumes_count"] == 0
 
 
 @pytest.mark.integration
@@ -80,6 +115,35 @@ def test_upload_profile_pdf(client: TestClient):
     d = r.json()["data"]
     assert d["name"] == "PDF Profile"
     assert len(d["skills_text"]) > 0
+
+
+@pytest.mark.integration
+def test_preview_profile_pdf_does_not_create_profile(client: TestClient):
+    pdf_bytes = _make_minimal_pdf("Preview Python FastAPI")
+    r = client.post(
+        "/api/profiles/upload/preview",
+        files={"file": ("resume.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
+    )
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["filename"] == "resume.pdf"
+    assert "Preview" in d["skills_text"]
+    assert client.get("/api/profiles").json()["data"] == []
+
+
+@pytest.mark.integration
+def test_upload_profile_pdf_allows_reviewed_text_override(client: TestClient):
+    pdf_bytes = _make_minimal_pdf("Extracted text")
+    r = client.post(
+        "/api/profiles/upload",
+        files={"file": ("resume.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
+        data={"name": "Reviewed", "skills_text": "Reviewed skills", "is_default": "true"},
+    )
+    assert r.status_code == 200
+    d = r.json()["data"]
+    assert d["skills_text"] == "Reviewed skills"
+    assert d["is_default"] is True
+    assert d["pdf_path"]
 
 
 @pytest.mark.integration
@@ -142,6 +206,25 @@ def test_evaluate_defaults_to_latest_profile(client: TestClient):
 
 
 @pytest.mark.integration
+def test_evaluate_defaults_to_marked_default_profile(client: TestClient):
+    p1 = client.post("/api/profiles", json={"skills_text": "Short"}).json()["data"]
+    long_text = "Long default profile skills text"
+    p2 = client.post("/api/profiles", json={"skills_text": long_text}).json()["data"]
+    client.put(f"/api/profiles/{p1['id']}", json={"is_default": True})
+
+    r = client.post("/api/evaluate", json={"jd_text": "Backend role [[score=90]]"})
+    assert r.status_code == 200
+    assert f"Resume text length: {len('Short')} chars" in r.json()["data"]["explanation"]
+
+    explicit = client.post(
+        "/api/evaluate",
+        json={"jd_text": "Another backend role [[score=90]]", "profile_id": p2["id"]},
+    )
+    assert explicit.status_code == 200
+    assert f"Resume text length: {len(long_text)} chars" in explicit.json()["data"]["explanation"]
+
+
+@pytest.mark.integration
 def test_evaluate_different_profiles_are_cached_separately(client: TestClient):
     p1 = client.post("/api/profiles", json={"skills_text": "Python"}).json()["data"]
     p2 = client.post("/api/profiles", json={"skills_text": "Java"}).json()["data"]
@@ -171,9 +254,9 @@ def test_legacy_post_profile_still_works(client: TestClient):
 
 
 @pytest.mark.integration
-def test_legacy_get_profile_returns_latest(client: TestClient):
+def test_legacy_get_profile_returns_default(client: TestClient):
     client.post("/api/profiles", json={"skills_text": "First"})
     client.post("/api/profiles", json={"skills_text": "Second"})
     r = client.get("/api/profile")
     assert r.status_code == 200
-    assert r.json()["data"]["skills_text"] == "Second"
+    assert r.json()["data"]["skills_text"] == "First"

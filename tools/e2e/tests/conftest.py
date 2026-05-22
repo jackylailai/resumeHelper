@@ -122,6 +122,7 @@ def db_engine(_e2e_db: str) -> Iterator[Engine]:
 
 
 _DATA_TABLES = (
+    "applications",
     "generated_resumes",
     "job_analyses",
     "job_listings",

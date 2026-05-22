@@ -17,6 +17,23 @@ router = APIRouter()
 
 @router.get("/health")
 def health_check(db: Session = Depends(get_db)) -> JSONResponse:
+    data = build_health_payload(db)
+    return success(data)
+
+
+@router.get("/health/live")
+def liveness_check() -> JSONResponse:
+    return success(_liveness())
+
+
+@router.get("/health/ready")
+def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
+    data = build_health_payload(db)
+    status_code = 200 if data["readiness"]["status"] == "ready" else 503
+    return success(data["readiness"], status_code=status_code)
+
+
+def build_health_payload(db: Session) -> dict[str, object]:
     settings = get_settings()
     checks: dict[str, dict[str, str]] = {
         "api": {"status": "ok", "message": "API is reachable."},
@@ -76,14 +93,27 @@ def health_check(db: Session = Depends(get_db)) -> JSONResponse:
         and checks["llm"]["status"] != "error"
         and profile_count > 0
     )
+    ready = checks["db"]["status"] == "ok" and checks["llm"]["status"] != "error"
 
-    return success({
+    return {
         "status": status,
+        "liveness": _liveness(),
+        "readiness": {
+            "status": "ready" if ready else "not_ready",
+            "checks": {
+                "db": checks["db"],
+                "llm": checks["llm"],
+            },
+        },
         "checks": checks,
         "counts": counts,
         "can_evaluate": can_evaluate,
         "next_actions": next_actions,
-    })
+    }
+
+
+def _liveness() -> dict[str, str]:
+    return {"status": "ok", "message": "API process is running."}
 
 
 def _llm_check(backend: str, api_key: str) -> dict[str, str]:

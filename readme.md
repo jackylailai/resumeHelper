@@ -1,35 +1,63 @@
 # Resume Fit Evaluator
 
-A single-user tool that scores job descriptions against your baseline resume
-profile and automatically tailors your resume for strong-but-not-perfect matches.
+A single-user job search assistant that scores job descriptions against saved
+resume profiles, generates tailored resumes for good matches, and tracks the
+application pipeline.
 
 ---
 
-## How it works
+## How It Works
 
-1. **Save your baseline profile** — paste your skills/experience text once.
-2. **Evaluate a JD** — paste any job description. The system scores it 0–100
-   against your baseline and classifies it into one of three tiers:
+1. **Create resume profiles** - paste skills text or upload a PDF. You can keep
+   multiple profiles and mark one as the default.
+2. **Evaluate jobs** - paste a JD directly or score stored listings from the JD
+   Database. The system scores each JD from 0-100:
 
 | Score | Status | What happens |
-|-------|--------|-------------|
-| 85+ | `ready_to_submit` | Strong match — submit as-is |
-| 60–84 | `needs_tailoring` | Good match — resume tailored in background |
-| <60 | `skip` | Weak match — skip with a reason |
+|-------|--------|--------------|
+| 85+ | `ready_to_submit` | Strong match; submit as-is |
+| 60-84 | `needs_tailoring` | Good match; tailored resume generated in background |
+| <60 | `skip` | Weak match; skip with a reason |
 
-3. **View history** — all evaluated JDs with scores and statuses.
-4. **Check submittable** — jobs with a generated resume ready to submit.
+3. **Review outputs** - history and submittable views show scores, generated
+   resumes, and on-demand PDF downloads.
+4. **Track applications** - add scored JD Database listings to the Applications
+   tracker and update status/follow-up dates.
+
+For a screen-by-screen map of buttons, API calls, and screenshot callouts, see
+[docs/ui-flow.md](docs/ui-flow.md).
 
 ---
 
-## Phase 1 (current)
+## User Flow
 
-- FastAPI backend + PostgreSQL
-- Three-tier scoring via Claude API
-- Background tailoring (FastAPI BackgroundTasks)
-- Single-page UI (Evaluate / History / Profile tabs)
-- JD deduplication by content hash
-- Bulk JD evaluation endpoint
+| Step | Screen | User action | What the app does |
+|------|--------|-------------|-------------------|
+| 1 | Profile | Add a profile from text or PDF, then mark one profile as default | Saves resume skills text through `/api/profiles` |
+| 2 | Evaluate | Pick a profile, paste a JD, click **Evaluate** | Scores the JD through `/api/evaluate` and routes it to ready, tailoring, or skip |
+| 3 | JD Database | Search listings, select rows, click **Score selected** | Scores stored listings through `/api/evaluate/by-listings` |
+| 4 | Submittable | Click **View** or **PDF** | Reviews generated resume text or downloads `/api/generated-resumes/{id}/pdf` |
+| 5 | Applications | Click **Track Application**, then update status or follow-up date | Creates or updates tracker rows through `/api/applications` |
+| 6 | History | Click **Refresh** or **View** | Shows past evaluations and full analysis details |
+
+Annotated screenshots and button-level behavior are maintained in
+[docs/ui-flow.md](docs/ui-flow.md).
+
+---
+
+## Current Scope
+
+- FastAPI backend + PostgreSQL with Alembic migrations
+- Multi-profile CRUD, PDF upload preview, default profile selection
+- Three-tier JD scoring via configurable LLM backend (`claude_cli`,
+  `anthropic`, or `fake`)
+- Background resume tailoring and generated PDF download
+- JD Database for scraped/stored listings, batch scoring, and paste-to-score
+- Application tracker with search, status filters, sorting, and follow-up dates
+- Health endpoints: `/api/health`, `/api/health/live`, `/api/health/ready`
+- Optional write-operation guard via bearer token or basic auth
+- Vanilla JS UI: Evaluate, JD Database, Applications, History, Submittable,
+  Profile
 
 ## Stack
 
@@ -37,19 +65,15 @@ profile and automatically tailors your resume for strong-but-not-perfect matches
 |-------|------|
 | API | FastAPI |
 | DB | PostgreSQL (SQLAlchemy + Alembic) |
-| LLM | Claude (local `claude` CLI or Anthropic API) |
-| UI | Vanilla JS single-page app |
+| LLM | Claude CLI or Anthropic API |
+| UI | Vanilla JS |
 | Tests | pytest + testcontainers |
 
 ---
 
 ## Quickstart
 
-> **Python 3.11+ required.** The codebase uses `datetime.UTC`, PEP 604
-> unions inside SQLAlchemy `Mapped[...]` annotations (which are evaluated
-> at runtime), and other typing-modernise constructs. There is no 3.9/3.10
-> fallback — `pyenv install 3.11 && pyenv local 3.11` if you're on Anaconda
-> 3.9 or similar.
+> Python 3.11+ required.
 
 See [specs/001-resume-upload-rating/quickstart.md](specs/001-resume-upload-rating/quickstart.md).
 
@@ -69,30 +93,32 @@ open http://localhost:8000
 
 ---
 
-## Running tests
+## Running Tests
 
 ```bash
-# Recommended: bootstraps a Python 3.11+ venv at .venv/ if missing,
-# installs requirements, runs pytest. Use this if your default `python`
-# is < 3.11 (e.g. Anaconda 3.9).
+# Recommended wrapper
 ./scripts/test.sh
 
-# Forward args:
-./scripts/test.sh -k some_test_name
-./scripts/test.sh --recreate    # blow away .venv and rebuild
+# Forward args
+./scripts/test.sh -k applications_tracker
 
-# Or directly, if you already have the right interpreter activated:
+# Direct pytest, if Python 3.11+ deps are already installed
 python -m pytest backend/tests/unit/ backend/tests/integration/v2/ -q
 ```
 
-Docker must be running — testcontainers spawns a Postgres container for the integration suite.
+Docker must be running because integration tests use testcontainers Postgres.
 
 ---
 
-## Roadmap (future phases)
+## Production Notes
 
-- Job crawler / n8n ingestion pipeline
-- PDF resume generation (weasyprint)
-- Multi-user support
-- Kubernetes deployment
-- Discord agent interface
+For non-local deployments, set explicit CORS origins and enable write auth:
+
+```env
+ENVIRONMENT=production
+CORS_ALLOWED_ORIGINS=https://resumehelper.example.com
+MANAGEMENT_AUTH_ENABLED=true
+MANAGEMENT_AUTH_TOKEN=<strong-token>
+```
+
+`/api/health/ready` returns HTTP 503 when required dependencies are not ready.

@@ -57,6 +57,13 @@
         return `${prefix}${message}.${suffix}`;
     }
 
+    function apiErrorBanner(response, payload, options = {}) {
+        const message = payload?.error?.message || response.statusText || "Request failed";
+        const id = requestId(response, payload);
+        const prefix = options.includeStatus ? `Error ${response.status}: ` : "";
+        return errorBanner(`${prefix}${message}.`, id);
+    }
+
     function escHtml(value) {
         return String(value)
             .replace(/&/g, "&amp;")
@@ -74,9 +81,29 @@
         return emptyState(message);
     }
 
-    function errorBanner(message) {
-        return `<div class="error-msg">${escHtml(message)}</div>`;
+    function errorBanner(message, requestIdValue = "") {
+        const requestHtml = requestIdValue
+            ? ` <span class="request-id">Request ID: ${escHtml(requestIdValue)}</span>`
+                + ` <button type="button" class="copy-request-id" data-copy-request-id="${escHtml(requestIdValue)}">Copy</button>`
+            : "";
+        return `<div class="error-msg">${escHtml(message)}${requestHtml}</div>`;
     }
+
+    document.addEventListener("click", async function (event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || !target.matches("[data-copy-request-id]")) {
+            return;
+        }
+        const id = target.getAttribute("data-copy-request-id") || "";
+        try {
+            await navigator.clipboard.writeText(id);
+            target.textContent = "Copied";
+            setTimeout(() => { target.textContent = "Copy"; }, 1200);
+        } catch {
+            target.textContent = "Copy failed";
+            setTimeout(() => { target.textContent = "Copy"; }, 1200);
+        }
+    });
 
     function statusBadgeClass(status) {
         if (status === "ready_to_submit") return "badge-ready";
@@ -94,6 +121,7 @@
         apiFetch,
         safeApiFetch,
         formatApiError,
+        apiErrorBanner,
         requestId,
         escHtml,
         emptyState,

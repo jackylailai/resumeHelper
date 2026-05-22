@@ -33,8 +33,8 @@ from backend.app.schemas.evaluate import (
     HistoryItemOut,
     SubmittableResumeOut,
 )
-from backend.app.services.evaluator_v2 import evaluate_jd, get_profile
-from backend.app.services.evaluator_v2 import get_latest_profile as get_baseline
+from backend.app.services.evaluator_v2 import evaluate_jd, get_default_profile, get_profile
+from backend.app.services.evaluator_v2 import get_default_profile as get_baseline
 from backend.app.services.llm import LLMClient, LLMInvalidOutputError, LLMUnavailableError
 from backend.app.services.pdf import generated_resume_pdf_path, write_generated_resume_pdf
 
@@ -251,8 +251,10 @@ def evaluate_by_listings(
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Evaluate stored scraper JDs by listing id and link results back to the rows."""
-    if get_profile(db, body.profile_id) is None:
-        return error("not_found", f"profile {body.profile_id} not found", status_code=404)
+    profile = get_profile(db, body.profile_id) if body.profile_id is not None else get_default_profile(db)
+    if profile is None:
+        return error("not_found", "baseline_profile not set", status_code=404)
+    profile_id = profile.id
 
     settings = get_settings()
     llm = _get_llm(request)
@@ -290,7 +292,7 @@ def evaluate_by_listings(
                 llm,
                 prompt_version=settings.llm_prompt_version,
                 threshold=settings.resume_gen_threshold,
-                profile_id=body.profile_id,
+                profile_id=profile_id,
             )
         except LookupError as exc:
             results.append(EvaluateByListingsResult(

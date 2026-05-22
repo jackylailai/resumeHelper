@@ -1,21 +1,25 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from json import dumps
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.app.api.applications import router as applications_router
 from backend.app.api.envelope import error, reset_request_id, set_request_id
 from backend.app.api.evaluate import router as evaluate_router
 from backend.app.api.health import router as health_router
 from backend.app.api.job_listings import router as job_listings_router
 from backend.app.api.profile import router as profile_router
 from backend.app.config import get_settings
+from backend.app.security import is_management_authorized, write_auth_required
 from backend.app.services.llm.factory import create_llm_client
 
 logger = logging.getLogger(__name__)
@@ -53,7 +57,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -63,11 +67,38 @@ def create_app() -> FastAPI:
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
         token = set_request_id(request_id)
+        started = time.perf_counter()
+        status_code = 500
         try:
+            if write_auth_required(request, settings) and not is_management_authorized(request, settings):
+                response = error(
+                    "unauthorized",
+                    "Authentication is required for write operations.",
+                    status_code=401,
+                )
+                status_code = response.status_code
+                response.headers["X-Request-ID"] = request_id
+                response.headers["WWW-Authenticate"] = 'Basic realm="resume-helper"'
+                return response
             response = await call_next(request)
+            status_code = response.status_code
             response.headers["X-Request-ID"] = request_id
             return response
         finally:
+            latency_ms = round((time.perf_counter() - started) * 1000, 2)
+            logger.info(
+                dumps(
+                    {
+                        "event": "request",
+                        "request_id": request_id,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status": status_code,
+                        "latency_ms": latency_ms,
+                    },
+                    separators=(",", ":"),
+                )
+            )
             reset_request_id(token)
 
     @app.exception_handler(RequestValidationError)
@@ -126,6 +157,7 @@ def create_app() -> FastAPI:
     app.include_router(profile_router, prefix="/api")
     app.include_router(evaluate_router, prefix="/api")
     app.include_router(job_listings_router, prefix="/api")
+    app.include_router(applications_router, prefix="/api")
 
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
 

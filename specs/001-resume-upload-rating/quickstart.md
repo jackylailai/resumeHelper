@@ -22,8 +22,9 @@ cd resumeHelper
 cp .env.example .env
 ```
 
-The defaults in `.env.example` work for local development. No API key needed —
-the backend uses the local `claude` CLI.
+The defaults in `.env.example` work for local development. No API key is needed
+when `LLM_BACKEND=claude_cli` and the local `claude` CLI is already
+authenticated.
 
 ## 3. Start PostgreSQL
 
@@ -64,12 +65,13 @@ INFO:     Uvicorn running on http://127.0.0.1:8000
 ```bash
 # Health
 curl -s http://localhost:8000/api/health
-# → {"data":{"status":"ok"},"error":null,"meta":{...}}
+curl -s http://localhost:8000/api/health/live
+curl -i http://localhost:8000/api/health/ready
 
-# Save your baseline profile
-curl -s -X POST http://localhost:8000/api/profile \
+# Save your default baseline profile
+curl -s -X POST http://localhost:8000/api/profiles \
   -H "Content-Type: application/json" \
-  -d '{"skills_text": "Python, FastAPI, PostgreSQL, Docker, 5 years backend experience"}'
+  -d '{"name":"Backend","skills_text":"Python, FastAPI, PostgreSQL, Docker, 5 years backend experience","is_default":true}'
 
 # Evaluate a job description
 curl -s -X POST http://localhost:8000/api/evaluate \
@@ -87,7 +89,12 @@ curl -s http://localhost:8000/api/history
 open http://localhost:8000
 ```
 
-The UI has three tabs: **Evaluate**, **History**, and **Profile**.
+The UI includes **Evaluate**, **History**, **Submittable**, and **Profile**.
+The secondary pages are **JD Database** (`/jobs.html`) and **Applications**
+(`/applications.html`).
+
+For a button-by-button walkthrough with annotated E2E screenshots, see
+[`docs/ui-flow.md`](../../docs/ui-flow.md).
 
 ## 9. Bulk evaluate (optional)
 
@@ -97,6 +104,35 @@ curl -s -X POST http://localhost:8000/api/evaluate/bulk \
   -d '{"jd_texts": ["JD one...", "JD two...", "JD three..."]}'
 # → {"data":{"total":3,"new":3,"cached":0,"results":[...]},...}
 ```
+
+## 10. Application tracker (optional)
+
+Score a JD Database row first, then add it to the tracker from `/jobs.html`.
+The tracker itself is available at:
+
+```bash
+open http://localhost:8000/applications.html
+```
+
+API shape:
+
+```bash
+curl -s 'http://localhost:8000/api/applications?status=planned&sort_by=follow_up_date'
+```
+
+## Production guard (optional)
+
+For non-local deployment:
+
+```env
+ENVIRONMENT=production
+CORS_ALLOWED_ORIGINS=https://resumehelper.example.com
+MANAGEMENT_AUTH_ENABLED=true
+MANAGEMENT_AUTH_TOKEN=<strong-token>
+```
+
+Write requests must then include `Authorization: Bearer <strong-token>` or
+configured basic auth credentials.
 
 ## Running the test suite
 
@@ -114,5 +150,6 @@ python -m pytest backend/tests/unit/ backend/tests/integration/v2/ -q
 |---|---|
 | `connection refused` to Postgres | `docker compose up -d postgres`; wait for healthy |
 | `claude: command not found` | Install claude CLI: `npm install -g @anthropic-ai/claude-code` |
-| Profile 404 on evaluate | POST to `/api/profile` first |
+| Profile 404 on evaluate | POST to `/api/profiles` first |
 | Score always 0 | LLM client may be using fake/stub — check `app.state.llm_client` |
+| `/api/health/ready` returns 503 | Check DB connectivity and LLM backend/API key configuration |

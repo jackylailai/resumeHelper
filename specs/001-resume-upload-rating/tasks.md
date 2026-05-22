@@ -161,13 +161,34 @@ TDD: write tests RED before implementation.
 - [x] `scripts/e2e.sh` — local runner; bootstraps Playwright on first call
 - [x] `pyproject.toml` — `[project.optional-dependencies] e2e` group
 
+### P2.5-T15 · Default profile + profile safety ✅
+- [x] `0007_default_profile.py` — add `baseline_profile.is_default`; mark newest existing profile as default
+- [x] `services/evaluator_v2.py` — resolve omitted profile IDs via default profile, fallback latest
+- [x] `api/profile.py` — support `is_default`, upload preview, reviewed PDF text override, and delete-impact endpoint
+- [x] `static/index.html` + `app.js` — profile edit form, default selector, PDF text preview
+- [x] `tests/integration/v2/test_profiles_endpoint.py` — default selection, delete impact, preview, upload override coverage
+
+### P2.5-T16 · Production config + observability ✅
+- [x] `config.py` — production rejects wildcard CORS; optional management auth settings validated
+- [x] `security.py` + `main.py` — bearer/basic write guard for non-GET `/api/*`
+- [x] `api/health.py` — `/api/health`, `/api/health/live`, `/api/health/ready`
+- [x] `main.py` — request IDs, structured request logging, validation/error envelopes
+- [x] `tests/integration/v2/test_production_config_observability.py`
+
+### P2.5-T17 · Application tracker ✅
+- [x] `0008_applications.py` — create `applications` table after `0007_default_profile`
+- [x] `models/application.py` + `schemas/application.py`
+- [x] `api/applications.py` — create/list/update, duplicate detection, hydrated listing/analysis/resume fields
+- [x] `static/jobs.html` + `jobs.js` — add scored listing to tracker
+- [x] `static/applications.html` + `applications.js` — tracker UI with filters, sorting, pagination, status/follow-up edits
+- [x] `tests/integration/v2/test_applications_tracker.py`
+
 ---
 
 ## Phase 3 — Roadmap (future)
 
 - Crawler / external job ingestion pipeline (n8n removed; will be re-introduced as a separate service if/when needed — `/api/callback` already accepts external resume delivery)
 - Multi-user authentication
-- PDF generation (weasyprint)
 - PDF blob storage (move `baseline_profile.pdf_path` from local disk to S3 — column is already TEXT, scheme-swap only)
 - LLM audit log (token cost / latency)
 - Type-check cleanup PRs to drop `continue-on-error` from the mypy gate
