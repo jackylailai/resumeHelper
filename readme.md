@@ -59,6 +59,9 @@ For a screen-by-screen map of buttons, API calls, and screenshot callouts, see
 The complete step-by-step guide with annotated screenshots is in
 [docs/ui-flow.md](docs/ui-flow.md).
 
+中文逐步導覽與中文說明圖在
+[docs/ui-flow.zh-TW.md](docs/ui-flow.zh-TW.md)。
+
 ---
 
 ## Current Scope
