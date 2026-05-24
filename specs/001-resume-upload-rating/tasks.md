@@ -247,6 +247,11 @@ TDD: write tests RED before implementation.
 - [x] `static/styles.css` — `.run-id` chip, hover state, `.run-filter-hint` pill; `td:nth-child(7)` selector for the Errors column bumped to `nth-child(8)` after the new Id column; `min-width` raised 760→820 to fit the extra column.
 - [x] No backend changes — `ScrapeRunOut.id` was already serialized.
 
+### P2.5-T26 · Remove JD detail empty-state placeholder
+- [x] `static/jobs.html` — drop the `<div id="detail-empty" class="empty-state">` placeholder; the right panel is just empty when nothing is selected.
+- [x] `static/jobs.js` — remove the `detailEmpty` binding and toggle calls; on load-detail error, show a `UI.toast.fromApiError()` toast instead of writing the banner into the placeholder.
+- [x] `static/styles.css` — drop the now-unused `.empty-state` rule (only consumer was `#detail-empty`). `.job-detail-panel`'s existing `min-height: 560px` keeps the panel sized.
+
 ---
 
 ## Phase 3 — Roadmap (future)

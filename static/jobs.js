@@ -2,7 +2,6 @@ const filters = document.getElementById("filters");
 const jobList = document.getElementById("job-list");
 const listStatus = document.getElementById("list-status");
 const resultCount = document.getElementById("result-count");
-const detailEmpty = document.getElementById("detail-empty");
 const detail = document.getElementById("detail");
 const profileSelect = document.getElementById("profile-select");
 const selectPage = document.getElementById("select-page");
@@ -455,14 +454,12 @@ async function loadDetail(id) {
 
     const { response, payload } = await safeApiFetch(`/api/job-listings/${id}`);
     if (!response.ok) {
-        detailEmpty.hidden = false;
         detail.hidden = true;
-        setApiError(detailEmpty, response, payload);
+        UI.toast.fromApiError(response, payload, { title: "Could not load listing" });
         return;
     }
 
     const listing = payload.data;
-    detailEmpty.hidden = true;
     detail.hidden = false;
 
     document.getElementById("detail-source").textContent = (
