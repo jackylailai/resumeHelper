@@ -235,6 +235,12 @@ TDD: write tests RED before implementation.
 - [x] Backend slice: enqueue and process durable `kind=evaluate` jobs while preserving the existing synchronous evaluate code path.
 - [x] Backend tests: async evaluate creation, alias behavior, job result payload schema, and optional follow-on tailoring enqueue when `evaluation.status=needs_tailoring`.
 
+### P2.5-T24 · Split tracker into Opportunities + Applications tabs (issue #183)
+- [x] `static/opportunities.html` + `static/opportunities.js` — standalone Opportunities page, sidebar marks itself active, reuses `/api/job-opportunities` and "Track" → `POST /api/applications` flow.
+- [x] `static/applications.html` + `static/applications.js` — Opportunities table + loader removed; flow-context copy now links to `/opportunities.html`.
+- [x] Sidebar update on `index.html`, `applications.html`, `jobs.html`, `scrapes.html`, `opportunities.html` — Data group gains an Opportunities link above Applications.
+- [x] No backend changes — `/api/job-opportunities` and `/api/applications` routers untouched.
+
 ---
 
 ## Phase 3 — Roadmap (future)
