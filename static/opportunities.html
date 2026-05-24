@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Opportunities - AI Career Intelligence System</title>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="wrap header-row">
+            <div>
+                <h1>Opportunities</h1>
+                <p class="sub">High-fit jobs ready to review and add to your pipeline.</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-shell">
+    <aside class="app-sidebar" aria-label="Primary">
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Evaluate</div>
+            <a class="tab-btn" href="/#evaluate">Evaluate</a>
+            <a class="tab-btn" href="/#history">History</a>
+            <a class="tab-btn" href="/#submittable">Submittable</a>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Data</div>
+            <a class="tab-btn" href="/jobs.html">JD Database</a>
+            <a class="tab-btn" href="/#profile">Profile</a>
+            <a class="tab-btn active" href="/opportunities.html" aria-current="page">Opportunities</a>
+            <a class="tab-btn" href="/applications.html">Applications</a>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-title">Pipeline</div>
+            <a class="tab-btn" href="/scrapes.html">Scrapes</a>
+        </div>
+    </aside>
+    <main class="app-main"><div class="wrap">
+        <section class="panel flow-context-panel">
+            <h2>Review Matches</h2>
+            <p class="muted">
+                Opportunities are high-fit JDs surfaced from your evaluations that
+                you have not yet started tracking. Add the ones you want to act on
+                and they will appear in Applications.
+            </p>
+        </section>
+
+        <section class="panel tracker-panel">
+            <div class="list-header">
+                <div>
+                    <h2>Opportunities</h2>
+                    <p class="muted">High-fit jobs that are ready to review or track.</p>
+                </div>
+                <button id="refresh-opportunities" type="button">Refresh</button>
+            </div>
+            <div id="opportunities-status" class="muted" aria-live="polite"></div>
+            <div class="tracker-table-wrap">
+                <table class="tracker-table opportunities-table">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Title</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                            <th>Links</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="opportunities-body">
+                        <tr><td colspan="6" class="empty-row">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div></main>
+    </div>
+
+    <script src="/shared.js" defer></script>
+    <script src="/opportunities.js" defer></script>
+</body>
+</html>

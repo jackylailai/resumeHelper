@@ -258,11 +258,12 @@ status/follow-up information.
 
 The tracker is a user-owned pipeline, not an automated submission system. It
 records intent and progress after a listing has been evaluated, reviewed as an
-opportunity, or linked to a generated resume. Submittable is the upstream review
-queue for strong matches and generated resumes; Applications is the downstream
-tracker for jobs the user chooses to act on. Duplicate tracking requests for the
-same listing or analysis should return the existing application row and may
-update status, notes, or follow-up date.
+opportunity, or linked to a generated resume. Opportunities and Applications
+live on separate pages: Opportunities (`/opportunities.html`) is the review
+queue of high-fit untracked JDs; Applications (`/applications.html`) is the
+downstream tracker for jobs the user chooses to act on. Duplicate tracking
+requests for the same listing or analysis should return the existing
+application row and may update status, notes, or follow-up date.
 
 ## LLM Flow And Spec Requirements
 

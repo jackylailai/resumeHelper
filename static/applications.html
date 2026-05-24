@@ -28,6 +28,7 @@
             <div class="sidebar-group-title">Data</div>
             <a class="tab-btn" href="/jobs.html">JD Database</a>
             <a class="tab-btn" href="/#profile">Profile</a>
+            <a class="tab-btn" href="/opportunities.html">Opportunities</a>
             <a class="tab-btn active" href="/applications.html" aria-current="page">Applications</a>
         </div>
         <div class="sidebar-group">
@@ -40,38 +41,10 @@
             <h2>Application Pipeline</h2>
             <p class="muted">
                 Applications is the tracker for jobs you intend to act on. Review
-                matches in Opportunities or Submittable first, then add the jobs you
-                actually want to follow through planned, applied, interviewing, offer,
-                rejected, or archived.
+                matches in <a href="/opportunities.html">Opportunities</a> first,
+                then add the jobs you actually want to follow through planned,
+                applied, interviewing, offer, rejected, or archived.
             </p>
-        </section>
-
-        <section class="panel tracker-panel">
-            <div class="list-header">
-                <div>
-                    <h2>Opportunities</h2>
-                    <p class="muted">High-fit jobs that are ready to review or track.</p>
-                </div>
-                <button id="refresh-opportunities" type="button">Refresh</button>
-            </div>
-            <div id="opportunities-status" class="muted" aria-live="polite"></div>
-            <div class="tracker-table-wrap">
-                <table class="tracker-table opportunities-table">
-                    <thead>
-                        <tr>
-                            <th>Company</th>
-                            <th>Title</th>
-                            <th>Score</th>
-                            <th>Status</th>
-                            <th>Links</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="opportunities-body">
-                        <tr><td colspan="6" class="empty-row">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
         </section>
 
         <section class="panel">
