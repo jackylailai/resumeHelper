@@ -241,6 +241,12 @@ TDD: write tests RED before implementation.
 - [x] Sidebar update on `index.html`, `applications.html`, `jobs.html`, `scrapes.html`, `opportunities.html` — Data group gains an Opportunities link above Applications.
 - [x] No backend changes — `/api/job-opportunities` and `/api/applications` routers untouched.
 
+### P2.5-T25 · Surface scrape run id + filter-only outcome hint (issue #185)
+- [x] `static/scrapes.js` — runs table gains leading `Id` column rendering a truncated UUID (first 8 chars) inside a `<code class="run-id">` chip; full UUID lives in `data-copy-run-id` and `title`. Delegated click handler on the `#scrape-runs` container copies to clipboard, briefly flashes "Copied!", and restores the chip text.
+- [x] `static/scrapes.js` — `renderFilterHint(run)` adds a "filter rejected all N candidates" pill next to the status when `status==succeeded && inserted+updated==0 && skipped_by_filter>0`, so successful-but-empty runs are no longer ambiguous.
+- [x] `static/styles.css` — `.run-id` chip, hover state, `.run-filter-hint` pill; `td:nth-child(7)` selector for the Errors column bumped to `nth-child(8)` after the new Id column; `min-width` raised 760→820 to fit the extra column.
+- [x] No backend changes — `ScrapeRunOut.id` was already serialized.
+
 ---
 
 ## Phase 3 — Roadmap (future)

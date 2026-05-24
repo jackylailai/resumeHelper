@@ -19,6 +19,21 @@ const UI = window.ResumeHelper;
 
 let scrapeRefreshTimer = null;
 
+scrapeRuns.addEventListener("click", async (event) => {
+    const target = event.target.closest("[data-copy-run-id]");
+    if (!target) return;
+    const full = target.getAttribute("data-copy-run-id");
+    if (!full) return;
+    const original = target.textContent;
+    try {
+        await navigator.clipboard.writeText(full);
+        target.textContent = "Copied!";
+    } catch {
+        target.textContent = "Copy failed";
+    }
+    setTimeout(() => { target.textContent = original; }, 1200);
+});
+
 scrapeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await runScrape(false);
@@ -206,6 +221,7 @@ function renderScrapeRuns(runs) {
         <table class="scrape-run-table">
             <thead>
                 <tr>
+                    <th>Id</th>
                     <th>Source</th>
                     <th>Status</th>
                     <th>Keyword</th>
@@ -218,11 +234,13 @@ function renderScrapeRuns(runs) {
             <tbody>
                 ${runs.map((run) => `
                     <tr>
+                        <td>${renderRunId(run.id)}</td>
                         <td>${esc(run.source)}</td>
                         <td>
                             <span class="run-status run-${esc(run.status)}">
                                 ${formatRunStatus(run.status)}
                             </span>
+                            ${renderFilterHint(run)}
                         </td>
                         <td>${esc(run.keyword)}</td>
                         <td>${renderStatChips(run)}</td>
@@ -234,6 +252,25 @@ function renderScrapeRuns(runs) {
             </tbody>
         </table>
     `;
+}
+
+function renderRunId(runId) {
+    if (!runId) return '<span class="muted">-</span>';
+    const full = String(runId);
+    const short = full.slice(0, 8);
+    return (
+        `<code class="run-id" data-copy-run-id="${esc(full)}" `
+        + `title="${esc(full)} — click to copy">${esc(short)}</code>`
+    );
+}
+
+function renderFilterHint(run) {
+    if (run.status !== "succeeded") return "";
+    const filtered = run.skipped_by_filter ?? 0;
+    const kept = (run.inserted ?? 0) + (run.updated ?? 0);
+    if (filtered <= 0 || kept > 0) return "";
+    const label = `Filter rejected all ${filtered} candidate${filtered === 1 ? "" : "s"}`;
+    return `<span class="run-filter-hint" title="${esc(label)}.">${esc(label.toLowerCase())}</span>`;
 }
 
 function renderStatChips(run) {
